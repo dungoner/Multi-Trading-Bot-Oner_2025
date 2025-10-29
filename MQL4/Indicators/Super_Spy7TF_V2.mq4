@@ -24,6 +24,7 @@ input int    Retry = 3;                                      // Retry Attempts p
 input string TargetSymbol = "";                              // Target Symbol - Empty = current chart | Symbol muc tieu - Rong = chart hien tai
 input bool   EnableHealthCheck = true;                       // Health check at 8h & 16h | Kiem tra suc khoe luc 8h va 16h
 input bool   EnableMidnightReset = true;                     // Midnight reset at 0h daily | Reset luc 0h hang ngay
+input bool   EnableStartupReset = true;                      // Startup reset 1 minute after MT4 starts | Reset khoi dong 1 phut sau khi MT4 chay
 input bool   ProcessSignalOnOddSecond = true;                // Process Signal on ODD second only | Xu ly tin hieu giay le (tranh conflict)
 input bool   EnableMonthlyStats = true;                      // Monthly stats on 1st day of month | Thong ke thang vao ngay 1
 input string DataFolder = "DataAutoOner\\";                  // Data Storage Folder | Thu muc luu tru du lieu
@@ -2681,21 +2682,33 @@ int OnInit() {
 // ============================================================
 
 // Startup Reset: 1 minute after bot starts (1 TIME ONLY)
+// Uses GlobalVariable to survive indicator reload - only resets when MT4 closes
 void RunStartupReset() {
-    static string reset_executed;  // Kệ nó, không gán gì cả
-    static datetime init_time;
+    if(!EnableStartupReset) return;  // Skip if disabled
 
-    if(init_time == 0) {
-        init_time = TimeCurrent();
+    // GlobalVariable names - unique per symbol
+    string gv_done = g_target_symbol + "_StartupResetDone";      // 0 = not executed, 1 = executed
+    string gv_init_time = g_target_symbol + "_StartupInitTime";  // timestamp
+
+    // Initialize GlobalVariables if they don't exist
+    if(GlobalVariableCheck(gv_done) == false) {
+        GlobalVariableSet(gv_done, 0);  // Not executed yet
+    }
+    if(GlobalVariableCheck(gv_init_time) == false) {
+        GlobalVariableSet(gv_init_time, TimeCurrent());  // Set init time
     }
 
-    // Điều kiện duy nhất: != "HAHA" thì làm reset, gán = "HAHA" để không bao giờ chạy lại
-    if(reset_executed != "HAHA" && (TimeCurrent() - init_time >= 60)) {
+    // Get current values
+    double reset_done = GlobalVariableGet(gv_done);
+    datetime init_time = (datetime)GlobalVariableGet(gv_init_time);
+
+    // Execute only if not done yet AND 60 seconds passed
+    if(reset_done == 0 && (TimeCurrent() - init_time >= 60)) {
         Print("-------------------------------------------------------");
         Print("   STARTUP RESET - 1 Minute After ", g_target_symbol, " Bot Started");
         Print("-------------------------------------------------------");
         SmartTFReset();
-        reset_executed = "HAHA";  // Gán = "HAHA", bot khác không thể trùng
+        GlobalVariableSet(gv_done, 1);  // Mark as executed - NEVER runs again until MT4 restarts
     }
 }
 
@@ -2960,11 +2973,26 @@ int OnCalculate(const int rates_total,
 void OnDeinit(const int reason) {
     EventKillTimer();
 
-    // Xóa 4 dashboard objects kh?i chart
+    // Xóa 4 dashboard objects khỏi chart
     ObjectDelete(0, "SPY_Dashboard_Line1");
     ObjectDelete(0, "SPY_Dashboard_Line2");
     ObjectDelete(0, "SPY_Dashboard_Line3");
     ObjectDelete(0, "SPY_Dashboard_Line4");
 
-    Print("? SUPER_Spy7TF_Oner V2 Deinitialized");
+    // Cleanup GlobalVariables when indicator is removed (not just reloaded)
+    if(reason == REASON_REMOVE) {
+        string gv_done = g_target_symbol + "_StartupResetDone";
+        string gv_init_time = g_target_symbol + "_StartupInitTime";
+
+        if(GlobalVariableCheck(gv_done)) {
+            GlobalVariableDel(gv_done);
+        }
+        if(GlobalVariableCheck(gv_init_time)) {
+            GlobalVariableDel(gv_init_time);
+        }
+
+        Print("✓ Cleaned up GlobalVariables for ", g_target_symbol);
+    }
+
+    Print("✓ SUPER_Spy7TF_Oner V2 Deinitialized");
 }
