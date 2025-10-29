@@ -878,11 +878,6 @@ const int MAX_INSTANCES = 10;                                // Maximum concurre
 // Dashboard globals | Bien toan cau bang dieu khien
 string g_dashboard_info = "";                                // Dashboard information | Thong tin bang dieu khien
 
-// Midnight reset system | He thong reset luc nua dem
-datetime g_last_midnight_switch = 0;                         // Last midnight switch time | Thoi gian chuyen doi nua dem cuoi
-bool g_midnight_switch_done_today = false;                   // Today's switch status | Trang thai chuyen doi hom nay
-int g_chart_period_before_switch = 0;                        // Store chart TF before midnight switch | Luu khung thoi gian truoc khi chuyen doi 0h
-
 // Health check system | He thong kiem tra suc khoe
 datetime g_last_health_check = 0;                            // Last health check time | Thoi gian kiem tra suc khoe cuoi
 datetime g_last_csdl1_modified = 0;                          // Last CSDL1 modification time | Thoi gian sua doi CSDL1 cuoi
@@ -2943,40 +2938,6 @@ void MidnightReset() {
 
         SmartTFReset();
         last_day = current_day;
-    }
-}
-
-// Legacy midnight reset function (deprecated but kept for compatibility) | Ham reset nua dem cu (khong dung nua nhung giu de tuong thich)
-void ProcessMidnightReset() {
-    datetime current_time = TimeCurrent();
-
-    // Check if it's 00:00:00 (midnight) and we haven't reset today
-    if(TimeHour(current_time) == 0 && TimeMinute(current_time) == 0 &&
-       !g_midnight_switch_done_today) {
-
-        g_chart_period_before_switch = Period();
-        long chart_window = ChartGetInteger(ChartID(), CHART_WINDOW_HANDLE);
-        PostMessageA(chart_window, WM_COMMAND, 33137, 0);
-        Sleep(2000);  // 2 seconds - ICMarket server rest time at midnight
-
-        int cmd = 0;
-        if(g_chart_period_before_switch == PERIOD_M1) cmd = 33137;
-        else if(g_chart_period_before_switch == PERIOD_M5) cmd = 33138;
-        else if(g_chart_period_before_switch == PERIOD_M15) cmd = 33139;
-        else if(g_chart_period_before_switch == PERIOD_M30) cmd = 33140;
-        else if(g_chart_period_before_switch == PERIOD_H1) cmd = 33135;
-        else if(g_chart_period_before_switch == PERIOD_H4) cmd = 33134;
-        else if(g_chart_period_before_switch == PERIOD_D1) cmd = 33133;
-
-        if(cmd > 0) PostMessageA(chart_window, WM_COMMAND, cmd, 0);
-
-        g_midnight_switch_done_today = true;
-        g_last_midnight_switch = current_time;
-
-    }
-
-    if(TimeHour(current_time) == 1 && g_midnight_switch_done_today) {
-        g_midnight_switch_done_today = false;
     }
 }
 
