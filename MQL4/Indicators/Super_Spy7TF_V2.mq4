@@ -32,9 +32,7 @@ input string DataFolder = "DataAutoOner\\";                  // Data Storage Fol
 //--- NEWS CASCADE Configuration | Cau hinh NEWS CASCADE
 input double NewsBaseLiveDiff = 2.5;                         // L1 Base Live Diff threshold (USD) | Nguong Live Diff co ban L1
 input double NewsLiveDiffStep = 0.5;                         // Live Diff increment per level (USD) | Tang Live Diff moi cap
-input int    NewsL1TimeLimit = 60;                           // L1 Time limit (seconds) | Gioi han thoi gian L1
-input int    NewsL2L3TimeLimit = 300;                        // L2-L3 Time limit (seconds) | Gioi han thoi gian L2-L3
-input int    NewsL4L7TimeLimit = 180;                        // L4-L7 Time limit (seconds) | Gioi han thoi gian L4-L7
+input int    NewsUserTimeLimit = 300;                        // Category 2 Time limit (seconds) L1-L7 | Gioi han thoi gian Category 2
 input bool   EnableCategoryEA = true;                        // Enable Category 1 (EA Trading) | Bat Category 1 (EA danh)
 input bool   EnableCategoryUser = true;                      // Enable Category 2 (User Reference) | Bat Category 2 (tham khao)
 
@@ -1718,7 +1716,7 @@ int DetectCASCADE_New() {
         // L1: M1 only
         // live_diff > 0 + time < 5 min → Score 1
         if(m1_signal != 0) {
-            if(live_usd_diff > 0 && live_time_diff < NewsL2L3TimeLimit) {
+            if(live_usd_diff > 0 && live_time_diff < NewsUserTimeLimit) {
                 result = m1_signal * 1;
             }
         }
@@ -1727,7 +1725,7 @@ int DetectCASCADE_New() {
         // live_diff > 0 + time < 5 min → Score 2
         if(m5_signal != 0 && m1_signal != 0 && m1_signal == m5_signal && result == 0) {
             if(m5_cross == m1_time) {
-                if(live_usd_diff > 0 && live_time_diff < NewsL2L3TimeLimit) {
+                if(live_usd_diff > 0 && live_time_diff < NewsUserTimeLimit) {
                     result = m5_signal * 2;
                 }
             }
@@ -1738,56 +1736,56 @@ int DetectCASCADE_New() {
         if(m15_signal != 0 && m5_signal != 0 && m1_signal != 0 &&
            m1_signal == m5_signal && m5_signal == m15_signal && result == 0) {
             if(m15_cross == m5_time && m5_cross == m1_time) {
-                if(live_usd_diff > 0 && live_time_diff < NewsL2L3TimeLimit) {
+                if(live_usd_diff > 0 && live_time_diff < NewsUserTimeLimit) {
                     result = m15_signal * 3;
                 }
             }
         }
 
         // L4: M30→M15→M5→M1
-        // live_diff > 0 + time < 3 min → Score 4
+        // live_diff > 0 + time < 5 min → Score 4
         if(m30_signal != 0 && m15_signal != 0 && m5_signal != 0 && m1_signal != 0 &&
            m1_signal == m5_signal && m5_signal == m15_signal && m15_signal == m30_signal && result == 0) {
             if(m30_cross == m15_time && m15_cross == m5_time && m5_cross == m1_time) {
-                if(live_usd_diff > 0 && live_time_diff < NewsL4L7TimeLimit) {
+                if(live_usd_diff > 0 && live_time_diff < NewsUserTimeLimit) {
                     result = m30_signal * 4;
                 }
             }
         }
 
         // L5: H1→M30→M15→M5→M1
-        // live_diff > 0 + time < 3 min → Score 5
+        // live_diff > 0 + time < 5 min → Score 5
         if(h1_signal != 0 && m30_signal != 0 && m15_signal != 0 && m5_signal != 0 && m1_signal != 0 &&
            m1_signal == m5_signal && m5_signal == m15_signal && m15_signal == m30_signal && m30_signal == h1_signal && result == 0) {
             if(h1_cross == m30_time && m30_cross == m15_time && m15_cross == m5_time && m5_cross == m1_time) {
-                if(live_usd_diff > 0 && live_time_diff < NewsL4L7TimeLimit) {
+                if(live_usd_diff > 0 && live_time_diff < NewsUserTimeLimit) {
                     result = h1_signal * 5;
                 }
             }
         }
 
         // L6: H4→H1→M30→M15→M5→M1
-        // live_diff > 0 + time < 3 min → Score 6
+        // live_diff > 0 + time < 5 min → Score 6
         if(h4_signal != 0 && h1_signal != 0 && m30_signal != 0 && m15_signal != 0 && m5_signal != 0 && m1_signal != 0 &&
            m1_signal == m5_signal && m5_signal == m15_signal && m15_signal == m30_signal &&
            m30_signal == h1_signal && h1_signal == h4_signal && result == 0) {
             if(h4_cross == h1_time && h1_cross == m30_time && m30_cross == m15_time &&
                m15_cross == m5_time && m5_cross == m1_time) {
-                if(live_usd_diff > 0 && live_time_diff < NewsL4L7TimeLimit) {
+                if(live_usd_diff > 0 && live_time_diff < NewsUserTimeLimit) {
                     result = h4_signal * 6;
                 }
             }
         }
 
         // L7: D1→H4→H1→M30→M15→M5→M1
-        // live_diff > 0 + time < 3 min → Score 7
+        // live_diff > 0 + time < 5 min → Score 7
         if(d1_signal != 0 && h4_signal != 0 && h1_signal != 0 && m30_signal != 0 &&
            m15_signal != 0 && m5_signal != 0 && m1_signal != 0 &&
            m1_signal == m5_signal && m5_signal == m15_signal && m15_signal == m30_signal &&
            m30_signal == h1_signal && h1_signal == h4_signal && h4_signal == d1_signal && result == 0) {
             if(d1_cross == h4_time && h4_cross == h1_time && h1_cross == m30_time &&
                m30_cross == m15_time && m15_cross == m5_time && m5_cross == m1_time) {
-                if(live_usd_diff > 0 && live_time_diff < NewsL4L7TimeLimit) {
+                if(live_usd_diff > 0 && live_time_diff < NewsUserTimeLimit) {
                     result = d1_signal * 7;
                 }
             }
