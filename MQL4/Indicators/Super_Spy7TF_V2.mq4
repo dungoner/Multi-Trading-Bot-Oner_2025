@@ -29,6 +29,15 @@ input bool   ProcessSignalOnOddSecond = true;                // Process Signal o
 input bool   EnableMonthlyStats = true;                      // Monthly stats on 1st day of month | Thong ke thang vao ngay 1
 input string DataFolder = "DataAutoOner\\";                  // Data Storage Folder | Thu muc luu tru du lieu
 
+//--- NEWS CASCADE Configuration | Cau hinh NEWS CASCADE
+input double NewsBaseLiveDiff = 2.5;                         // L1 Base Live Diff threshold (USD) | Nguong Live Diff co ban L1
+input double NewsLiveDiffStep = 1.0;                         // Live Diff increment per level (USD) | Tang Live Diff moi cap
+input int    NewsL1TimeLimit = 60;                           // L1 Time limit (seconds) | Gioi han thoi gian L1
+input int    NewsL2L3TimeLimit = 300;                        // L2-L3 Time limit (seconds) | Gioi han thoi gian L2-L3
+input int    NewsL4L7TimeLimit = 180;                        // L4-L7 Time limit (seconds) | Gioi han thoi gian L4-L7
+input bool   EnableCategoryEA = true;                        // Enable Category 1 (EA Trading) | Bat Category 1 (EA danh)
+input bool   EnableCategoryUser = true;                      // Enable Category 2 (User Reference) | Bat Category 2 (tham khao)
+
 //==============================================================================
 //  SECTION 2: DATA STRUCTURES (3 structs) | PHAN 2: CAU TRUC DU LIEU
 //==============================================================================
@@ -1552,10 +1561,28 @@ void CreateEmptyCSDL2Files() {
 //==============================================================================
 //  SECTION 11: NEWS CASCADE STRATEGY (5 functions) | PHAN 11: CHIEN LUOC NEWS CASCADE
 //==============================================================================
-// 6-level cascade detection system for multi-timeframe signal alignment
-// He thong phat hien cascade 6 cap do de sap xep tin hieu nhieu khung thoi gian
+// 7-level cascade detection system for multi-timeframe signal alignment with 2 categories
+// He thong phat hien cascade 7 cap do de sap xep tin hieu nhieu khung thoi gian voi 2 category
 
-// Detect NEWS CASCADE across 6 levels of timeframe alignment | Phat hien NEWS CASCADE qua 6 cap do sap xep khung thoi gian
+// Helper function: Check if signal timestamp is within current candle of specified timeframe
+// Ham ho tro: Kiem tra timestamp tin hieu co nam trong nen hien tai cua khung thoi gian chi dinh
+bool IsWithinOneCandle(int timeframe_index, datetime signal_time) {
+    // timeframe_index: 0=M1, 1=M5, 2=M15, 3=M30, 4=H1, 5=H4, 6=D1
+    int tf_periods[] = {PERIOD_M1, PERIOD_M5, PERIOD_M15, PERIOD_M30, PERIOD_H1, PERIOD_H4, PERIOD_D1};
+
+    if(timeframe_index < 0 || timeframe_index > 6) return false;
+
+    int period = tf_periods[timeframe_index];
+
+    // Get current candle start time for this timeframe
+    datetime candle_start = iTime(g_target_symbol, period, 0);
+
+    // Signal must be >= candle_start (within current candle)
+    return (signal_time >= candle_start);
+}
+
+// Detect NEWS CASCADE across 7 levels of timeframe alignment | Phat hien NEWS CASCADE qua 7 cap do sap xep khung thoi gian
+// Returns: ±1-7 (Category 2: User Reference) or ±10-70 (Category 1: EA Trading)
 int DetectCASCADE_New() {
     // Get 7 TF signals (M1=0, M5=1, ..., D1=6) from g_symbol_data
     int m1_signal = g_symbol_data.signals[0];
@@ -1584,204 +1611,202 @@ int DetectCASCADE_New() {
     datetime d1_cross = (datetime)g_symbol_data.crosses[6];
 
     // Calculate LIVE USD diff from current price (real-time)
-    double m1_price = g_symbol_data.prices[0];          // M1 last signal price
+    double m1_price = g_symbol_data.prices[0];               // M1 last signal price
     double current_price = (Ask + Bid) / 2.0;                // Current real-time price
     double live_diff_raw = current_price - m1_price;         // Raw price difference
     double live_usd_diff = GetUSDValue(g_target_symbol, MathAbs(live_diff_raw));  // USD conversion
-    int live_time_diff = (int)(TimeCurrent() - m1_time);     // Time since M1 signal
-    int highest_result = 0;
+    int live_time_diff = (int)(TimeCurrent() - m1_time);     // Time since M1 signal (for breakthrough detection)
+
+    // Result tracking
+    int result_ea = 0;    // Category 1: EA Trading (scores 10-70)
+    int result_user = 0;  // Category 2: User Reference (scores 1-7)
 
     // ============================================================
-    // L1: M5?M1 (Basic +1 / Advanced +16)
+    // L1: M1 only - Single timeframe breakthrough
+    // Category 1 (EA): live_diff > 2.5 USD + within 1 candle → Score 10
+    // Category 2 (User): live_diff > 0 + time < 5 min → Score 1
+    // ============================================================
+    if(m1_signal != 0) {
+        // Category 1: EA Trading (Strict)
+        if(EnableCategoryEA) {
+            double l1_threshold = NewsBaseLiveDiff;  // 2.5 USD
+            if(live_usd_diff > l1_threshold && IsWithinOneCandle(0, m1_time)) {
+                result_ea = m1_signal * 10;
+            }
+        }
+
+        // Category 2: User Reference (Relaxed)
+        if(EnableCategoryUser && result_ea == 0) {
+            if(live_usd_diff > 0 && live_time_diff < NewsL2L3TimeLimit) {  // < 5 min
+                result_user = m1_signal * 1;
+            }
+        }
+    }
+
+    // ============================================================
+    // L2: M5→M1 - Two timeframe cascade
+    // Category 1 (EA): M5→M1 aligned + live_diff > 3.5 USD + M5.cross=M1.time + within 1 candle → Score 20
+    // Category 2 (User): M5→M1 aligned + live_diff > 0 + time < 5 min → Score 2
     // ============================================================
     if(m5_signal != 0 && m1_signal != 0 && m1_signal == m5_signal) {
         if(m5_cross == m1_time) {  // M5.cross = M1.timestamp
-            int result = 1;  // Basic
-            if(live_usd_diff >= 4.0 && live_time_diff <= 300) {  // 5 min
-                result = 16;  // Advanced
-            }
-            highest_result = m5_signal * result;
-        }
-    }
-
-    // ============================================================
-    // L2: M15?M5?M1 (Basic +12 / Advanced +17)
-    // BONUS: M15?M5 (cross reference exists, USD > 0) = +2
-    // ============================================================
-    if(m15_signal != 0 && m5_signal != 0 && m5_signal == m15_signal) {
-        if(m15_cross == m5_time) {  // M15.cross = M5.timestamp
-            int result = 0;
-
-            // Check if M5?M1 cascade exists
-                // Full cascade: M15?M5?M1
-            if(m1_signal == m15_signal && m5_cross == m1_time) {
-                result = 12;  // Basic
-                if(live_usd_diff >= 6.0 && live_time_diff <= 900) {  // 15 min
-                    result = 17;  // Advanced
+            // Category 1: EA Trading (Strict)
+            if(EnableCategoryEA) {
+                double l2_threshold = NewsBaseLiveDiff + NewsLiveDiffStep;  // 3.5 USD
+                if(live_usd_diff > l2_threshold && IsWithinOneCandle(0, m1_time)) {
+                    if(MathAbs(result_ea) < 20) result_ea = m5_signal * 20;
                 }
-            } else if(m15_cross == m5_time && live_usd_diff > 0) {
-                // BONUS: M15?M5 cross exists + USD > 0
-                result = 2;
             }
 
-            if(result > MathAbs(highest_result)) {
-                highest_result = m15_signal * result;
-            }
-        }
-    }
-
-    // BONUS standalone check if not in full cascade
-    // MUST check same direction: m5_signal == m15_signal
-    if(m15_signal != 0 && m5_signal != 0 && m5_signal == m15_signal && m15_cross == m5_time && live_usd_diff > 0) {
-        if(MathAbs(highest_result) < 2) {
-            highest_result = m15_signal * 2;
-        }
-    }
-
-    // ============================================================
-    // L3: M30?M15?M5 (Basic +13 / Advanced +18)
-    // BONUS: M30?M15 (cross exists, USD > 0) = +3
-    // ============================================================
-    if(m30_signal != 0 && m15_signal != 0 && m15_signal == m30_signal) {
-        if(m30_cross == m15_time) {  // M30.cross = M15.timestamp
-            int result = 0;
-
-            // Check M15?M5 cascade
-            if(m5_signal == m30_signal && m15_cross == m5_time) {
-                // Full: M30?M15?M5
-                result = 13;
-                if(live_usd_diff >= 8.0 && live_time_diff <= 1800) {  // 30 min
-                    result = 18;
+            // Category 2: User Reference (Relaxed)
+            if(EnableCategoryUser && result_ea == 0) {
+                if(live_usd_diff > 0 && live_time_diff < NewsL2L3TimeLimit) {  // < 5 min
+                    if(MathAbs(result_user) < 2) result_user = m5_signal * 2;
                 }
-            } else if(m30_cross == m15_time && live_usd_diff > 0) {
-                // BONUS: M30?M15 cross exists + USD > 0
-                result = 3;
-            }
-
-            if(result > MathAbs(highest_result)) {
-                highest_result = m30_signal * result;
             }
         }
     }
 
-    // BONUS standalone
-    // MUST check same direction: m15_signal == m30_signal
-    if(m30_signal != 0 && m15_signal != 0 && m15_signal == m30_signal && m30_cross == m15_time && live_usd_diff > 0) {
-        if(MathAbs(highest_result) < 3) {
-            highest_result = m30_signal * 3;
-        }
-    }
-
     // ============================================================
-    // L4: H1?M30?M15 (Basic +14 / Advanced +19)
-    // BONUS: H1?M30 (cross exists, USD > 0) = +4
+    // L3: M15→M5→M1 - Three timeframe full cascade
+    // Category 1 (EA): Full cascade + live_diff > 4.0 USD + all crosses valid + within 1 candle → Score 30
+    // Category 2 (User): Full cascade + live_diff > 0 + time < 5 min → Score 3
     // ============================================================
-    if(h1_signal != 0 && m30_signal != 0 && m30_signal == h1_signal) {
-        if(h1_cross == m30_time) {  // H1.cross = M30.timestamp
-            int result = 0;
-
-            // Check M30?M15 cascade
-            if(m15_signal == h1_signal && m30_cross == m15_time) {
-                // Full: H1?M30?M15
-                result = 14;
-                if(live_usd_diff >= 10.0 && live_time_diff <= 3600) {  // 1 hour
-                    result = 19;
+    if(m15_signal != 0 && m5_signal != 0 && m1_signal != 0 &&
+       m1_signal == m5_signal && m5_signal == m15_signal) {
+        if(m15_cross == m5_time && m5_cross == m1_time) {  // Full cascade validation
+            // Category 1: EA Trading (Strict)
+            if(EnableCategoryEA) {
+                double l3_threshold = NewsBaseLiveDiff + (NewsLiveDiffStep * 1.5);  // 4.0 USD
+                if(live_usd_diff > l3_threshold && IsWithinOneCandle(0, m1_time)) {
+                    if(MathAbs(result_ea) < 30) result_ea = m15_signal * 30;
                 }
-            } else if(h1_cross == m30_time && live_usd_diff > 0) {
-                // BONUS: H1?M30 cross exists + USD > 0
-                result = 4;
             }
 
-            if(result > MathAbs(highest_result)) {
-                highest_result = h1_signal * result;
-            }
-        }
-    }
-
-    // BONUS standalone
-    // MUST check same direction: m30_signal == h1_signal
-    if(h1_signal != 0 && m30_signal != 0 && m30_signal == h1_signal && h1_cross == m30_time && live_usd_diff > 0) {
-        if(MathAbs(highest_result) < 4) {
-            highest_result = h1_signal * 4;
-        }
-    }
-
-    // ============================================================
-    // L5: H4?H1?M30 (Basic +15 / Advanced +20)
-    // BONUS: H4?H1 (cross exists, USD > 0) = +5
-    // ============================================================
-    if(h4_signal != 0 && h1_signal != 0 && h1_signal == h4_signal) {
-        if(h4_cross == h1_time) {  // H4.cross = H1.timestamp
-            int result = 0;
-
-            // Check H1?M30 cascade
-            if(m30_signal == h4_signal && h1_cross == m30_time) {
-                // Full: H4?H1?M30
-                result = 15;
-                if(live_usd_diff >= 12.0 && live_time_diff <= 14400) {  // 4 hours
-                    result = 20;
+            // Category 2: User Reference (Relaxed)
+            if(EnableCategoryUser && result_ea == 0) {
+                if(live_usd_diff > 0 && live_time_diff < NewsL2L3TimeLimit) {  // < 5 min
+                    if(MathAbs(result_user) < 3) result_user = m15_signal * 3;
                 }
-            } else if(h4_cross == h1_time && live_usd_diff > 0) {
-                // BONUS: H4?H1 cross exists + USD > 0
-                result = 5;
-            }
-
-            if(result > MathAbs(highest_result)) {
-                highest_result = h4_signal * result;
             }
         }
     }
 
-    // BONUS standalone
-    // MUST check same direction: h1_signal == h4_signal
-    if(h4_signal != 0 && h1_signal != 0 && h1_signal == h4_signal && h4_cross == h1_time && live_usd_diff > 0) {
-        if(MathAbs(highest_result) < 5) {
-            highest_result = h4_signal * 5;
-        }
-    }
-
     // ============================================================
-    // L6: D1?H4?H1 (Basic +16 / Advanced +30) - NEW
-    // BONUS: D1?H4 (cross exists, USD > 0) = +6
+    // L4: M30→M15→M5→M1 - Four timeframe full cascade
+    // Category 1 (EA): Full cascade + live_diff > 4.5 USD + all crosses valid + within 1 candle → Score 40
+    // Category 2 (User): Full cascade + live_diff > 0 + time < 3 min → Score 4
     // ============================================================
-    if(d1_signal != 0 && h4_signal != 0 && h4_signal == d1_signal) {
-        if(d1_cross == h4_time) {  // D1.cross = H4.timestamp
-            int result = 0;
-
-            // Check H4?H1 cascade
-            if(h1_signal == d1_signal && h4_cross == h1_time) {
-                // Full: D1?H4?H1
-                result = 16;
-                if(live_usd_diff >= 14.0 && live_time_diff <= 14400) {  // 4 hours
-                    result = 30;
+    if(m30_signal != 0 && m15_signal != 0 && m5_signal != 0 && m1_signal != 0 &&
+       m1_signal == m5_signal && m5_signal == m15_signal && m15_signal == m30_signal) {
+        if(m30_cross == m15_time && m15_cross == m5_time && m5_cross == m1_time) {  // Full cascade
+            // Category 1: EA Trading (Strict)
+            if(EnableCategoryEA) {
+                double l4_threshold = NewsBaseLiveDiff + (NewsLiveDiffStep * 2.0);  // 4.5 USD
+                if(live_usd_diff > l4_threshold && IsWithinOneCandle(0, m1_time)) {
+                    if(MathAbs(result_ea) < 40) result_ea = m30_signal * 40;
                 }
-            } else if(d1_cross == h4_time && live_usd_diff > 0) {
-                // BONUS: D1?H4 cross exists + USD > 0
-                result = 6;
             }
 
-            if(result > MathAbs(highest_result)) {
-                highest_result = d1_signal * result;
+            // Category 2: User Reference (Relaxed)
+            if(EnableCategoryUser && result_ea == 0) {
+                if(live_usd_diff > 0 && live_time_diff < NewsL4L7TimeLimit) {  // < 3 min
+                    if(MathAbs(result_user) < 4) result_user = m30_signal * 4;
+                }
             }
         }
     }
 
-    // BONUS standalone
-    // MUST check same direction: h4_signal == d1_signal
-    if(d1_signal != 0 && h4_signal != 0 && h4_signal == d1_signal && d1_cross == h4_time && live_usd_diff > 0) {
-        if(MathAbs(highest_result) < 6) {
-            highest_result = d1_signal * 6;
+    // ============================================================
+    // L5: H1→M30→M15→M5→M1 - Five timeframe full cascade
+    // Category 1 (EA): Full cascade + live_diff > 5.0 USD + all crosses valid + within 1 candle → Score 50
+    // Category 2 (User): Full cascade + live_diff > 0 + time < 3 min → Score 5
+    // ============================================================
+    if(h1_signal != 0 && m30_signal != 0 && m15_signal != 0 && m5_signal != 0 && m1_signal != 0 &&
+       m1_signal == m5_signal && m5_signal == m15_signal && m15_signal == m30_signal && m30_signal == h1_signal) {
+        if(h1_cross == m30_time && m30_cross == m15_time && m15_cross == m5_time && m5_cross == m1_time) {
+            // Category 1: EA Trading (Strict)
+            if(EnableCategoryEA) {
+                double l5_threshold = NewsBaseLiveDiff + (NewsLiveDiffStep * 2.5);  // 5.0 USD
+                if(live_usd_diff > l5_threshold && IsWithinOneCandle(0, m1_time)) {
+                    if(MathAbs(result_ea) < 50) result_ea = h1_signal * 50;
+                }
+            }
+
+            // Category 2: User Reference (Relaxed)
+            if(EnableCategoryUser && result_ea == 0) {
+                if(live_usd_diff > 0 && live_time_diff < NewsL4L7TimeLimit) {  // < 3 min
+                    if(MathAbs(result_user) < 5) result_user = h1_signal * 5;
+                }
+            }
         }
     }
 
-    return highest_result;
+    // ============================================================
+    // L6: H4→H1→M30→M15→M5→M1 - Six timeframe full cascade
+    // Category 1 (EA): Full cascade + live_diff > 6.0 USD + all crosses valid + within 1 candle → Score 60
+    // Category 2 (User): Full cascade + live_diff > 0 + time < 3 min → Score 6
+    // ============================================================
+    if(h4_signal != 0 && h1_signal != 0 && m30_signal != 0 && m15_signal != 0 && m5_signal != 0 && m1_signal != 0 &&
+       m1_signal == m5_signal && m5_signal == m15_signal && m15_signal == m30_signal &&
+       m30_signal == h1_signal && h1_signal == h4_signal) {
+        if(h4_cross == h1_time && h1_cross == m30_time && m30_cross == m15_time &&
+           m15_cross == m5_time && m5_cross == m1_time) {
+            // Category 1: EA Trading (Strict)
+            if(EnableCategoryEA) {
+                double l6_threshold = NewsBaseLiveDiff + (NewsLiveDiffStep * 3.5);  // 6.0 USD
+                if(live_usd_diff > l6_threshold && IsWithinOneCandle(0, m1_time)) {
+                    if(MathAbs(result_ea) < 60) result_ea = h4_signal * 60;
+                }
+            }
+
+            // Category 2: User Reference (Relaxed)
+            if(EnableCategoryUser && result_ea == 0) {
+                if(live_usd_diff > 0 && live_time_diff < NewsL4L7TimeLimit) {  // < 3 min
+                    if(MathAbs(result_user) < 6) result_user = h4_signal * 6;
+                }
+            }
+        }
+    }
+
+    // ============================================================
+    // L7: D1→H4→H1→M30→M15→M5→M1 - Seven timeframe full cascade (ULTIMATE)
+    // Category 1 (EA): Full cascade + live_diff > 7.0 USD + all crosses valid + within 1 candle → Score 70
+    // Category 2 (User): Full cascade + live_diff > 0 + time < 3 min → Score 7
+    // ============================================================
+    if(d1_signal != 0 && h4_signal != 0 && h1_signal != 0 && m30_signal != 0 &&
+       m15_signal != 0 && m5_signal != 0 && m1_signal != 0 &&
+       m1_signal == m5_signal && m5_signal == m15_signal && m15_signal == m30_signal &&
+       m30_signal == h1_signal && h1_signal == h4_signal && h4_signal == d1_signal) {
+        if(d1_cross == h4_time && h4_cross == h1_time && h1_cross == m30_time &&
+           m30_cross == m15_time && m15_cross == m5_time && m5_cross == m1_time) {
+            // Category 1: EA Trading (Strict)
+            if(EnableCategoryEA) {
+                double l7_threshold = NewsBaseLiveDiff + (NewsLiveDiffStep * 4.5);  // 7.0 USD
+                if(live_usd_diff > l7_threshold && IsWithinOneCandle(0, m1_time)) {
+                    if(MathAbs(result_ea) < 70) result_ea = d1_signal * 70;
+                }
+            }
+
+            // Category 2: User Reference (Relaxed)
+            if(EnableCategoryUser && result_ea == 0) {
+                if(live_usd_diff > 0 && live_time_diff < NewsL4L7TimeLimit) {  // < 3 min
+                    if(MathAbs(result_user) < 7) result_user = d1_signal * 7;
+                }
+            }
+        }
+    }
+
+    // Priority: Category 1 (EA) > Category 2 (User)
+    if(result_ea != 0) return result_ea;
+    return result_user;
 }
 
 // Main NEWS analysis function - LIVE mode (simplified, no state) | Ham phan tich NEWS - che do LIVE don gian
 int AnalyzeNEWS() {
     // Simply detect and return CASCADE result directly
     int cascade_result = DetectCASCADE_New();
-    return cascade_result;  // Return ±0 to ±30
+    return cascade_result;  // Return ±1-7 (User) or ±10-70 (EA)
 }
 
 // Update LIVE NEWS for all 7 timeframes independently | Cap nhat NEWS LIVE cho 7 khung thoi gian doc lap
@@ -1789,55 +1814,41 @@ void UpdateLiveNEWS() {
     // Get CASCADE result
     int cascade_result = DetectCASCADE_New();
 
-    if(cascade_result == 0) {
-        // Clear all NEWS results when no cascade
-        for(int i = 0; i < 7; i++) {
-            g_symbol_data.news_results[i] = 0;
-        }
-        return;
-    }
-
-    // Extract level and direction
-    int abs_result = MathAbs(cascade_result);
-    int direction = cascade_result > 0 ? 1 : -1;
-
-    // Map result to level and write to corresponding row
-    // L1: ±1, ±16 → news_results[1] (M5 row)
-    // L2: ±2, ±12, ±17 → news_results[2] (M15 row)
-    // L3: ±3, ±13, ±18 → news_results[3] (M30 row)
-    // L4: ±4, ±14, ±19 → news_results[4] (H1 row)
-    // L5: ±5, ±15, ±20 → news_results[5] (H4 row)
-    // L6: ±6, ±16, ±30 → news_results[6] (D1 row)
-
-    // Clear all first
+    // Clear all NEWS results first
     for(int i = 0; i < 7; i++) {
         g_symbol_data.news_results[i] = 0;
     }
 
-    // Write to correct row based on result value
-    if(abs_result == 1 || abs_result == 16) {
-        // L1 or L6 - need to distinguish
-        // Check if it's L6 (D1→H4→H1) by checking higher TF alignment
-        if(abs_result == 16 && g_symbol_data.signals[6] != 0) {  // D1 signal exists
-            g_symbol_data.news_results[6] = cascade_result;  // L6
-        } else {
-            g_symbol_data.news_results[1] = cascade_result;  // L1 (M5)
-        }
+    if(cascade_result == 0) {
+        return;  // No cascade detected
     }
-    else if(abs_result == 2 || abs_result == 12 || abs_result == 17) {
-        g_symbol_data.news_results[2] = cascade_result;  // L2 (M15)
+
+    // Extract level from result
+    // Category 1 (EA): ±10, ±20, ±30, ±40, ±50, ±60, ±70 → levels 1-7
+    // Category 2 (User): ±1, ±2, ±3, ±4, ±5, ±6, ±7 → levels 1-7
+    int abs_result = MathAbs(cascade_result);
+    int level = 0;
+
+    if(abs_result >= 10) {
+        // Category 1: EA (10-70)
+        level = abs_result / 10;  // 10→1, 20→2, ..., 70→7
+    } else {
+        // Category 2: User (1-7)
+        level = abs_result;  // 1→1, 2→2, ..., 7→7
     }
-    else if(abs_result == 3 || abs_result == 13 || abs_result == 18) {
-        g_symbol_data.news_results[3] = cascade_result;  // L3 (M30)
-    }
-    else if(abs_result == 4 || abs_result == 14 || abs_result == 19) {
-        g_symbol_data.news_results[4] = cascade_result;  // L4 (H1)
-    }
-    else if(abs_result == 5 || abs_result == 15 || abs_result == 20) {
-        g_symbol_data.news_results[5] = cascade_result;  // L5 (H4)
-    }
-    else if(abs_result == 6 || abs_result == 30) {
-        g_symbol_data.news_results[6] = cascade_result;  // L6 (D1)
+
+    // Map level to row index
+    // L1 → row 0 (M1)
+    // L2 → row 1 (M5)
+    // L3 → row 2 (M15)
+    // L4 → row 3 (M30)
+    // L5 → row 4 (H1)
+    // L6 → row 5 (H4)
+    // L7 → row 6 (D1)
+
+    if(level >= 1 && level <= 7) {
+        int row_index = level - 1;  // Level 1→row 0, Level 2→row 1, ..., Level 7→row 6
+        g_symbol_data.news_results[row_index] = cascade_result;
     }
 
     // Write to file
