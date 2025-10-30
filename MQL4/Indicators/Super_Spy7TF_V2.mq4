@@ -1849,6 +1849,11 @@ void UpdateLiveNEWS() {
         g_symbol_data.news_results[row_index] = cascade_result;
     }
 
+    // Log only Category 1 L3+ to avoid spam (major news events only)
+    if(abs_result >= 30) {
+        Print("NEWS ", g_target_symbol, " L", level, ": ", (cascade_result > 0 ? "BUY" : "SELL"), " | Score:", cascade_result);
+    }
+
     // Write to file
     WriteCSDL1ArrayToFile();
 }
@@ -2558,9 +2563,7 @@ void RunStartupReset() {
 
     // Execute only if not done yet AND 60 seconds passed
     if(reset_done == 0 && (TimeCurrent() - init_time >= 60)) {
-        Print("-------------------------------------------------------");
-        Print("   STARTUP RESET - 1 Minute After ", g_target_symbol, " Bot Started");
-        Print("-------------------------------------------------------");
+        Print("StartupReset: ", g_target_symbol, " | 1 min after MT4 start");
         SmartTFReset();
         GlobalVariableSet(gv_done, 1);  // Mark as executed - NEVER runs again until MT4 restarts
     }
@@ -2700,10 +2703,6 @@ string PeriodToString(int period) {
 
 // Smart timeframe reset for all charts of current symbol | Reset thong minh khung thoi gian cho tat ca bieu do symbol hien tai
 void SmartTFReset() {
-    Print("-------------------------------------------------------");
-    Print("   SMART TF RESET - Resetting All Bots...");
-    Print("-------------------------------------------------------");
-
     // Get current chart info | Lay thong tin chart hien tai
     string current_symbol = Symbol();
     int current_period = Period();
@@ -2726,8 +2725,6 @@ void SmartTFReset() {
     // Step 2: Reset 6 TF con lai TRUOC (W1 -> original TF, delay 1s)
     for(int i = 0; i < total_charts; i++) {
         int other_period = ChartPeriod(chart_ids[i]);
-        Print("? Step ", (i+1), ": Reset TF ", PeriodToString(other_period), "...");
-
         ChartSetSymbolPeriod(chart_ids[i], current_symbol, PERIOD_W1);
         Sleep(1000);  // Delay 1s
         ChartSetSymbolPeriod(chart_ids[i], current_symbol, other_period);
@@ -2735,27 +2732,22 @@ void SmartTFReset() {
     }
 
     // Step 3: Reset chart HIEN TAI CUOI CUNG (de nhan dien lai 6 TF con lai)
-    Print("? Step ", (total_charts+1), ": Reset current chart ", PeriodToString(current_period), " (LAST)...");
     ChartSetSymbolPeriod(current_chart_id, current_symbol, PERIOD_W1);
     Sleep(1000);  // Delay 1s
     ChartSetSymbolPeriod(current_chart_id, current_symbol, current_period);
     Sleep(1000);  // Delay 1s
 
-    Print("? Smart TF Reset COMPLETED - ", (total_charts + 1), " charts reset");
-    Print("...........................................................");
+    Print("SmartTFReset: ", current_symbol, " | ", (total_charts + 1), " charts reset");
 }
 
 // Health check for CSDL1 file activity (called at 8h and 16h) | Kiem tra hoat dong file CSDL1 (goi luc 8h va 16h)
 void HealthCheck() {
-    // Không c?n check EnableHealthCheck - ?ã check ? OnTimer()
-    // Không c?n check th?i gian - ?ã check ? OnTimer()
-
     // Check CSDL1 file modification time | Kiem tra thoi gian sua doi file CSDL1
     string csdl1_file = DataFolder + g_target_symbol + ".json";
 
     int handle = FileOpen(csdl1_file, FILE_READ|FILE_TXT|FILE_SHARE_READ);
     if(handle == INVALID_HANDLE) {
-        Print("!! Health Check: Cannot open CSDL1 file!");
+        Print("HealthCheck: Cannot open CSDL1 file!");
         return;
     }
 
@@ -2765,28 +2757,16 @@ void HealthCheck() {
     // First run - just save timestamp | Lan dau - chi luu timestamp
     if(g_last_csdl1_modified == 0) {
         g_last_csdl1_modified = current_modified;
-        Print("? Health Check: Initial timestamp saved");
         return;
     }
 
     // Check if file unchanged (bot stuck) | Kiem tra file khong doi (bot treo)
     if(current_modified == g_last_csdl1_modified) {
-        Print("-------------------------------------------------------");
-        Print("   HEALTH CHECK FAILED - Bot SPY Stuck!");
-        Print("-------------------------------------------------------");
-        Print("  CSDL1 file unchanged since last check!");
-        Print("  Last modified: ", TimeToString(current_modified, TIME_DATE|TIME_MINUTES));
-        Print("  Current check: ", TimeToString(TimeCurrent(), TIME_DATE|TIME_MINUTES));
-        Print("  ? Triggering Smart TF Reset...");
-        Print("...........................................................");
-
-        Alert("?? Bot SPY stuck - Auto reset triggered!");
+        Print("HealthCheck: ", g_target_symbol, " STUCK | Auto-reset triggered");
+        Alert("Bot SPY stuck - Auto reset!");
         SmartTFReset();
-
-        // Update timestamp after reset | Cap nhat timestamp sau reset
         g_last_csdl1_modified = TimeCurrent();
     } else {
-        Print("? Health Check: CSDL1 active (modified at ", TimeToString(current_modified, TIME_MINUTES), ")");
         g_last_csdl1_modified = current_modified;
     }
 }
@@ -2800,10 +2780,7 @@ void MidnightReset() {
 
     // Check if new day (0h crossed) | Kiem tra neu sang ngay moi (qua 0h)
     if(current_day != last_day && TimeHour(TimeCurrent()) == 0) {
-        Print("-------------------------------------------------------");
-        Print("   MIDNIGHT RESET - ", g_target_symbol, " - New Day Started");
-        Print("-------------------------------------------------------");
-
+        Print("MidnightReset: ", g_target_symbol, " | New day started");
         SmartTFReset();
         last_day = current_day;
     }
