@@ -827,10 +827,8 @@ void PrintDashboard() {
     string news_str = IntegerToString(g_symbol_data.news_results[0]);
     if(g_symbol_data.news_results[0] >= 0) news_str = "+" + news_str;
 
-    // Build line 4 - split into parts for NEWS highlight
-    string line4_part1 = "[D1|" + d1_sig + "|" + d1_pricediff + "|" + IntegerToString(g_symbol_data.timediffs[6]) + "m] | ";
-    string line4_news = "NEWS:" + news_str;
-    string line4_part2 = " | LIVE: " + live_price_str + " (" + live_usd_str + ", " + IntegerToString(live_time_diff) + "m)";
+    // Build line 4
+    string line4 = "[D1|" + d1_sig + "|" + d1_pricediff + "|" + IntegerToString(g_symbol_data.timediffs[6]) + "m] | NEWS:" + news_str + " | LIVE: " + live_price_str + " (" + live_usd_str + ", " + IntegerToString(live_time_diff) + "m)";
 
     // =========================================================================
     // TẠO 4 OBJECTS RIÊNG BIỆT (KHÔNG CONFLICT VỚI COMMENT() CỦA WT)
@@ -848,9 +846,9 @@ void PrintDashboard() {
     lines[0] = line1;
     lines[1] = line2;
     lines[2] = line3;
-    lines[3] = line4_part1;  // D1 part only
+    lines[3] = line4;
 
-    // Tạo 4 objects chính
+    // Tạo 4 objects
     for(int i = 0; i < 4; i++) {
         // Xóa object cũ nếu có
         if(ObjectFind(0, obj_names[i]) >= 0) {
@@ -872,45 +870,6 @@ void PrintDashboard() {
         ObjectSetInteger(0, obj_names[i], OBJPROP_SELECTABLE, false);
         ObjectSetInteger(0, obj_names[i], OBJPROP_HIDDEN, true);
     }
-
-    // =========================================================================
-    // TẠO NEWS OBJECT ĐẶC BIỆT VỚI BACKGROUND VÀNG
-    // =========================================================================
-    string news_obj = "SPY_Dashboard_NEWS";
-    string live_obj = "SPY_Dashboard_LIVE";
-
-    int line4_y = y_start + (3 * y_spacing);
-    int news_x_offset = 190;  // Vị trí X cho NEWS (sau D1 part)
-    int live_x_offset = 270;  // Vị trí X cho LIVE part
-
-    // Xóa objects cũ
-    if(ObjectFind(0, news_obj) >= 0) ObjectDelete(0, news_obj);
-    if(ObjectFind(0, live_obj) >= 0) ObjectDelete(0, live_obj);
-
-    // Tạo NEWS object với background vàng và text đen
-    ObjectCreate(0, news_obj, OBJ_LABEL, 0, 0, 0);
-    ObjectSetInteger(0, news_obj, OBJPROP_CORNER, CORNER_LEFT_UPPER);
-    ObjectSetInteger(0, news_obj, OBJPROP_XDISTANCE, news_x_offset);
-    ObjectSetInteger(0, news_obj, OBJPROP_YDISTANCE, line4_y);
-    ObjectSetInteger(0, news_obj, OBJPROP_COLOR, clrBlack);  // Text màu đen
-    ObjectSetInteger(0, news_obj, OBJPROP_BGCOLOR, clrYellow);  // Background vàng
-    ObjectSetInteger(0, news_obj, OBJPROP_FONTSIZE, 8);
-    ObjectSetString(0, news_obj, OBJPROP_FONT, "Courier New");
-    ObjectSetString(0, news_obj, OBJPROP_TEXT, " " + line4_news + " ");  // Thêm space padding
-    ObjectSetInteger(0, news_obj, OBJPROP_SELECTABLE, false);
-    ObjectSetInteger(0, news_obj, OBJPROP_HIDDEN, true);
-
-    // Tạo LIVE object (phần còn lại)
-    ObjectCreate(0, live_obj, OBJ_LABEL, 0, 0, 0);
-    ObjectSetInteger(0, live_obj, OBJPROP_CORNER, CORNER_LEFT_UPPER);
-    ObjectSetInteger(0, live_obj, OBJPROP_XDISTANCE, live_x_offset);
-    ObjectSetInteger(0, live_obj, OBJPROP_YDISTANCE, line4_y);
-    ObjectSetInteger(0, live_obj, OBJPROP_COLOR, clrDodgerBlue);  // Màu xanh như line 4
-    ObjectSetInteger(0, live_obj, OBJPROP_FONTSIZE, 8);
-    ObjectSetString(0, live_obj, OBJPROP_FONT, "Courier New");
-    ObjectSetString(0, live_obj, OBJPROP_TEXT, line4_part2);
-    ObjectSetInteger(0, live_obj, OBJPROP_SELECTABLE, false);
-    ObjectSetInteger(0, live_obj, OBJPROP_HIDDEN, true);
 }
 
 //==============================================================================
@@ -2852,13 +2811,11 @@ int OnCalculate(const int rates_total,
 void OnDeinit(const int reason) {
     EventKillTimer();
 
-    // Xóa dashboard objects khỏi chart
+    // Xóa 4 dashboard objects khỏi chart
     ObjectDelete(0, "SPY_Dashboard_Line1");
     ObjectDelete(0, "SPY_Dashboard_Line2");
     ObjectDelete(0, "SPY_Dashboard_Line3");
     ObjectDelete(0, "SPY_Dashboard_Line4");
-    ObjectDelete(0, "SPY_Dashboard_NEWS");
-    ObjectDelete(0, "SPY_Dashboard_LIVE");
 
     // Cleanup GlobalVariables when indicator is removed (not just reloaded)
     if(reason == REASON_REMOVE) {
