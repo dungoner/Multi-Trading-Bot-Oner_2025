@@ -1570,10 +1570,8 @@ bool IsWithinOneCandle(int timeframe_index, datetime signal_time) {
 
     if(timeframe_index < 0 || timeframe_index > 6) return false;
 
-    int period = tf_periods[timeframe_index];
-
     // Get current candle start time for this timeframe
-    datetime candle_start = iTime(g_target_symbol, period, 0);
+    datetime candle_start = iTime(g_target_symbol, tf_periods[timeframe_index], 0);
 
     // Signal must be >= candle_start (within current candle)
     return (signal_time >= candle_start);
@@ -1636,7 +1634,7 @@ int DetectCASCADE_New() {
         if(m5_signal != 0 && m1_signal != 0 && m1_signal == m5_signal && result == 0) {
             if(m5_cross == m1_time) {  // M5.cross = M1.timestamp
                 double l2_threshold = NewsBaseLiveDiff + (NewsLiveDiffStep * 1);  // 3.0 USD
-                if(live_usd_diff > l2_threshold && IsWithinOneCandle(0, m1_time)) {
+                if(live_usd_diff > l2_threshold && IsWithinOneCandle(1, m5_time)) {
                     result = m5_signal * 20;
                 }
             }
@@ -1648,7 +1646,7 @@ int DetectCASCADE_New() {
            m1_signal == m5_signal && m5_signal == m15_signal && result == 0) {
             if(m15_cross == m5_time && m5_cross == m1_time) {  // Full cascade validation
                 double l3_threshold = NewsBaseLiveDiff + (NewsLiveDiffStep * 2);  // 3.5 USD
-                if(live_usd_diff > l3_threshold && IsWithinOneCandle(0, m1_time)) {
+                if(live_usd_diff > l3_threshold && IsWithinOneCandle(2, m15_time)) {
                     result = m15_signal * 30;
                 }
             }
@@ -1660,7 +1658,7 @@ int DetectCASCADE_New() {
            m1_signal == m5_signal && m5_signal == m15_signal && m15_signal == m30_signal && result == 0) {
             if(m30_cross == m15_time && m15_cross == m5_time && m5_cross == m1_time) {
                 double l4_threshold = NewsBaseLiveDiff + (NewsLiveDiffStep * 3);  // 4.0 USD
-                if(live_usd_diff > l4_threshold && IsWithinOneCandle(0, m1_time)) {
+                if(live_usd_diff > l4_threshold && IsWithinOneCandle(3, m30_time)) {
                     result = m30_signal * 40;
                 }
             }
@@ -1672,7 +1670,7 @@ int DetectCASCADE_New() {
            m1_signal == m5_signal && m5_signal == m15_signal && m15_signal == m30_signal && m30_signal == h1_signal && result == 0) {
             if(h1_cross == m30_time && m30_cross == m15_time && m15_cross == m5_time && m5_cross == m1_time) {
                 double l5_threshold = NewsBaseLiveDiff + (NewsLiveDiffStep * 4);  // 4.5 USD
-                if(live_usd_diff > l5_threshold && IsWithinOneCandle(0, m1_time)) {
+                if(live_usd_diff > l5_threshold && IsWithinOneCandle(4, h1_time)) {
                     result = h1_signal * 50;
                 }
             }
@@ -1686,7 +1684,7 @@ int DetectCASCADE_New() {
             if(h4_cross == h1_time && h1_cross == m30_time && m30_cross == m15_time &&
                m15_cross == m5_time && m5_cross == m1_time) {
                 double l6_threshold = NewsBaseLiveDiff + (NewsLiveDiffStep * 5);  // 5.0 USD
-                if(live_usd_diff > l6_threshold && IsWithinOneCandle(0, m1_time)) {
+                if(live_usd_diff > l6_threshold && IsWithinOneCandle(5, h4_time)) {
                     result = h4_signal * 60;
                 }
             }
@@ -1701,7 +1699,7 @@ int DetectCASCADE_New() {
             if(d1_cross == h4_time && h4_cross == h1_time && h1_cross == m30_time &&
                m30_cross == m15_time && m15_cross == m5_time && m5_cross == m1_time) {
                 double l7_threshold = NewsBaseLiveDiff + (NewsLiveDiffStep * 6);  // 5.5 USD
-                if(live_usd_diff > l7_threshold && IsWithinOneCandle(0, m1_time)) {
+                if(live_usd_diff > l7_threshold && IsWithinOneCandle(6, d1_time)) {
                     result = d1_signal * 70;
                 }
             }
