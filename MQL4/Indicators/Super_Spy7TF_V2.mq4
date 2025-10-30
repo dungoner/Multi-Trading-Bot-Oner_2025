@@ -32,7 +32,7 @@ input string DataFolder = "DataAutoOner\\";                  // Data Storage Fol
 //--- NEWS CASCADE Configuration | Cau hinh NEWS CASCADE
 input double NewsBaseLiveDiff = 2.5;                         // L1 Base Live Diff threshold (USD) | Nguong Live Diff co ban L1
 input double NewsLiveDiffStep = 0.5;                         // Live Diff increment per level (USD) | Tang Live Diff moi cap
-input int    NewsUserTimeLimit = 300;                        // Category 2 Time limit (seconds) L1-L7 | Gioi han thoi gian Category 2
+input int    NewsBaseTimeMinutes = 2;                        // Category 2 Base Time (minutes) 2^level | Thoi gian co so Category 2
 input bool   EnableCategoryEA = true;                        // Enable Category 1 (EA Trading) | Bat Category 1 (EA danh)
 input bool   EnableCategoryUser = true;                      // Enable Category 2 (User Reference) | Bat Category 2 (tham khao)
 
@@ -1714,78 +1714,85 @@ int DetectCASCADE_New() {
     // ============================================================
     if(result == 0 && EnableCategoryUser) {
         // L1: M1 only
-        // live_diff > 0 + time < 5 min → Score 1
+        // live_diff > 0 + time < 2 min (1×2) → Score 1
         if(m1_signal != 0) {
-            if(live_usd_diff > 0 && live_time_diff < NewsUserTimeLimit) {
+            int l1_time_limit = 1 * NewsBaseTimeMinutes * 60;  // 1 × 2 × 60 = 120s = 2min
+            if(live_usd_diff > 0 && live_time_diff < l1_time_limit) {
                 result = m1_signal * 1;
             }
         }
 
         // L2: M5→M1
-        // live_diff > 0 + time < 5 min → Score 2
+        // live_diff > 0 + time < 4 min (2×2) → Score 2
         if(m5_signal != 0 && m1_signal != 0 && m1_signal == m5_signal && result == 0) {
             if(m5_cross == m1_time) {
-                if(live_usd_diff > 0 && live_time_diff < NewsUserTimeLimit) {
+                int l2_time_limit = 2 * NewsBaseTimeMinutes * 60;  // 2 × 2 × 60 = 240s = 4min
+                if(live_usd_diff > 0 && live_time_diff < l2_time_limit) {
                     result = m5_signal * 2;
                 }
             }
         }
 
         // L3: M15→M5→M1
-        // live_diff > 0 + time < 5 min → Score 3
+        // live_diff > 0 + time < 6 min (3×2) → Score 3
         if(m15_signal != 0 && m5_signal != 0 && m1_signal != 0 &&
            m1_signal == m5_signal && m5_signal == m15_signal && result == 0) {
             if(m15_cross == m5_time && m5_cross == m1_time) {
-                if(live_usd_diff > 0 && live_time_diff < NewsUserTimeLimit) {
+                int l3_time_limit = 3 * NewsBaseTimeMinutes * 60;  // 3 × 2 × 60 = 360s = 6min
+                if(live_usd_diff > 0 && live_time_diff < l3_time_limit) {
                     result = m15_signal * 3;
                 }
             }
         }
 
         // L4: M30→M15→M5→M1
-        // live_diff > 0 + time < 5 min → Score 4
+        // live_diff > 0 + time < 8 min (4×2) → Score 4
         if(m30_signal != 0 && m15_signal != 0 && m5_signal != 0 && m1_signal != 0 &&
            m1_signal == m5_signal && m5_signal == m15_signal && m15_signal == m30_signal && result == 0) {
             if(m30_cross == m15_time && m15_cross == m5_time && m5_cross == m1_time) {
-                if(live_usd_diff > 0 && live_time_diff < NewsUserTimeLimit) {
+                int l4_time_limit = 4 * NewsBaseTimeMinutes * 60;  // 4 × 2 × 60 = 480s = 8min
+                if(live_usd_diff > 0 && live_time_diff < l4_time_limit) {
                     result = m30_signal * 4;
                 }
             }
         }
 
         // L5: H1→M30→M15→M5→M1
-        // live_diff > 0 + time < 5 min → Score 5
+        // live_diff > 0 + time < 10 min (5×2) → Score 5
         if(h1_signal != 0 && m30_signal != 0 && m15_signal != 0 && m5_signal != 0 && m1_signal != 0 &&
            m1_signal == m5_signal && m5_signal == m15_signal && m15_signal == m30_signal && m30_signal == h1_signal && result == 0) {
             if(h1_cross == m30_time && m30_cross == m15_time && m15_cross == m5_time && m5_cross == m1_time) {
-                if(live_usd_diff > 0 && live_time_diff < NewsUserTimeLimit) {
+                int l5_time_limit = 5 * NewsBaseTimeMinutes * 60;  // 5 × 2 × 60 = 600s = 10min
+                if(live_usd_diff > 0 && live_time_diff < l5_time_limit) {
                     result = h1_signal * 5;
                 }
             }
         }
 
         // L6: H4→H1→M30→M15→M5→M1
-        // live_diff > 0 + time < 5 min → Score 6
+        // live_diff > 0 + time < 12 min (6×2) → Score 6
         if(h4_signal != 0 && h1_signal != 0 && m30_signal != 0 && m15_signal != 0 && m5_signal != 0 && m1_signal != 0 &&
            m1_signal == m5_signal && m5_signal == m15_signal && m15_signal == m30_signal &&
            m30_signal == h1_signal && h1_signal == h4_signal && result == 0) {
             if(h4_cross == h1_time && h1_cross == m30_time && m30_cross == m15_time &&
                m15_cross == m5_time && m5_cross == m1_time) {
-                if(live_usd_diff > 0 && live_time_diff < NewsUserTimeLimit) {
+                int l6_time_limit = 6 * NewsBaseTimeMinutes * 60;  // 6 × 2 × 60 = 720s = 12min
+                if(live_usd_diff > 0 && live_time_diff < l6_time_limit) {
                     result = h4_signal * 6;
                 }
             }
         }
 
         // L7: D1→H4→H1→M30→M15→M5→M1
-        // live_diff > 0 + time < 5 min → Score 7
+        // live_diff > 0 + time < 14 min (7×2) → Score 7
         if(d1_signal != 0 && h4_signal != 0 && h1_signal != 0 && m30_signal != 0 &&
            m15_signal != 0 && m5_signal != 0 && m1_signal != 0 &&
            m1_signal == m5_signal && m5_signal == m15_signal && m15_signal == m30_signal &&
            m30_signal == h1_signal && h1_signal == h4_signal && h4_signal == d1_signal && result == 0) {
             if(d1_cross == h4_time && h4_cross == h1_time && h1_cross == m30_time &&
                m30_cross == m15_time && m15_cross == m5_time && m5_cross == m1_time) {
-                if(live_usd_diff > 0 && live_time_diff < NewsUserTimeLimit) {
+                int l7_time_limit = 7 * NewsBaseTimeMinutes * 60;  // 7 × 2 × 60 = 840s = 14min
+                if(live_usd_diff > 0 && live_time_diff < l7_time_limit) {
                     result = d1_signal * 7;
                 }
             }
