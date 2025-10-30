@@ -828,8 +828,8 @@ void PrintDashboard() {
     if(g_symbol_data.news_results[0] >= 0) news_str = "+" + news_str;
 
     // Build line 4 - NEWS moved to end for simple gold highlighting
-    string line4 = "[D1|" + d1_sig + "|" + d1_pricediff + "|" + IntegerToString(g_symbol_data.timediffs[6]) + "m] | LIVE: " + live_price_str + " (" + live_usd_str + ", " + IntegerToString(live_time_diff) + "m) |";
-    string line4_news = " NEWS:" + news_str;
+    string line4 = "[D1|" + d1_sig + "|" + d1_pricediff + "|" + IntegerToString(g_symbol_data.timediffs[6]) + "m] | LIVE: " + live_price_str + " (" + live_usd_str + ", " + IntegerToString(live_time_diff) + "m)";
+    string line4_news = " | NEWS:" + news_str;
 
     // =========================================================================
     // TẠO 4 OBJECTS RIÊNG BIỆT (KHÔNG CONFLICT VỚI COMMENT() CỦA WT)
@@ -878,7 +878,7 @@ void PrintDashboard() {
 
     ObjectCreate(0, news_obj, OBJ_LABEL, 0, 0, 0);
     ObjectSetInteger(0, news_obj, OBJPROP_CORNER, CORNER_LEFT_UPPER);
-    ObjectSetInteger(0, news_obj, OBJPROP_XDISTANCE, 460);  // X position closer to LIVE part
+    ObjectSetInteger(0, news_obj, OBJPROP_XDISTANCE, 390);  // X position closer (removed trailing | from line4)
     ObjectSetInteger(0, news_obj, OBJPROP_YDISTANCE, y_start + (3 * y_spacing));
     ObjectSetInteger(0, news_obj, OBJPROP_COLOR, clrGold);  // Gold color
     ObjectSetInteger(0, news_obj, OBJPROP_FONTSIZE, 8);
