@@ -1154,81 +1154,6 @@ double GetUSDValue(string symbol, double price_change) {
     return (price_change / point) * 0.10;
 }
 
-// Extract integer field from JSON object string | Trich xuat truong so nguyen tu chuoi doi tuong JSON
-int ExtractIntField(string json_obj, string field_name) {
-    string search_str = "\"" + field_name + "\":";
-    int pos = StringFind(json_obj, search_str);
-    if(pos < 0) return 0;
-
-    pos += StringLen(search_str);
-
-    while(pos < StringLen(json_obj) &&
-          (StringGetCharacter(json_obj, pos) == ' ' ||
-           StringGetCharacter(json_obj, pos) == '\t')) {
-        pos++;
-    }
-
-    string num_str = "";
-    while(pos < StringLen(json_obj)) {
-        ushort ch = StringGetCharacter(json_obj, pos);
-        if(ch == ',' || ch == ' ' || ch == '}' || ch == '\n' || ch == '\r') break;
-        num_str += ShortToString(ch);
-        pos++;
-    }
-
-    return (int)StringToInteger(num_str);
-}
-
-// Extract long integer field from JSON object string | Trich xuat truong so nguyen dai tu chuoi doi tuong JSON
-long ExtractLongField(string json_obj, string field_name) {
-    string search_str = "\"" + field_name + "\":";
-    int pos = StringFind(json_obj, search_str);
-    if(pos < 0) return 0;
-
-    pos += StringLen(search_str);
-
-    while(pos < StringLen(json_obj) &&
-          (StringGetCharacter(json_obj, pos) == ' ' ||
-           StringGetCharacter(json_obj, pos) == '\t')) {
-        pos++;
-    }
-
-    string num_str = "";
-    while(pos < StringLen(json_obj)) {
-        ushort ch = StringGetCharacter(json_obj, pos);
-        if(ch == ',' || ch == ' ' || ch == '}' || ch == '\n' || ch == '\r') break;
-        num_str += ShortToString(ch);
-        pos++;
-    }
-
-    return (long)StringToInteger(num_str);
-}
-
-// Extract double field from JSON object string | Trich xuat truong so thuc tu chuoi doi tuong JSON
-double ExtractDoubleField(string json_obj, string field_name) {
-    string search_str = "\"" + field_name + "\":";
-    int pos = StringFind(json_obj, search_str);
-    if(pos < 0) return 0.0;
-
-    pos += StringLen(search_str);
-
-    while(pos < StringLen(json_obj) &&
-          (StringGetCharacter(json_obj, pos) == ' ' ||
-           StringGetCharacter(json_obj, pos) == '\t')) {
-        pos++;
-    }
-
-    string num_str = "";
-    while(pos < StringLen(json_obj)) {
-        ushort ch = StringGetCharacter(json_obj, pos);
-        if(ch == ',' || ch == ' ' || ch == '}' || ch == '\n' || ch == '\r') break;
-        num_str += ShortToString(ch);
-        pos++;
-    }
-
-    return StringToDouble(num_str);
-}
-
 // Convert signal integer to string representation | Chuyen doi so nguyen tin hieu sang chuoi dai dien
 string SignalToString(int signal) {
     if(signal > 0) return "BUY";   // Buy signal | Tin hieu mua
@@ -1292,20 +1217,6 @@ string ExtractJsonValue(string json_obj, string key) {
 //==============================================================================
 //  SECTION 10: FILE I/O FUNCTIONS (10 functions) | PHAN 10: HAM XUONG NHAP FILE
 //==============================================================================
-
-// Convert pips to points for the current symbol | Chuyen doi pip sang diem cho symbol hien tai
-double PipsToPoints(double pips) {
-    double pip_value = GetPipValue(g_target_symbol);
-    if(pip_value <= 0) return 0.0;
-    return pips * pip_value;
-}
-
-// Convert points to pips for display | Chuyen doi diem sang pip de hien thi
-double PointsToPips(double points) {
-    double pip_value = GetPipValue(g_target_symbol);
-    if(pip_value <= 0) return 0.0;
-    return points / pip_value;
-}
 
 // Convert timeframe period number to string name | Chuyen doi so chu ky khung thoi gian sang ten chuoi
 string TimeframeToString(int tf_period) {
@@ -2169,28 +2080,6 @@ int ExtractJsonInt(string json, string key) {
     }
 
     return (int)StringToInteger(value_str);
-}
-
-long ExtractJsonLong(string json, string key) {
-    return (long)ExtractJsonInt(json, key);
-}
-
-double ExtractJsonDouble(string json, string key) {
-    int key_pos = StringFind(json, "\"" + key + "\":");
-    if(key_pos < 0) return 0.0;
-
-    int value_start = key_pos + StringLen("\"" + key + "\":");
-
-    string value_str = "";
-    for(int i = value_start; i < StringLen(json); i++) {
-        ushort ch = StringGetCharacter(json, i);
-        if(ch == '"' || ch == ',') break;
-        if((ch >= '0' && ch <= '9') || ch == '.' || ch == '-') {
-            value_str = value_str + CharToString((uchar)ch);
-        }
-    }
-
-    return StringToDouble(value_str);
 }
 
 // REMOVED: WriteCSDL2ToFile() and BuildCSDL2JsonContent() - CSDL2 not used
