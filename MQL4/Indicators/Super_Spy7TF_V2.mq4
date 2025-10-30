@@ -31,7 +31,7 @@ input string DataFolder = "DataAutoOner\\";                  // Data Storage Fol
 
 //--- NEWS CASCADE Configuration | Cau hinh NEWS CASCADE
 input double NewsBaseLiveDiff = 2.5;                         // L1 Base Live Diff threshold (USD) | Nguong Live Diff co ban L1
-input double NewsLiveDiffStep = 1.0;                         // Live Diff increment per level (USD) | Tang Live Diff moi cap
+input double NewsLiveDiffStep = 0.5;                         // Live Diff increment per level (USD) | Tang Live Diff moi cap
 input int    NewsL1TimeLimit = 60;                           // L1 Time limit (seconds) | Gioi han thoi gian L1
 input int    NewsL2L3TimeLimit = 300;                        // L2-L3 Time limit (seconds) | Gioi han thoi gian L2-L3
 input int    NewsL4L7TimeLimit = 180;                        // L4-L7 Time limit (seconds) | Gioi han thoi gian L4-L7
@@ -1634,10 +1634,10 @@ int DetectCASCADE_New() {
         }
 
         // L2: M5→M1 - Two timeframe cascade
-        // M5→M1 aligned + live_diff > 3.5 USD + M5.cross=M1.time + within 1 candle → Score 20
+        // M5→M1 aligned + live_diff > 3.0 USD + M5.cross=M1.time + within 1 candle → Score 20
         if(m5_signal != 0 && m1_signal != 0 && m1_signal == m5_signal && result == 0) {
             if(m5_cross == m1_time) {  // M5.cross = M1.timestamp
-                double l2_threshold = NewsBaseLiveDiff + NewsLiveDiffStep;  // 3.5 USD
+                double l2_threshold = NewsBaseLiveDiff + (NewsLiveDiffStep * 1);  // 3.0 USD
                 if(live_usd_diff > l2_threshold && IsWithinOneCandle(0, m1_time)) {
                     result = m5_signal * 20;
                 }
@@ -1645,11 +1645,11 @@ int DetectCASCADE_New() {
         }
 
         // L3: M15→M5→M1 - Three timeframe full cascade
-        // Full cascade + live_diff > 4.0 USD + all crosses valid + within 1 candle → Score 30
+        // Full cascade + live_diff > 3.5 USD + all crosses valid + within 1 candle → Score 30
         if(m15_signal != 0 && m5_signal != 0 && m1_signal != 0 &&
            m1_signal == m5_signal && m5_signal == m15_signal && result == 0) {
             if(m15_cross == m5_time && m5_cross == m1_time) {  // Full cascade validation
-                double l3_threshold = NewsBaseLiveDiff + (NewsLiveDiffStep * 1.5);  // 4.0 USD
+                double l3_threshold = NewsBaseLiveDiff + (NewsLiveDiffStep * 2);  // 3.5 USD
                 if(live_usd_diff > l3_threshold && IsWithinOneCandle(0, m1_time)) {
                     result = m15_signal * 30;
                 }
@@ -1657,11 +1657,11 @@ int DetectCASCADE_New() {
         }
 
         // L4: M30→M15→M5→M1 - Four timeframe full cascade
-        // Full cascade + live_diff > 4.5 USD + all crosses valid + within 1 candle → Score 40
+        // Full cascade + live_diff > 4.0 USD + all crosses valid + within 1 candle → Score 40
         if(m30_signal != 0 && m15_signal != 0 && m5_signal != 0 && m1_signal != 0 &&
            m1_signal == m5_signal && m5_signal == m15_signal && m15_signal == m30_signal && result == 0) {
             if(m30_cross == m15_time && m15_cross == m5_time && m5_cross == m1_time) {
-                double l4_threshold = NewsBaseLiveDiff + (NewsLiveDiffStep * 2.0);  // 4.5 USD
+                double l4_threshold = NewsBaseLiveDiff + (NewsLiveDiffStep * 3);  // 4.0 USD
                 if(live_usd_diff > l4_threshold && IsWithinOneCandle(0, m1_time)) {
                     result = m30_signal * 40;
                 }
@@ -1669,11 +1669,11 @@ int DetectCASCADE_New() {
         }
 
         // L5: H1→M30→M15→M5→M1 - Five timeframe full cascade
-        // Full cascade + live_diff > 5.0 USD + all crosses valid + within 1 candle → Score 50
+        // Full cascade + live_diff > 4.5 USD + all crosses valid + within 1 candle → Score 50
         if(h1_signal != 0 && m30_signal != 0 && m15_signal != 0 && m5_signal != 0 && m1_signal != 0 &&
            m1_signal == m5_signal && m5_signal == m15_signal && m15_signal == m30_signal && m30_signal == h1_signal && result == 0) {
             if(h1_cross == m30_time && m30_cross == m15_time && m15_cross == m5_time && m5_cross == m1_time) {
-                double l5_threshold = NewsBaseLiveDiff + (NewsLiveDiffStep * 2.5);  // 5.0 USD
+                double l5_threshold = NewsBaseLiveDiff + (NewsLiveDiffStep * 4);  // 4.5 USD
                 if(live_usd_diff > l5_threshold && IsWithinOneCandle(0, m1_time)) {
                     result = h1_signal * 50;
                 }
@@ -1681,13 +1681,13 @@ int DetectCASCADE_New() {
         }
 
         // L6: H4→H1→M30→M15→M5→M1 - Six timeframe full cascade
-        // Full cascade + live_diff > 6.0 USD + all crosses valid + within 1 candle → Score 60
+        // Full cascade + live_diff > 5.0 USD + all crosses valid + within 1 candle → Score 60
         if(h4_signal != 0 && h1_signal != 0 && m30_signal != 0 && m15_signal != 0 && m5_signal != 0 && m1_signal != 0 &&
            m1_signal == m5_signal && m5_signal == m15_signal && m15_signal == m30_signal &&
            m30_signal == h1_signal && h1_signal == h4_signal && result == 0) {
             if(h4_cross == h1_time && h1_cross == m30_time && m30_cross == m15_time &&
                m15_cross == m5_time && m5_cross == m1_time) {
-                double l6_threshold = NewsBaseLiveDiff + (NewsLiveDiffStep * 3.5);  // 6.0 USD
+                double l6_threshold = NewsBaseLiveDiff + (NewsLiveDiffStep * 5);  // 5.0 USD
                 if(live_usd_diff > l6_threshold && IsWithinOneCandle(0, m1_time)) {
                     result = h4_signal * 60;
                 }
@@ -1695,14 +1695,14 @@ int DetectCASCADE_New() {
         }
 
         // L7: D1→H4→H1→M30→M15→M5→M1 - Seven timeframe full cascade (ULTIMATE)
-        // Full cascade + live_diff > 7.0 USD + all crosses valid + within 1 candle → Score 70
+        // Full cascade + live_diff > 5.5 USD + all crosses valid + within 1 candle → Score 70
         if(d1_signal != 0 && h4_signal != 0 && h1_signal != 0 && m30_signal != 0 &&
            m15_signal != 0 && m5_signal != 0 && m1_signal != 0 &&
            m1_signal == m5_signal && m5_signal == m15_signal && m15_signal == m30_signal &&
            m30_signal == h1_signal && h1_signal == h4_signal && h4_signal == d1_signal && result == 0) {
             if(d1_cross == h4_time && h4_cross == h1_time && h1_cross == m30_time &&
                m30_cross == m15_time && m15_cross == m5_time && m5_cross == m1_time) {
-                double l7_threshold = NewsBaseLiveDiff + (NewsLiveDiffStep * 4.5);  // 7.0 USD
+                double l7_threshold = NewsBaseLiveDiff + (NewsLiveDiffStep * 6);  // 5.5 USD
                 if(live_usd_diff > l7_threshold && IsWithinOneCandle(0, m1_time)) {
                     result = d1_signal * 70;
                 }
