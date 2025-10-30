@@ -1064,10 +1064,10 @@ double GetUSDValue(string symbol, double price_change) {
        StringFind(symbol_upper, "LTC") >= 0 || StringFind(symbol_upper, "BNB") >= 0 ||
        StringFind(symbol_upper, "SOL") >= 0 || StringFind(symbol_upper, "ADA") >= 0) {
         if(StringFind(symbol_upper, "BTC") >= 0) {
-            return price_change * 1.0;
+            return (price_change / 10.0) * 1.0;  // $10 BTC change ≈ $1 (match GOLD standard)
         }
         else if(StringFind(symbol_upper, "ETH") >= 0) {
-            return price_change * 0.5;
+            return (price_change / 2.0) * 1.0;  // $2 ETH change ≈ $1 (match GOLD standard)
         }
         else if(StringFind(symbol_upper, "LTC") >= 0) {
             return (price_change / 0.01) * 0.10;
@@ -1116,9 +1116,9 @@ double GetUSDValue(string symbol, double price_change) {
             double current_price = MarketInfo(symbol, MODE_BID);
             if(current_price > 0) {
                 if(StringFind(symbol_upper, "JPY") > 0) {
-                    return pips * 1.0 * 100 / current_price;
+                    return pips * 10.0 / current_price;  // Normalize to match GOLD standard
                 } else {
-                    return pips * 1.0 / current_price;
+                    return pips * 0.10 / current_price;  // Scale down to match GOLD standard
                 }
             }
         }
