@@ -1851,7 +1851,8 @@ void UpdateLiveNEWS() {
 
     // Log only Category 1 L3+ to avoid spam (major news events only)
     if(abs_result >= 30) {
-        Print("NEWS ", g_target_symbol, " L", level, ": ", (cascade_result > 0 ? "BUY" : "SELL"), " | Score:", cascade_result);
+        string time_str = TimeToString(TimeCurrent(), TIME_DATE|TIME_SECONDS);
+        Print(time_str, " | NEWS ", g_target_symbol, " L", level, ": ", (cascade_result > 0 ? "BUY" : "SELL"), " | Score:", cascade_result);
     }
 
     // Write to file
