@@ -827,8 +827,9 @@ void PrintDashboard() {
     string news_str = IntegerToString(g_symbol_data.news_results[0]);
     if(g_symbol_data.news_results[0] >= 0) news_str = "+" + news_str;
 
-    // Build line 4
-    string line4 = "[D1|" + d1_sig + "|" + d1_pricediff + "|" + IntegerToString(g_symbol_data.timediffs[6]) + "m] | NEWS:" + news_str + " | LIVE: " + live_price_str + " (" + live_usd_str + ", " + IntegerToString(live_time_diff) + "m)";
+    // Build line 4 - NEWS moved to end for simple gold highlighting
+    string line4 = "[D1|" + d1_sig + "|" + d1_pricediff + "|" + IntegerToString(g_symbol_data.timediffs[6]) + "m] | LIVE: " + live_price_str + " (" + live_usd_str + ", " + IntegerToString(live_time_diff) + "m) |";
+    string line4_news = " NEWS:" + news_str;
 
     // =========================================================================
     // TẠO 4 OBJECTS RIÊNG BIỆT (KHÔNG CONFLICT VỚI COMMENT() CỦA WT)
@@ -870,6 +871,21 @@ void PrintDashboard() {
         ObjectSetInteger(0, obj_names[i], OBJPROP_SELECTABLE, false);
         ObjectSetInteger(0, obj_names[i], OBJPROP_HIDDEN, true);
     }
+
+    // Tạo NEWS object riêng với màu vàng gold (ở cuối dòng 4)
+    string news_obj = "SPY_Dashboard_NEWS";
+    if(ObjectFind(0, news_obj) >= 0) ObjectDelete(0, news_obj);
+
+    ObjectCreate(0, news_obj, OBJ_LABEL, 0, 0, 0);
+    ObjectSetInteger(0, news_obj, OBJPROP_CORNER, CORNER_LEFT_UPPER);
+    ObjectSetInteger(0, news_obj, OBJPROP_XDISTANCE, 520);  // X position after LIVE part
+    ObjectSetInteger(0, news_obj, OBJPROP_YDISTANCE, y_start + (3 * y_spacing));
+    ObjectSetInteger(0, news_obj, OBJPROP_COLOR, clrGold);  // Gold color
+    ObjectSetInteger(0, news_obj, OBJPROP_FONTSIZE, 8);
+    ObjectSetString(0, news_obj, OBJPROP_FONT, "Courier New");
+    ObjectSetString(0, news_obj, OBJPROP_TEXT, line4_news);
+    ObjectSetInteger(0, news_obj, OBJPROP_SELECTABLE, false);
+    ObjectSetInteger(0, news_obj, OBJPROP_HIDDEN, true);
 }
 
 //==============================================================================
@@ -2811,11 +2827,12 @@ int OnCalculate(const int rates_total,
 void OnDeinit(const int reason) {
     EventKillTimer();
 
-    // Xóa 4 dashboard objects khỏi chart
+    // Xóa dashboard objects khỏi chart
     ObjectDelete(0, "SPY_Dashboard_Line1");
     ObjectDelete(0, "SPY_Dashboard_Line2");
     ObjectDelete(0, "SPY_Dashboard_Line3");
     ObjectDelete(0, "SPY_Dashboard_Line4");
+    ObjectDelete(0, "SPY_Dashboard_NEWS");
 
     // Cleanup GlobalVariables when indicator is removed (not just reloaded)
     if(reason == REASON_REMOVE) {
