@@ -29,6 +29,13 @@ input bool   ProcessSignalOnOddSecond = true;                // Process Signal o
 input bool   EnableMonthlyStats = true;                      // Monthly stats on 1st day of month | Thong ke thang vao ngay 1
 input string DataFolder = "DataAutoOner\\";                  // Data Storage Folder | Thu muc luu tru du lieu
 
+//--- NEWS CASCADE Configuration | Cau hinh NEWS CASCADE
+input double NewsBaseLiveDiff = 2.5;                         // L1 Base Live Diff threshold (USD) | Nguong Live Diff co ban L1
+input double NewsLiveDiffStep = 0.5;                         // Live Diff increment per level (USD) | Tang Live Diff moi cap
+input int    NewsBaseTimeMinutes = 2;                        // Category 2 Base Time (minutes) 2^level | Thoi gian co so Category 2
+input bool   EnableCategoryEA = true;                        // Enable Category 1 (EA Trading) | Bat Category 1 (EA danh)
+input bool   EnableCategoryUser = true;                      // Enable Category 2 (User Reference) | Bat Category 2 (tham khao)
+
 //==============================================================================
 //  SECTION 2: DATA STRUCTURES (3 structs) | PHAN 2: CAU TRUC DU LIEU
 //==============================================================================
@@ -121,9 +128,6 @@ SymbolCSDL1Data g_symbol_data;  // Data for current chart symbol only | Du lieu 
 //  SECTION 3: GLOBAL STATE VARIABLES (2 variables) | PHAN 3: BIEN TRANG THAI TOAN CAU
 //==============================================================================
 
-// NEWS Strategy Global State Variables | Bien trang thai toan cau chien luoc NEWS
-int g_news_active_level = 0;       // Active NEWS cascade level (0-6) | Cap do NEWS cascade dang hoat dong
-int g_news_active_direction = 0;   // Active NEWS direction (1=BUY,-1=SELL) | Huong NEWS dang hoat dong
 
 //==============================================================================
 //  SECTION 4: CONSTANTS & ANALYSIS STRUCTURES | PHAN 4: HANG SO VA CAU TRUC PHAN TICH
@@ -704,13 +708,13 @@ bool ProcessSignalForTF(int tf_idx, int signal, long signal_time) {
     g_symbol_data.pricediffs[tf_idx] = pricediff_usd;
     g_symbol_data.timediffs[tf_idx] = timediff_min;
 
-    // Calculate Column 9: NEWS (reads from g_symbol_data)
-    int news_result = AnalyzeNEWS();
-    g_symbol_data.news_results[tf_idx] = news_result;
-
-    // Calculate Column 10: Max Loss
+    // Column 9: NEWS - Updated by UpdateLiveNEWS() independently (runs every 2 seconds)
+    // Column 10: Max Loss
     double max_loss = CalculateMaxLoss();
     g_symbol_data.max_losses[tf_idx] = max_loss;
+
+    // Get current NEWS result for history/logging (set by UpdateLiveNEWS)
+    int news_result = g_symbol_data.news_results[tf_idx];
 
     // Update last tracking
     g_symbol_data.signals_last[tf_idx] = signal;
@@ -1064,10 +1068,10 @@ double GetUSDValue(string symbol, double price_change) {
        StringFind(symbol_upper, "LTC") >= 0 || StringFind(symbol_upper, "BNB") >= 0 ||
        StringFind(symbol_upper, "SOL") >= 0 || StringFind(symbol_upper, "ADA") >= 0) {
         if(StringFind(symbol_upper, "BTC") >= 0) {
-            return price_change * 1.0;
+            return (price_change / 10.0) * 1.0;  // $10 BTC change ≈ $1 (match GOLD standard)
         }
         else if(StringFind(symbol_upper, "ETH") >= 0) {
-            return price_change * 0.5;
+            return (price_change / 2.0) * 1.0;  // $2 ETH change ≈ $1 (match GOLD standard)
         }
         else if(StringFind(symbol_upper, "LTC") >= 0) {
             return (price_change / 0.01) * 0.10;
@@ -1116,9 +1120,9 @@ double GetUSDValue(string symbol, double price_change) {
             double current_price = MarketInfo(symbol, MODE_BID);
             if(current_price > 0) {
                 if(StringFind(symbol_upper, "JPY") > 0) {
-                    return pips * 1.0 * 100 / current_price;
+                    return pips * 10.0 / current_price;  // Normalize to match GOLD standard
                 } else {
-                    return pips * 1.0 / current_price;
+                    return pips * 0.10 / current_price;  // Scale down to match GOLD standard
                 }
             }
         }
@@ -1152,81 +1156,6 @@ double GetUSDValue(string symbol, double price_change) {
     }
 
     return (price_change / point) * 0.10;
-}
-
-// Extract integer field from JSON object string | Trich xuat truong so nguyen tu chuoi doi tuong JSON
-int ExtractIntField(string json_obj, string field_name) {
-    string search_str = "\"" + field_name + "\":";
-    int pos = StringFind(json_obj, search_str);
-    if(pos < 0) return 0;
-
-    pos += StringLen(search_str);
-
-    while(pos < StringLen(json_obj) &&
-          (StringGetCharacter(json_obj, pos) == ' ' ||
-           StringGetCharacter(json_obj, pos) == '\t')) {
-        pos++;
-    }
-
-    string num_str = "";
-    while(pos < StringLen(json_obj)) {
-        ushort ch = StringGetCharacter(json_obj, pos);
-        if(ch == ',' || ch == ' ' || ch == '}' || ch == '\n' || ch == '\r') break;
-        num_str += ShortToString(ch);
-        pos++;
-    }
-
-    return (int)StringToInteger(num_str);
-}
-
-// Extract long integer field from JSON object string | Trich xuat truong so nguyen dai tu chuoi doi tuong JSON
-long ExtractLongField(string json_obj, string field_name) {
-    string search_str = "\"" + field_name + "\":";
-    int pos = StringFind(json_obj, search_str);
-    if(pos < 0) return 0;
-
-    pos += StringLen(search_str);
-
-    while(pos < StringLen(json_obj) &&
-          (StringGetCharacter(json_obj, pos) == ' ' ||
-           StringGetCharacter(json_obj, pos) == '\t')) {
-        pos++;
-    }
-
-    string num_str = "";
-    while(pos < StringLen(json_obj)) {
-        ushort ch = StringGetCharacter(json_obj, pos);
-        if(ch == ',' || ch == ' ' || ch == '}' || ch == '\n' || ch == '\r') break;
-        num_str += ShortToString(ch);
-        pos++;
-    }
-
-    return (long)StringToInteger(num_str);
-}
-
-// Extract double field from JSON object string | Trich xuat truong so thuc tu chuoi doi tuong JSON
-double ExtractDoubleField(string json_obj, string field_name) {
-    string search_str = "\"" + field_name + "\":";
-    int pos = StringFind(json_obj, search_str);
-    if(pos < 0) return 0.0;
-
-    pos += StringLen(search_str);
-
-    while(pos < StringLen(json_obj) &&
-          (StringGetCharacter(json_obj, pos) == ' ' ||
-           StringGetCharacter(json_obj, pos) == '\t')) {
-        pos++;
-    }
-
-    string num_str = "";
-    while(pos < StringLen(json_obj)) {
-        ushort ch = StringGetCharacter(json_obj, pos);
-        if(ch == ',' || ch == ' ' || ch == '}' || ch == '\n' || ch == '\r') break;
-        num_str += ShortToString(ch);
-        pos++;
-    }
-
-    return StringToDouble(num_str);
 }
 
 // Convert signal integer to string representation | Chuyen doi so nguyen tin hieu sang chuoi dai dien
@@ -1292,20 +1221,6 @@ string ExtractJsonValue(string json_obj, string key) {
 //==============================================================================
 //  SECTION 10: FILE I/O FUNCTIONS (10 functions) | PHAN 10: HAM XUONG NHAP FILE
 //==============================================================================
-
-// Convert pips to points for the current symbol | Chuyen doi pip sang diem cho symbol hien tai
-double PipsToPoints(double pips) {
-    double pip_value = GetPipValue(g_target_symbol);
-    if(pip_value <= 0) return 0.0;
-    return pips * pip_value;
-}
-
-// Convert points to pips for display | Chuyen doi diem sang pip de hien thi
-double PointsToPips(double points) {
-    double pip_value = GetPipValue(g_target_symbol);
-    if(pip_value <= 0) return 0.0;
-    return points / pip_value;
-}
 
 // Convert timeframe period number to string name | Chuyen doi so chu ky khung thoi gian sang ten chuoi
 string TimeframeToString(int tf_period) {
@@ -1644,10 +1559,26 @@ void CreateEmptyCSDL2Files() {
 //==============================================================================
 //  SECTION 11: NEWS CASCADE STRATEGY (5 functions) | PHAN 11: CHIEN LUOC NEWS CASCADE
 //==============================================================================
-// 6-level cascade detection system for multi-timeframe signal alignment
-// He thong phat hien cascade 6 cap do de sap xep tin hieu nhieu khung thoi gian
+// 7-level cascade detection system for multi-timeframe signal alignment with 2 categories
+// He thong phat hien cascade 7 cap do de sap xep tin hieu nhieu khung thoi gian voi 2 category
 
-// Detect NEWS CASCADE across 6 levels of timeframe alignment | Phat hien NEWS CASCADE qua 6 cap do sap xep khung thoi gian
+// Helper function: Check if signal timestamp is within current candle of specified timeframe
+// Ham ho tro: Kiem tra timestamp tin hieu co nam trong nen hien tai cua khung thoi gian chi dinh
+bool IsWithinOneCandle(int timeframe_index, datetime signal_time) {
+    // timeframe_index: 0=M1, 1=M5, 2=M15, 3=M30, 4=H1, 5=H4, 6=D1
+    int tf_periods[] = {PERIOD_M1, PERIOD_M5, PERIOD_M15, PERIOD_M30, PERIOD_H1, PERIOD_H4, PERIOD_D1};
+
+    if(timeframe_index < 0 || timeframe_index > 6) return false;
+
+    // Get current candle start time for this timeframe
+    datetime candle_start = iTime(g_target_symbol, tf_periods[timeframe_index], 0);
+
+    // Signal must be >= candle_start (within current candle)
+    return (signal_time >= candle_start);
+}
+
+// Detect NEWS CASCADE across 7 levels of timeframe alignment | Phat hien NEWS CASCADE qua 7 cap do sap xep khung thoi gian
+// Returns: ±1-7 (Category 2: User Reference) or ±10-70 (Category 1: EA Trading)
 int DetectCASCADE_New() {
     // Get 7 TF signals (M1=0, M5=1, ..., D1=6) from g_symbol_data
     int m1_signal = g_symbol_data.signals[0];
@@ -1676,305 +1607,250 @@ int DetectCASCADE_New() {
     datetime d1_cross = (datetime)g_symbol_data.crosses[6];
 
     // Calculate LIVE USD diff from current price (real-time)
-    double m1_price = g_symbol_data.prices[0];          // M1 last signal price
+    double m1_price = g_symbol_data.prices[0];               // M1 last signal price
     double current_price = (Ask + Bid) / 2.0;                // Current real-time price
     double live_diff_raw = current_price - m1_price;         // Raw price difference
     double live_usd_diff = GetUSDValue(g_target_symbol, MathAbs(live_diff_raw));  // USD conversion
-    int live_time_diff = (int)(TimeCurrent() - m1_time);     // Time since M1 signal
-    int highest_result = 0;
+    int live_time_diff = (int)(TimeCurrent() - m1_time);     // Time since M1 signal (for breakthrough detection)
+
+    int result = 0;  // Final result
 
     // ============================================================
-    // L1: M5?M1 (Basic +1 / Advanced +16)
+    // PHASE 1: CATEGORY 1 (EA TRADING) - CHECK ALL 7 LEVELS FIRST
+    // Priority: Check strict conditions for EA trading signals
     // ============================================================
-    if(m5_signal != 0 && m1_signal != 0 && m1_signal == m5_signal) {
-        if(m5_cross == m1_time) {  // M5.cross = M1.timestamp
-            int result = 1;  // Basic
-            if(live_usd_diff >= 4.0 && live_time_diff <= 300) {  // 5 min
-                result = 16;  // Advanced
+    if(EnableCategoryEA) {
+        // L1: M1 only - Single timeframe breakthrough
+        // live_diff > 2.5 USD + within 1 candle → Score 10
+        if(m1_signal != 0 && result == 0) {
+            double l1_threshold = NewsBaseLiveDiff;  // 2.5 USD
+            if(live_usd_diff > l1_threshold && IsWithinOneCandle(0, m1_time)) {
+                result = m1_signal * 10;
             }
-            highest_result = m5_signal * result;
         }
-    }
 
-    // ============================================================
-    // L2: M15?M5?M1 (Basic +12 / Advanced +17)
-    // BONUS: M15?M5 (cross reference exists, USD > 0) = +2
-    // ============================================================
-    if(m15_signal != 0 && m5_signal != 0 && m5_signal == m15_signal) {
-        if(m15_cross == m5_time) {  // M15.cross = M5.timestamp
-            int result = 0;
-
-            // Check if M5?M1 cascade exists
-                // Full cascade: M15?M5?M1
-            if(m1_signal == m15_signal && m5_cross == m1_time) {
-                result = 12;  // Basic
-                if(live_usd_diff >= 6.0 && live_time_diff <= 900) {  // 15 min
-                    result = 17;  // Advanced
+        // L2: M5→M1 - Two timeframe cascade
+        // M5→M1 aligned + live_diff > 3.0 USD + M5.cross=M1.time + within 1 candle → Score 20
+        if(m5_signal != 0 && m1_signal != 0 && m1_signal == m5_signal && result == 0) {
+            if(m5_cross == m1_time) {  // M5.cross = M1.timestamp
+                double l2_threshold = NewsBaseLiveDiff + (NewsLiveDiffStep * 1);  // 3.0 USD
+                if(live_usd_diff > l2_threshold && IsWithinOneCandle(1, m5_time)) {
+                    result = m5_signal * 20;
                 }
-            } else if(m15_cross == m5_time && live_usd_diff > 0) {
-                // BONUS: M15?M5 cross exists + USD > 0
-                result = 2;
-            }
-
-            if(result > MathAbs(highest_result)) {
-                highest_result = m15_signal * result;
             }
         }
-    }
 
-    // BONUS standalone check if not in full cascade
-    // MUST check same direction: m5_signal == m15_signal
-    if(m15_signal != 0 && m5_signal != 0 && m5_signal == m15_signal && m15_cross == m5_time && live_usd_diff > 0) {
-        if(MathAbs(highest_result) < 2) {
-            highest_result = m15_signal * 2;
-        }
-    }
-
-    // ============================================================
-    // L3: M30?M15?M5 (Basic +13 / Advanced +18)
-    // BONUS: M30?M15 (cross exists, USD > 0) = +3
-    // ============================================================
-    if(m30_signal != 0 && m15_signal != 0 && m15_signal == m30_signal) {
-        if(m30_cross == m15_time) {  // M30.cross = M15.timestamp
-            int result = 0;
-
-            // Check M15?M5 cascade
-            if(m5_signal == m30_signal && m15_cross == m5_time) {
-                // Full: M30?M15?M5
-                result = 13;
-                if(live_usd_diff >= 8.0 && live_time_diff <= 1800) {  // 30 min
-                    result = 18;
+        // L3: M15→M5→M1 - Three timeframe full cascade
+        // Full cascade + live_diff > 3.5 USD + all crosses valid + within 1 candle → Score 30
+        if(m15_signal != 0 && m5_signal != 0 && m1_signal != 0 &&
+           m1_signal == m5_signal && m5_signal == m15_signal && result == 0) {
+            if(m15_cross == m5_time && m5_cross == m1_time) {  // Full cascade validation
+                double l3_threshold = NewsBaseLiveDiff + (NewsLiveDiffStep * 2);  // 3.5 USD
+                if(live_usd_diff > l3_threshold && IsWithinOneCandle(2, m15_time)) {
+                    result = m15_signal * 30;
                 }
-            } else if(m30_cross == m15_time && live_usd_diff > 0) {
-                // BONUS: M30?M15 cross exists + USD > 0
-                result = 3;
-            }
-
-            if(result > MathAbs(highest_result)) {
-                highest_result = m30_signal * result;
             }
         }
-    }
 
-    // BONUS standalone
-    // MUST check same direction: m15_signal == m30_signal
-    if(m30_signal != 0 && m15_signal != 0 && m15_signal == m30_signal && m30_cross == m15_time && live_usd_diff > 0) {
-        if(MathAbs(highest_result) < 3) {
-            highest_result = m30_signal * 3;
-        }
-    }
-
-    // ============================================================
-    // L4: H1?M30?M15 (Basic +14 / Advanced +19)
-    // BONUS: H1?M30 (cross exists, USD > 0) = +4
-    // ============================================================
-    if(h1_signal != 0 && m30_signal != 0 && m30_signal == h1_signal) {
-        if(h1_cross == m30_time) {  // H1.cross = M30.timestamp
-            int result = 0;
-
-            // Check M30?M15 cascade
-            if(m15_signal == h1_signal && m30_cross == m15_time) {
-                // Full: H1?M30?M15
-                result = 14;
-                if(live_usd_diff >= 10.0 && live_time_diff <= 3600) {  // 1 hour
-                    result = 19;
+        // L4: M30→M15→M5→M1 - Four timeframe full cascade
+        // Full cascade + live_diff > 4.0 USD + all crosses valid + within 1 candle → Score 40
+        if(m30_signal != 0 && m15_signal != 0 && m5_signal != 0 && m1_signal != 0 &&
+           m1_signal == m5_signal && m5_signal == m15_signal && m15_signal == m30_signal && result == 0) {
+            if(m30_cross == m15_time && m15_cross == m5_time && m5_cross == m1_time) {
+                double l4_threshold = NewsBaseLiveDiff + (NewsLiveDiffStep * 3);  // 4.0 USD
+                if(live_usd_diff > l4_threshold && IsWithinOneCandle(3, m30_time)) {
+                    result = m30_signal * 40;
                 }
-            } else if(h1_cross == m30_time && live_usd_diff > 0) {
-                // BONUS: H1?M30 cross exists + USD > 0
-                result = 4;
-            }
-
-            if(result > MathAbs(highest_result)) {
-                highest_result = h1_signal * result;
             }
         }
-    }
 
-    // BONUS standalone
-    // MUST check same direction: m30_signal == h1_signal
-    if(h1_signal != 0 && m30_signal != 0 && m30_signal == h1_signal && h1_cross == m30_time && live_usd_diff > 0) {
-        if(MathAbs(highest_result) < 4) {
-            highest_result = h1_signal * 4;
-        }
-    }
-
-    // ============================================================
-    // L5: H4?H1?M30 (Basic +15 / Advanced +20)
-    // BONUS: H4?H1 (cross exists, USD > 0) = +5
-    // ============================================================
-    if(h4_signal != 0 && h1_signal != 0 && h1_signal == h4_signal) {
-        if(h4_cross == h1_time) {  // H4.cross = H1.timestamp
-            int result = 0;
-
-            // Check H1?M30 cascade
-            if(m30_signal == h4_signal && h1_cross == m30_time) {
-                // Full: H4?H1?M30
-                result = 15;
-                if(live_usd_diff >= 12.0 && live_time_diff <= 14400) {  // 4 hours
-                    result = 20;
+        // L5: H1→M30→M15→M5→M1 - Five timeframe full cascade
+        // Full cascade + live_diff > 4.5 USD + all crosses valid + within 1 candle → Score 50
+        if(h1_signal != 0 && m30_signal != 0 && m15_signal != 0 && m5_signal != 0 && m1_signal != 0 &&
+           m1_signal == m5_signal && m5_signal == m15_signal && m15_signal == m30_signal && m30_signal == h1_signal && result == 0) {
+            if(h1_cross == m30_time && m30_cross == m15_time && m15_cross == m5_time && m5_cross == m1_time) {
+                double l5_threshold = NewsBaseLiveDiff + (NewsLiveDiffStep * 4);  // 4.5 USD
+                if(live_usd_diff > l5_threshold && IsWithinOneCandle(4, h1_time)) {
+                    result = h1_signal * 50;
                 }
-            } else if(h4_cross == h1_time && live_usd_diff > 0) {
-                // BONUS: H4?H1 cross exists + USD > 0
-                result = 5;
-            }
-
-            if(result > MathAbs(highest_result)) {
-                highest_result = h4_signal * result;
             }
         }
-    }
 
-    // BONUS standalone
-    // MUST check same direction: h1_signal == h4_signal
-    if(h4_signal != 0 && h1_signal != 0 && h1_signal == h4_signal && h4_cross == h1_time && live_usd_diff > 0) {
-        if(MathAbs(highest_result) < 5) {
-            highest_result = h4_signal * 5;
-        }
-    }
-
-    // ============================================================
-    // L6: D1?H4?H1 (Basic +16 / Advanced +30) - NEW
-    // BONUS: D1?H4 (cross exists, USD > 0) = +6
-    // ============================================================
-    if(d1_signal != 0 && h4_signal != 0 && h4_signal == d1_signal) {
-        if(d1_cross == h4_time) {  // D1.cross = H4.timestamp
-            int result = 0;
-
-            // Check H4?H1 cascade
-            if(h1_signal == d1_signal && h4_cross == h1_time) {
-                // Full: D1?H4?H1
-                result = 16;
-                if(live_usd_diff >= 14.0 && live_time_diff <= 14400) {  // 4 hours
-                    result = 30;
+        // L6: H4→H1→M30→M15→M5→M1 - Six timeframe full cascade
+        // Full cascade + live_diff > 5.0 USD + all crosses valid + within 1 candle → Score 60
+        if(h4_signal != 0 && h1_signal != 0 && m30_signal != 0 && m15_signal != 0 && m5_signal != 0 && m1_signal != 0 &&
+           m1_signal == m5_signal && m5_signal == m15_signal && m15_signal == m30_signal &&
+           m30_signal == h1_signal && h1_signal == h4_signal && result == 0) {
+            if(h4_cross == h1_time && h1_cross == m30_time && m30_cross == m15_time &&
+               m15_cross == m5_time && m5_cross == m1_time) {
+                double l6_threshold = NewsBaseLiveDiff + (NewsLiveDiffStep * 5);  // 5.0 USD
+                if(live_usd_diff > l6_threshold && IsWithinOneCandle(5, h4_time)) {
+                    result = h4_signal * 60;
                 }
-            } else if(d1_cross == h4_time && live_usd_diff > 0) {
-                // BONUS: D1?H4 cross exists + USD > 0
-                result = 6;
-            }
-
-            if(result > MathAbs(highest_result)) {
-                highest_result = d1_signal * result;
             }
         }
-    }
 
-    // BONUS standalone
-    // MUST check same direction: h4_signal == d1_signal
-    if(d1_signal != 0 && h4_signal != 0 && h4_signal == d1_signal && d1_cross == h4_time && live_usd_diff > 0) {
-        if(MathAbs(highest_result) < 6) {
-            highest_result = d1_signal * 6;
+        // L7: D1→H4→H1→M30→M15→M5→M1 - Seven timeframe full cascade (ULTIMATE)
+        // Full cascade + live_diff > 5.5 USD + all crosses valid + within 1 candle → Score 70
+        if(d1_signal != 0 && h4_signal != 0 && h1_signal != 0 && m30_signal != 0 &&
+           m15_signal != 0 && m5_signal != 0 && m1_signal != 0 &&
+           m1_signal == m5_signal && m5_signal == m15_signal && m15_signal == m30_signal &&
+           m30_signal == h1_signal && h1_signal == h4_signal && h4_signal == d1_signal && result == 0) {
+            if(d1_cross == h4_time && h4_cross == h1_time && h1_cross == m30_time &&
+               m30_cross == m15_time && m15_cross == m5_time && m5_cross == m1_time) {
+                double l7_threshold = NewsBaseLiveDiff + (NewsLiveDiffStep * 6);  // 5.5 USD
+                if(live_usd_diff > l7_threshold && IsWithinOneCandle(6, d1_time)) {
+                    result = d1_signal * 70;
+                }
+            }
         }
-    }
+    }  // End Category 1
 
-    return highest_result;
+    // ============================================================
+    // PHASE 2: CATEGORY 2 (USER REFERENCE) - ONLY IF CATEGORY 1 = 0
+    // Relaxed conditions for user reference signals
+    // ============================================================
+    if(result == 0 && EnableCategoryUser) {
+        // L1: M1 only
+        // live_diff > 0 + time < 2 min (1×2) → Score 1
+        if(m1_signal != 0) {
+            int l1_time_limit = 1 * NewsBaseTimeMinutes * 60;  // 1 × 2 × 60 = 120s = 2min
+            if(live_usd_diff > 0 && live_time_diff < l1_time_limit) {
+                result = m1_signal * 1;
+            }
+        }
+
+        // L2: M5→M1
+        // live_diff > 0 + time < 4 min (2×2) → Score 2
+        if(m5_signal != 0 && m1_signal != 0 && m1_signal == m5_signal && result == 0) {
+            if(m5_cross == m1_time) {
+                int l2_time_limit = 2 * NewsBaseTimeMinutes * 60;  // 2 × 2 × 60 = 240s = 4min
+                if(live_usd_diff > 0 && live_time_diff < l2_time_limit) {
+                    result = m5_signal * 2;
+                }
+            }
+        }
+
+        // L3: M15→M5→M1
+        // live_diff > 0 + time < 6 min (3×2) → Score 3
+        if(m15_signal != 0 && m5_signal != 0 && m1_signal != 0 &&
+           m1_signal == m5_signal && m5_signal == m15_signal && result == 0) {
+            if(m15_cross == m5_time && m5_cross == m1_time) {
+                int l3_time_limit = 3 * NewsBaseTimeMinutes * 60;  // 3 × 2 × 60 = 360s = 6min
+                if(live_usd_diff > 0 && live_time_diff < l3_time_limit) {
+                    result = m15_signal * 3;
+                }
+            }
+        }
+
+        // L4: M30→M15→M5→M1
+        // live_diff > 0 + time < 8 min (4×2) → Score 4
+        if(m30_signal != 0 && m15_signal != 0 && m5_signal != 0 && m1_signal != 0 &&
+           m1_signal == m5_signal && m5_signal == m15_signal && m15_signal == m30_signal && result == 0) {
+            if(m30_cross == m15_time && m15_cross == m5_time && m5_cross == m1_time) {
+                int l4_time_limit = 4 * NewsBaseTimeMinutes * 60;  // 4 × 2 × 60 = 480s = 8min
+                if(live_usd_diff > 0 && live_time_diff < l4_time_limit) {
+                    result = m30_signal * 4;
+                }
+            }
+        }
+
+        // L5: H1→M30→M15→M5→M1
+        // live_diff > 0 + time < 10 min (5×2) → Score 5
+        if(h1_signal != 0 && m30_signal != 0 && m15_signal != 0 && m5_signal != 0 && m1_signal != 0 &&
+           m1_signal == m5_signal && m5_signal == m15_signal && m15_signal == m30_signal && m30_signal == h1_signal && result == 0) {
+            if(h1_cross == m30_time && m30_cross == m15_time && m15_cross == m5_time && m5_cross == m1_time) {
+                int l5_time_limit = 5 * NewsBaseTimeMinutes * 60;  // 5 × 2 × 60 = 600s = 10min
+                if(live_usd_diff > 0 && live_time_diff < l5_time_limit) {
+                    result = h1_signal * 5;
+                }
+            }
+        }
+
+        // L6: H4→H1→M30→M15→M5→M1
+        // live_diff > 0 + time < 12 min (6×2) → Score 6
+        if(h4_signal != 0 && h1_signal != 0 && m30_signal != 0 && m15_signal != 0 && m5_signal != 0 && m1_signal != 0 &&
+           m1_signal == m5_signal && m5_signal == m15_signal && m15_signal == m30_signal &&
+           m30_signal == h1_signal && h1_signal == h4_signal && result == 0) {
+            if(h4_cross == h1_time && h1_cross == m30_time && m30_cross == m15_time &&
+               m15_cross == m5_time && m5_cross == m1_time) {
+                int l6_time_limit = 6 * NewsBaseTimeMinutes * 60;  // 6 × 2 × 60 = 720s = 12min
+                if(live_usd_diff > 0 && live_time_diff < l6_time_limit) {
+                    result = h4_signal * 6;
+                }
+            }
+        }
+
+        // L7: D1→H4→H1→M30→M15→M5→M1
+        // live_diff > 0 + time < 14 min (7×2) → Score 7
+        if(d1_signal != 0 && h4_signal != 0 && h1_signal != 0 && m30_signal != 0 &&
+           m15_signal != 0 && m5_signal != 0 && m1_signal != 0 &&
+           m1_signal == m5_signal && m5_signal == m15_signal && m15_signal == m30_signal &&
+           m30_signal == h1_signal && h1_signal == h4_signal && h4_signal == d1_signal && result == 0) {
+            if(d1_cross == h4_time && h4_cross == h1_time && h1_cross == m30_time &&
+               m30_cross == m15_time && m15_cross == m5_time && m5_cross == m1_time) {
+                int l7_time_limit = 7 * NewsBaseTimeMinutes * 60;  // 7 × 2 × 60 = 840s = 14min
+                if(live_usd_diff > 0 && live_time_diff < l7_time_limit) {
+                    result = d1_signal * 7;
+                }
+            }
+        }
+    }  // End Category 2
+
+    return result;
 }
 
-// Check if active NEWS direction has reversed based on timeframe | Kiem tra huong NEWS dang hoat dong co dao nguoc khong
-bool DirectionReversed() {
-    if(g_news_active_level == 0) return false;  // No active state
-
-    // L1: No reversal check - will reset naturally when CASCADE expires
-    if(g_news_active_level == 1) return false;
-
-    // Map level to timeframe index for reset check
-    int check_index = -1;
-
-    switch(g_news_active_level) {
-        case 2: check_index = 1; break;  // L2 (M15?M5?M1) - reset when M5 reverses
-        case 3: check_index = 2; break;  // L3 (M30?M15?M5) - reset when M15 reverses
-        case 4: check_index = 6; break;  // L4 (H1?M30?M15) - reset when D1 reverses
-        case 5: check_index = 6; break;  // L5 (H4?H1?M30) - reset when D1 reverses
-        case 6: check_index = 6; break;  // L6 (D1?H4?H1) - reset when D1 reverses
-    }
-
-    if(check_index < 0) return false;
-
-    // Get signal from g_symbol_data
-    int tf_signal = g_symbol_data.signals[check_index];
-
-    // Check reversal
-    if(tf_signal != 0 && tf_signal != g_news_active_direction) {
-        return true;
-    }
-
-    return false;
-}
-
-// Activate NEWS state with level and direction | Kich hoat trang thai NEWS voi cap do va huong
-void ActivateNewsState(int level, int direction) {
-    if(level < 1 || level > 6) return;  // ??i 5?6 ?? support L6
-    
-    // CH? update n?u level cao h?n
-    if(level > g_news_active_level) {
-        g_news_active_level = level;
-        g_news_active_direction = direction;
-        
-    }
-}
-
-// Reset NEWS state to inactive | Dat lai trang thai NEWS ve khong hoat dong
-void ResetNewsState() {
-    g_news_active_level = 0;       // Clear level | Xoa cap do
-    g_news_active_direction = 0;   // Clear direction | Xoa huong
-}
-
-// Main NEWS analysis function with cascade detection and state management | Ham phan tich NEWS chinh voi phat hien cascade va quan ly trang thai
+// Main NEWS analysis function - LIVE mode (simplified, no state) | Ham phan tich NEWS - che do LIVE don gian
 int AnalyzeNEWS() {
-    // Get M1 signal from g_symbol_data
-    int m1_signal = g_symbol_data.signals[0];
-    double m1_price = g_symbol_data.prices[0];
-    long m1_timestamp = g_symbol_data.timestamps[0];
+    // Simply detect and return CASCADE result directly
+    int cascade_result = DetectCASCADE_New();
+    return cascade_result;  // Return ±1-7 (User) or ±10-70 (EA)
+}
 
-    if(m1_signal == 0) return 0;
-
-    // Step 0: CHECK DIRECTION REVERSAL - RESET STATE - 2025-10-15
-    // L1: Natural reset when CASCADE expires (không check reversal)
-    // L2: Reset when M5 reverses
-    // L3: Reset when M15 reverses
-    // L4, L5, L6: Reset when D1 reverses
-    if(g_news_active_level > 0) {
-        if(DirectionReversed()) {
-            ResetNewsState();
-        }
-    }
-
-
-    // Step 3: CASCADE detection (NEW ENCODING)
+// Update LIVE NEWS for all 7 timeframes independently | Cap nhat NEWS LIVE cho 7 khung thoi gian doc lap
+void UpdateLiveNEWS() {
+    // Get CASCADE result
     int cascade_result = DetectCASCADE_New();
 
-    // Step 4: State management (NEW LOGIC)
-    if(cascade_result != 0) {
-        int level = MathAbs(cascade_result);
-        int direction = cascade_result > 0 ? 1 : -1;
-
-        // Priority: activate if higher level or direction changed
-        if(level > g_news_active_level ||
-           (level == g_news_active_level && direction != g_news_active_direction)) {
-            ActivateNewsState(level, direction);
-
-        }
-    }
-    else {
-        // No CASCADE detected
-        // L1: Natural reset when CASCADE expires (live h?t thì t? reset)
-        if(g_news_active_level == 1) {
-            ResetNewsState();
-        }
+    // Clear all NEWS results first
+    for(int i = 0; i < 7; i++) {
+        g_symbol_data.news_results[i] = 0;
     }
 
-    // Step 5: Return active state OR CASCADE result
-    // If state active, return state (keep level until reset conditions met)
-    if(g_news_active_level > 0) {
-        int active_result = g_news_active_direction * g_news_active_level;
-        return active_result;
+    if(cascade_result == 0) {
+        return;  // No cascade detected
     }
 
-    // If no active state, return cascade result
-    if(cascade_result != 0) {
-        return cascade_result;  // Return encoded value: +1 to +30 or -1 to -30
+    // Extract level from result
+    // Category 1 (EA): ±10, ±20, ±30, ±40, ±50, ±60, ±70 → levels 1-7
+    // Category 2 (User): ±1, ±2, ±3, ±4, ±5, ±6, ±7 → levels 1-7
+    int abs_result = MathAbs(cascade_result);
+    int level = 0;
+
+    if(abs_result >= 10) {
+        // Category 1: EA (10-70)
+        level = abs_result / 10;  // 10→1, 20→2, ..., 70→7
+    } else {
+        // Category 2: User (1-7)
+        level = abs_result;  // 1→1, 2→2, ..., 7→7
     }
 
-    return 0;
+    // Map level to row index
+    // L1 → row 0 (M1)
+    // L2 → row 1 (M5)
+    // L3 → row 2 (M15)
+    // L4 → row 3 (M30)
+    // L5 → row 4 (H1)
+    // L6 → row 5 (H4)
+    // L7 → row 6 (D1)
+
+    if(level >= 1 && level <= 7) {
+        int row_index = level - 1;  // Level 1→row 0, Level 2→row 1, ..., Level 7→row 6
+        g_symbol_data.news_results[row_index] = cascade_result;
+    }
+
+    // Write to file
+    WriteCSDL1ArrayToFile();
 }
 
 //==============================================================================
@@ -2169,28 +2045,6 @@ int ExtractJsonInt(string json, string key) {
     }
 
     return (int)StringToInteger(value_str);
-}
-
-long ExtractJsonLong(string json, string key) {
-    return (long)ExtractJsonInt(json, key);
-}
-
-double ExtractJsonDouble(string json, string key) {
-    int key_pos = StringFind(json, "\"" + key + "\":");
-    if(key_pos < 0) return 0.0;
-
-    int value_start = key_pos + StringLen("\"" + key + "\":");
-
-    string value_str = "";
-    for(int i = value_start; i < StringLen(json); i++) {
-        ushort ch = StringGetCharacter(json, i);
-        if(ch == '"' || ch == ',') break;
-        if((ch >= '0' && ch <= '9') || ch == '.' || ch == '-') {
-            value_str = value_str + CharToString((uchar)ch);
-        }
-    }
-
-    return StringToDouble(value_str);
 }
 
 // REMOVED: WriteCSDL2ToFile() and BuildCSDL2JsonContent() - CSDL2 not used
@@ -2793,6 +2647,7 @@ void OnTimer() {
     // (KHONG LIEN QUAN MODE CHINH)
     // ========================================
     if(current_second % 2 == 0) {  // Giay chan (0, 2, 4, 6, 8...)
+        UpdateLiveNEWS();            // Update NEWS LIVE (cot 9) - doc lap signal WT
         RunStartupReset();
         RunMidnightAndHealthCheck();
         RunDashboardUpdate();
