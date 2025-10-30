@@ -828,7 +828,7 @@ void PrintDashboard() {
     if(g_symbol_data.news_results[0] >= 0) news_str = "+" + news_str;
 
     // Build line 4
-    string line4 = "[D1|" + d1_sig + "|" + d1_pricediff + "|" + IntegerToString(g_symbol_data.timediffs[6]) + "m]  NEWS:" + news_str + " | LIVE: " + live_price_str + " (" + live_usd_str + " | " + IntegerToString(live_time_diff) + "m)";
+    string line4 = "[D1|" + d1_sig + "|" + d1_pricediff + "|" + IntegerToString(g_symbol_data.timediffs[6]) + "m] | NEWS:" + news_str + " | LIVE: " + live_price_str + " (" + live_usd_str + ", " + IntegerToString(live_time_diff) + "m)";
 
     // =========================================================================
     // TẠO 4 OBJECTS RIÊNG BIỆT (KHÔNG CONFLICT VỚI COMMENT() CỦA WT)
