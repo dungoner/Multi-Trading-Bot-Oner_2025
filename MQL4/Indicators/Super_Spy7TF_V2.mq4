@@ -1617,189 +1617,184 @@ int DetectCASCADE_New() {
     double live_usd_diff = GetUSDValue(g_target_symbol, MathAbs(live_diff_raw));  // USD conversion
     int live_time_diff = (int)(TimeCurrent() - m1_time);     // Time since M1 signal (for breakthrough detection)
 
-    // Result tracking
-    int result_ea = 0;    // Category 1: EA Trading (scores 10-70)
-    int result_user = 0;  // Category 2: User Reference (scores 1-7)
+    int result = 0;  // Final result
 
     // ============================================================
-    // L1: M1 only - Single timeframe breakthrough
-    // Category 1 (EA): live_diff > 2.5 USD + within 1 candle → Score 10
-    // Category 2 (User): live_diff > 0 + time < 5 min → Score 1
+    // PHASE 1: CATEGORY 1 (EA TRADING) - CHECK ALL 7 LEVELS FIRST
+    // Priority: Check strict conditions for EA trading signals
     // ============================================================
-    if(m1_signal != 0) {
-        // Category 1: EA Trading (Strict)
-        if(EnableCategoryEA) {
+    if(EnableCategoryEA) {
+        // L1: M1 only - Single timeframe breakthrough
+        // live_diff > 2.5 USD + within 1 candle → Score 10
+        if(m1_signal != 0 && result == 0) {
             double l1_threshold = NewsBaseLiveDiff;  // 2.5 USD
             if(live_usd_diff > l1_threshold && IsWithinOneCandle(0, m1_time)) {
-                result_ea = m1_signal * 10;
+                result = m1_signal * 10;
             }
         }
 
-        // Category 2: User Reference (Relaxed)
-        if(EnableCategoryUser && result_ea == 0) {
-            if(live_usd_diff > 0 && live_time_diff < NewsL2L3TimeLimit) {  // < 5 min
-                result_user = m1_signal * 1;
-            }
-        }
-    }
-
-    // ============================================================
-    // L2: M5→M1 - Two timeframe cascade
-    // Category 1 (EA): M5→M1 aligned + live_diff > 3.5 USD + M5.cross=M1.time + within 1 candle → Score 20
-    // Category 2 (User): M5→M1 aligned + live_diff > 0 + time < 5 min → Score 2
-    // ============================================================
-    if(m5_signal != 0 && m1_signal != 0 && m1_signal == m5_signal) {
-        if(m5_cross == m1_time) {  // M5.cross = M1.timestamp
-            // Category 1: EA Trading (Strict)
-            if(EnableCategoryEA) {
+        // L2: M5→M1 - Two timeframe cascade
+        // M5→M1 aligned + live_diff > 3.5 USD + M5.cross=M1.time + within 1 candle → Score 20
+        if(m5_signal != 0 && m1_signal != 0 && m1_signal == m5_signal && result == 0) {
+            if(m5_cross == m1_time) {  // M5.cross = M1.timestamp
                 double l2_threshold = NewsBaseLiveDiff + NewsLiveDiffStep;  // 3.5 USD
                 if(live_usd_diff > l2_threshold && IsWithinOneCandle(0, m1_time)) {
-                    if(MathAbs(result_ea) < 20) result_ea = m5_signal * 20;
-                }
-            }
-
-            // Category 2: User Reference (Relaxed)
-            if(EnableCategoryUser && result_ea == 0) {
-                if(live_usd_diff > 0 && live_time_diff < NewsL2L3TimeLimit) {  // < 5 min
-                    if(MathAbs(result_user) < 2) result_user = m5_signal * 2;
+                    result = m5_signal * 20;
                 }
             }
         }
-    }
 
-    // ============================================================
-    // L3: M15→M5→M1 - Three timeframe full cascade
-    // Category 1 (EA): Full cascade + live_diff > 4.0 USD + all crosses valid + within 1 candle → Score 30
-    // Category 2 (User): Full cascade + live_diff > 0 + time < 5 min → Score 3
-    // ============================================================
-    if(m15_signal != 0 && m5_signal != 0 && m1_signal != 0 &&
-       m1_signal == m5_signal && m5_signal == m15_signal) {
-        if(m15_cross == m5_time && m5_cross == m1_time) {  // Full cascade validation
-            // Category 1: EA Trading (Strict)
-            if(EnableCategoryEA) {
+        // L3: M15→M5→M1 - Three timeframe full cascade
+        // Full cascade + live_diff > 4.0 USD + all crosses valid + within 1 candle → Score 30
+        if(m15_signal != 0 && m5_signal != 0 && m1_signal != 0 &&
+           m1_signal == m5_signal && m5_signal == m15_signal && result == 0) {
+            if(m15_cross == m5_time && m5_cross == m1_time) {  // Full cascade validation
                 double l3_threshold = NewsBaseLiveDiff + (NewsLiveDiffStep * 1.5);  // 4.0 USD
                 if(live_usd_diff > l3_threshold && IsWithinOneCandle(0, m1_time)) {
-                    if(MathAbs(result_ea) < 30) result_ea = m15_signal * 30;
-                }
-            }
-
-            // Category 2: User Reference (Relaxed)
-            if(EnableCategoryUser && result_ea == 0) {
-                if(live_usd_diff > 0 && live_time_diff < NewsL2L3TimeLimit) {  // < 5 min
-                    if(MathAbs(result_user) < 3) result_user = m15_signal * 3;
+                    result = m15_signal * 30;
                 }
             }
         }
-    }
 
-    // ============================================================
-    // L4: M30→M15→M5→M1 - Four timeframe full cascade
-    // Category 1 (EA): Full cascade + live_diff > 4.5 USD + all crosses valid + within 1 candle → Score 40
-    // Category 2 (User): Full cascade + live_diff > 0 + time < 3 min → Score 4
-    // ============================================================
-    if(m30_signal != 0 && m15_signal != 0 && m5_signal != 0 && m1_signal != 0 &&
-       m1_signal == m5_signal && m5_signal == m15_signal && m15_signal == m30_signal) {
-        if(m30_cross == m15_time && m15_cross == m5_time && m5_cross == m1_time) {  // Full cascade
-            // Category 1: EA Trading (Strict)
-            if(EnableCategoryEA) {
+        // L4: M30→M15→M5→M1 - Four timeframe full cascade
+        // Full cascade + live_diff > 4.5 USD + all crosses valid + within 1 candle → Score 40
+        if(m30_signal != 0 && m15_signal != 0 && m5_signal != 0 && m1_signal != 0 &&
+           m1_signal == m5_signal && m5_signal == m15_signal && m15_signal == m30_signal && result == 0) {
+            if(m30_cross == m15_time && m15_cross == m5_time && m5_cross == m1_time) {
                 double l4_threshold = NewsBaseLiveDiff + (NewsLiveDiffStep * 2.0);  // 4.5 USD
                 if(live_usd_diff > l4_threshold && IsWithinOneCandle(0, m1_time)) {
-                    if(MathAbs(result_ea) < 40) result_ea = m30_signal * 40;
-                }
-            }
-
-            // Category 2: User Reference (Relaxed)
-            if(EnableCategoryUser && result_ea == 0) {
-                if(live_usd_diff > 0 && live_time_diff < NewsL4L7TimeLimit) {  // < 3 min
-                    if(MathAbs(result_user) < 4) result_user = m30_signal * 4;
+                    result = m30_signal * 40;
                 }
             }
         }
-    }
 
-    // ============================================================
-    // L5: H1→M30→M15→M5→M1 - Five timeframe full cascade
-    // Category 1 (EA): Full cascade + live_diff > 5.0 USD + all crosses valid + within 1 candle → Score 50
-    // Category 2 (User): Full cascade + live_diff > 0 + time < 3 min → Score 5
-    // ============================================================
-    if(h1_signal != 0 && m30_signal != 0 && m15_signal != 0 && m5_signal != 0 && m1_signal != 0 &&
-       m1_signal == m5_signal && m5_signal == m15_signal && m15_signal == m30_signal && m30_signal == h1_signal) {
-        if(h1_cross == m30_time && m30_cross == m15_time && m15_cross == m5_time && m5_cross == m1_time) {
-            // Category 1: EA Trading (Strict)
-            if(EnableCategoryEA) {
+        // L5: H1→M30→M15→M5→M1 - Five timeframe full cascade
+        // Full cascade + live_diff > 5.0 USD + all crosses valid + within 1 candle → Score 50
+        if(h1_signal != 0 && m30_signal != 0 && m15_signal != 0 && m5_signal != 0 && m1_signal != 0 &&
+           m1_signal == m5_signal && m5_signal == m15_signal && m15_signal == m30_signal && m30_signal == h1_signal && result == 0) {
+            if(h1_cross == m30_time && m30_cross == m15_time && m15_cross == m5_time && m5_cross == m1_time) {
                 double l5_threshold = NewsBaseLiveDiff + (NewsLiveDiffStep * 2.5);  // 5.0 USD
                 if(live_usd_diff > l5_threshold && IsWithinOneCandle(0, m1_time)) {
-                    if(MathAbs(result_ea) < 50) result_ea = h1_signal * 50;
-                }
-            }
-
-            // Category 2: User Reference (Relaxed)
-            if(EnableCategoryUser && result_ea == 0) {
-                if(live_usd_diff > 0 && live_time_diff < NewsL4L7TimeLimit) {  // < 3 min
-                    if(MathAbs(result_user) < 5) result_user = h1_signal * 5;
+                    result = h1_signal * 50;
                 }
             }
         }
-    }
 
-    // ============================================================
-    // L6: H4→H1→M30→M15→M5→M1 - Six timeframe full cascade
-    // Category 1 (EA): Full cascade + live_diff > 6.0 USD + all crosses valid + within 1 candle → Score 60
-    // Category 2 (User): Full cascade + live_diff > 0 + time < 3 min → Score 6
-    // ============================================================
-    if(h4_signal != 0 && h1_signal != 0 && m30_signal != 0 && m15_signal != 0 && m5_signal != 0 && m1_signal != 0 &&
-       m1_signal == m5_signal && m5_signal == m15_signal && m15_signal == m30_signal &&
-       m30_signal == h1_signal && h1_signal == h4_signal) {
-        if(h4_cross == h1_time && h1_cross == m30_time && m30_cross == m15_time &&
-           m15_cross == m5_time && m5_cross == m1_time) {
-            // Category 1: EA Trading (Strict)
-            if(EnableCategoryEA) {
+        // L6: H4→H1→M30→M15→M5→M1 - Six timeframe full cascade
+        // Full cascade + live_diff > 6.0 USD + all crosses valid + within 1 candle → Score 60
+        if(h4_signal != 0 && h1_signal != 0 && m30_signal != 0 && m15_signal != 0 && m5_signal != 0 && m1_signal != 0 &&
+           m1_signal == m5_signal && m5_signal == m15_signal && m15_signal == m30_signal &&
+           m30_signal == h1_signal && h1_signal == h4_signal && result == 0) {
+            if(h4_cross == h1_time && h1_cross == m30_time && m30_cross == m15_time &&
+               m15_cross == m5_time && m5_cross == m1_time) {
                 double l6_threshold = NewsBaseLiveDiff + (NewsLiveDiffStep * 3.5);  // 6.0 USD
                 if(live_usd_diff > l6_threshold && IsWithinOneCandle(0, m1_time)) {
-                    if(MathAbs(result_ea) < 60) result_ea = h4_signal * 60;
-                }
-            }
-
-            // Category 2: User Reference (Relaxed)
-            if(EnableCategoryUser && result_ea == 0) {
-                if(live_usd_diff > 0 && live_time_diff < NewsL4L7TimeLimit) {  // < 3 min
-                    if(MathAbs(result_user) < 6) result_user = h4_signal * 6;
+                    result = h4_signal * 60;
                 }
             }
         }
-    }
 
-    // ============================================================
-    // L7: D1→H4→H1→M30→M15→M5→M1 - Seven timeframe full cascade (ULTIMATE)
-    // Category 1 (EA): Full cascade + live_diff > 7.0 USD + all crosses valid + within 1 candle → Score 70
-    // Category 2 (User): Full cascade + live_diff > 0 + time < 3 min → Score 7
-    // ============================================================
-    if(d1_signal != 0 && h4_signal != 0 && h1_signal != 0 && m30_signal != 0 &&
-       m15_signal != 0 && m5_signal != 0 && m1_signal != 0 &&
-       m1_signal == m5_signal && m5_signal == m15_signal && m15_signal == m30_signal &&
-       m30_signal == h1_signal && h1_signal == h4_signal && h4_signal == d1_signal) {
-        if(d1_cross == h4_time && h4_cross == h1_time && h1_cross == m30_time &&
-           m30_cross == m15_time && m15_cross == m5_time && m5_cross == m1_time) {
-            // Category 1: EA Trading (Strict)
-            if(EnableCategoryEA) {
+        // L7: D1→H4→H1→M30→M15→M5→M1 - Seven timeframe full cascade (ULTIMATE)
+        // Full cascade + live_diff > 7.0 USD + all crosses valid + within 1 candle → Score 70
+        if(d1_signal != 0 && h4_signal != 0 && h1_signal != 0 && m30_signal != 0 &&
+           m15_signal != 0 && m5_signal != 0 && m1_signal != 0 &&
+           m1_signal == m5_signal && m5_signal == m15_signal && m15_signal == m30_signal &&
+           m30_signal == h1_signal && h1_signal == h4_signal && h4_signal == d1_signal && result == 0) {
+            if(d1_cross == h4_time && h4_cross == h1_time && h1_cross == m30_time &&
+               m30_cross == m15_time && m15_cross == m5_time && m5_cross == m1_time) {
                 double l7_threshold = NewsBaseLiveDiff + (NewsLiveDiffStep * 4.5);  // 7.0 USD
                 if(live_usd_diff > l7_threshold && IsWithinOneCandle(0, m1_time)) {
-                    if(MathAbs(result_ea) < 70) result_ea = d1_signal * 70;
-                }
-            }
-
-            // Category 2: User Reference (Relaxed)
-            if(EnableCategoryUser && result_ea == 0) {
-                if(live_usd_diff > 0 && live_time_diff < NewsL4L7TimeLimit) {  // < 3 min
-                    if(MathAbs(result_user) < 7) result_user = d1_signal * 7;
+                    result = d1_signal * 70;
                 }
             }
         }
-    }
+    }  // End Category 1
 
-    // Priority: Category 1 (EA) > Category 2 (User)
-    if(result_ea != 0) return result_ea;
-    return result_user;
+    // ============================================================
+    // PHASE 2: CATEGORY 2 (USER REFERENCE) - ONLY IF CATEGORY 1 = 0
+    // Relaxed conditions for user reference signals
+    // ============================================================
+    if(result == 0 && EnableCategoryUser) {
+        // L1: M1 only
+        // live_diff > 0 + time < 5 min → Score 1
+        if(m1_signal != 0) {
+            if(live_usd_diff > 0 && live_time_diff < NewsL2L3TimeLimit) {
+                result = m1_signal * 1;
+            }
+        }
+
+        // L2: M5→M1
+        // live_diff > 0 + time < 5 min → Score 2
+        if(m5_signal != 0 && m1_signal != 0 && m1_signal == m5_signal && result == 0) {
+            if(m5_cross == m1_time) {
+                if(live_usd_diff > 0 && live_time_diff < NewsL2L3TimeLimit) {
+                    result = m5_signal * 2;
+                }
+            }
+        }
+
+        // L3: M15→M5→M1
+        // live_diff > 0 + time < 5 min → Score 3
+        if(m15_signal != 0 && m5_signal != 0 && m1_signal != 0 &&
+           m1_signal == m5_signal && m5_signal == m15_signal && result == 0) {
+            if(m15_cross == m5_time && m5_cross == m1_time) {
+                if(live_usd_diff > 0 && live_time_diff < NewsL2L3TimeLimit) {
+                    result = m15_signal * 3;
+                }
+            }
+        }
+
+        // L4: M30→M15→M5→M1
+        // live_diff > 0 + time < 3 min → Score 4
+        if(m30_signal != 0 && m15_signal != 0 && m5_signal != 0 && m1_signal != 0 &&
+           m1_signal == m5_signal && m5_signal == m15_signal && m15_signal == m30_signal && result == 0) {
+            if(m30_cross == m15_time && m15_cross == m5_time && m5_cross == m1_time) {
+                if(live_usd_diff > 0 && live_time_diff < NewsL4L7TimeLimit) {
+                    result = m30_signal * 4;
+                }
+            }
+        }
+
+        // L5: H1→M30→M15→M5→M1
+        // live_diff > 0 + time < 3 min → Score 5
+        if(h1_signal != 0 && m30_signal != 0 && m15_signal != 0 && m5_signal != 0 && m1_signal != 0 &&
+           m1_signal == m5_signal && m5_signal == m15_signal && m15_signal == m30_signal && m30_signal == h1_signal && result == 0) {
+            if(h1_cross == m30_time && m30_cross == m15_time && m15_cross == m5_time && m5_cross == m1_time) {
+                if(live_usd_diff > 0 && live_time_diff < NewsL4L7TimeLimit) {
+                    result = h1_signal * 5;
+                }
+            }
+        }
+
+        // L6: H4→H1→M30→M15→M5→M1
+        // live_diff > 0 + time < 3 min → Score 6
+        if(h4_signal != 0 && h1_signal != 0 && m30_signal != 0 && m15_signal != 0 && m5_signal != 0 && m1_signal != 0 &&
+           m1_signal == m5_signal && m5_signal == m15_signal && m15_signal == m30_signal &&
+           m30_signal == h1_signal && h1_signal == h4_signal && result == 0) {
+            if(h4_cross == h1_time && h1_cross == m30_time && m30_cross == m15_time &&
+               m15_cross == m5_time && m5_cross == m1_time) {
+                if(live_usd_diff > 0 && live_time_diff < NewsL4L7TimeLimit) {
+                    result = h4_signal * 6;
+                }
+            }
+        }
+
+        // L7: D1→H4→H1→M30→M15→M5→M1
+        // live_diff > 0 + time < 3 min → Score 7
+        if(d1_signal != 0 && h4_signal != 0 && h1_signal != 0 && m30_signal != 0 &&
+           m15_signal != 0 && m5_signal != 0 && m1_signal != 0 &&
+           m1_signal == m5_signal && m5_signal == m15_signal && m15_signal == m30_signal &&
+           m30_signal == h1_signal && h1_signal == h4_signal && h4_signal == d1_signal && result == 0) {
+            if(d1_cross == h4_time && h4_cross == h1_time && h1_cross == m30_time &&
+               m30_cross == m15_time && m15_cross == m5_time && m5_cross == m1_time) {
+                if(live_usd_diff > 0 && live_time_diff < NewsL4L7TimeLimit) {
+                    result = d1_signal * 7;
+                }
+            }
+        }
+    }  // End Category 2
+
+    return result;
 }
 
 // Main NEWS analysis function - LIVE mode (simplified, no state) | Ham phan tich NEWS - che do LIVE don gian
