@@ -755,13 +755,13 @@ void PrintDashboard() {
     string symbol = g_symbol_data.symbol;
     string tf_names[7] = {"M1", "M5", "M15", "M30", "H1", "H4", "D1"};
 
-    // Dòng 1: Thông tin c? b?n + LIVE values
+    // Dòng 1: Thông tin cơ bản + LIVE values
     double pip_value = GetPipValue(symbol);
     double point_value = MarketInfo(symbol, MODE_POINT);
     if(point_value <= 0) point_value = Point;
     double usd_test = GetUSDValue(symbol, 1.0);
 
-    // Calculate LIVE USD diff and Time diff (real-time t? M1)
+    // Calculate LIVE USD diff and Time diff (real-time từ M1)
     double m1_price = g_symbol_data.prices[0];           // M1 last signal price
     datetime m1_time = (datetime)g_symbol_data.timestamps[0];  // M1 last signal time
     double current_price = (Ask + Bid) / 2.0;           // Current real-time price
@@ -769,16 +769,24 @@ void PrintDashboard() {
     double live_usd_diff = GetUSDValue(symbol, MathAbs(live_diff_raw));  // USD conversion
     int live_time_diff = (int)((TimeCurrent() - m1_time) / 60);  // Minutes since M1 signal
 
-    // Format LIVE values
+    // Format LIVE price string
+    string live_price_str = DoubleToString(current_price, (Digits > 0 ? Digits : 5));
+
+    // Format LIVE USD diff
     string live_usd_str = DoubleToString(live_usd_diff, 2);
     if(live_diff_raw >= 0) live_usd_str = "+" + live_usd_str;
     else live_usd_str = "-" + live_usd_str;
 
     // =========================================================================
-    // DÒNG 2: M1 ? M30 (4 TF)
+    // DÒNG 1: Thông tin cơ bản (GIỮ NGUYÊN)
+    // =========================================================================
+    string line1 = "[" + symbol + "] SPY | CSDL1: Active | 7TF | USD:" + DoubleToString(usd_test, 2) + " pip:" + DoubleToString(pip_value, 5);
+
+    // =========================================================================
+    // DÒNG 2: M1, M5, M15 (3 TF)
     // =========================================================================
     string line2 = "";
-    for(int i = 0; i < 4; i++) {
+    for(int i = 0; i < 3; i++) {  // 0=M1, 1=M5, 2=M15
         string sig = "NONE";
         if(g_symbol_data.signals[i] > 0) sig = "BUY";
         else if(g_symbol_data.signals[i] < 0) sig = "SELL";
@@ -790,10 +798,10 @@ void PrintDashboard() {
     }
 
     // =========================================================================
-    // DÒNG 3: H1 ? D1 (3 TF)
+    // DÒNG 3: M30, H1, H4 (3 TF)
     // =========================================================================
     string line3 = "";
-    for(int i = 4; i < 7; i++) {
+    for(int i = 3; i < 6; i++) {  // 3=M30, 4=H1, 5=H4
         string sig = "NONE";
         if(g_symbol_data.signals[i] > 0) sig = "BUY";
         else if(g_symbol_data.signals[i] < 0) sig = "SELL";
@@ -805,28 +813,28 @@ void PrintDashboard() {
     }
 
     // =========================================================================
-    // DÒNG 4: TREND_D1 + NEWS + LIVE values
+    // DÒNG 4: D1 + NEWS + LIVE (giá + USD diff + time diff)
     // =========================================================================
-    string news_str = IntegerToString(g_symbol_data.news_results[0]);  // C?t 10 M1
+    // D1 signal
+    string d1_sig = "NONE";
+    if(g_symbol_data.signals[6] > 0) d1_sig = "BUY";
+    else if(g_symbol_data.signals[6] < 0) d1_sig = "SELL";
+
+    string d1_pricediff = DoubleToString(g_symbol_data.pricediffs[6], 2);
+    if(g_symbol_data.pricediffs[6] >= 0) d1_pricediff = "+" + d1_pricediff;
+
+    // NEWS score
+    string news_str = IntegerToString(g_symbol_data.news_results[0]);
     if(g_symbol_data.news_results[0] >= 0) news_str = "+" + news_str;
 
-    string trend_d1 = "NONE";
-    if(g_symbol_data.signals[6] > 0) trend_d1 = "BUY";
-    else if(g_symbol_data.signals[6] < 0) trend_d1 = "SELL";
+    // Build line 4
+    string line4 = "[D1|" + d1_sig + "|" + d1_pricediff + "|" + IntegerToString(g_symbol_data.timediffs[6]) + "m]  NEWS:" + news_str + " | LIVE: " + live_price_str + " (" + live_usd_str + " | " + IntegerToString(live_time_diff) + "m)";
 
     // =========================================================================
-    // BUILD 4 DÒNG DASHBOARD - DÙNG OBJECTCREATE() ?? TRÁNH CONFLICT V?I WT
+    // TẠO 4 OBJECTS RIÊNG BIỆT (KHÔNG CONFLICT VỚI COMMENT() CỦA WT)
     // =========================================================================
-    // DÒNG 1: Thông tin c? b?n
-    string line1 = "[" + symbol + "] SPY | CSDL1: Active | 7TF | USD:" + DoubleToString(usd_test, 2) + " pip:" + DoubleToString(pip_value, 5);
-    // DÒNG 4: TREND_D1 + NEWS + LIVE values
-    string line4 = "TREND_D1: " + trend_d1 + "  |  NEWS: " + news_str + " | LIVE: " + live_usd_str + " USD | " + IntegerToString(live_time_diff) + "m";
-
-    // =========================================================================
-    // T?O 4 OBJECTS RIÊNG BI?T (KHÔNG CONFLICT V?I COMMENT() C?A WT)
-    // =========================================================================
-    int y_start = 120;  // V? trí b?t ??u (120 pixels t? trên, d??i WT)
-    int y_spacing = 15; // Kho?ng cách gi?a các dòng
+    int y_start = 120;  // Vị trí bắt đầu (120 pixels từ trên, dưới WT)
+    int y_spacing = 15; // Khoảng cách giữa các dòng
 
     string obj_names[4];
     obj_names[0] = "SPY_Dashboard_Line1";
@@ -840,9 +848,9 @@ void PrintDashboard() {
     lines[2] = line3;
     lines[3] = line4;
 
-    // T?o 4 objects
+    // Tạo 4 objects
     for(int i = 0; i < 4; i++) {
-        // Xóa object c? n?u có
+        // Xóa object cũ nếu có
         if(ObjectFind(0, obj_names[i]) >= 0) {
             ObjectDelete(0, obj_names[i]);
         }
@@ -850,7 +858,7 @@ void PrintDashboard() {
         // Mau xen ke: Trang -> Xanh -> Trang -> Xanh | Alternating colors: White -> Blue -> White -> Blue
         color line_color = (i % 2 == 0) ? clrWhite : clrDodgerBlue;
 
-        // T?o object m?i
+        // Tạo object mới
         ObjectCreate(0, obj_names[i], OBJ_LABEL, 0, 0, 0);
         ObjectSetInteger(0, obj_names[i], OBJPROP_CORNER, CORNER_LEFT_UPPER);
         ObjectSetInteger(0, obj_names[i], OBJPROP_XDISTANCE, 10);
@@ -2592,12 +2600,9 @@ void RunMidnightAndHealthCheck() {
 
 // Dashboard Update
 void RunDashboardUpdate() {
-    static int dashboard_cycle = 0;
-    dashboard_cycle++;
-
-    if(dashboard_cycle % 5 == 0) {  // Moi 5 lan = 10 giay
-        PrintDashboard();
-    }
+    // Dashboard updates every even second (no additional cycle check needed)
+    // Giây chẵn đã đủ để cập nhật dashboard mượt mà
+    PrintDashboard();
 }
 
 // Process All Signals (7 TF)
