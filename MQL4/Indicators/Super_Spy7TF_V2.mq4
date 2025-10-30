@@ -121,9 +121,6 @@ SymbolCSDL1Data g_symbol_data;  // Data for current chart symbol only | Du lieu 
 //  SECTION 3: GLOBAL STATE VARIABLES (2 variables) | PHAN 3: BIEN TRANG THAI TOAN CAU
 //==============================================================================
 
-// NEWS Strategy Global State Variables | Bien trang thai toan cau chien luoc NEWS
-int g_news_active_level = 0;       // Active NEWS cascade level (0-6) | Cap do NEWS cascade dang hoat dong
-int g_news_active_direction = 0;   // Active NEWS direction (1=BUY,-1=SELL) | Huong NEWS dang hoat dong
 
 //==============================================================================
 //  SECTION 4: CONSTANTS & ANALYSIS STRUCTURES | PHAN 4: HANG SO VA CAU TRUC PHAN TICH
@@ -704,13 +701,13 @@ bool ProcessSignalForTF(int tf_idx, int signal, long signal_time) {
     g_symbol_data.pricediffs[tf_idx] = pricediff_usd;
     g_symbol_data.timediffs[tf_idx] = timediff_min;
 
-    // Calculate Column 9: NEWS (reads from g_symbol_data)
-    int news_result = AnalyzeNEWS();
-    g_symbol_data.news_results[tf_idx] = news_result;
-
-    // Calculate Column 10: Max Loss
+    // Column 9: NEWS - Updated by UpdateLiveNEWS() independently (runs every 2 seconds)
+    // Column 10: Max Loss
     double max_loss = CalculateMaxLoss();
     g_symbol_data.max_losses[tf_idx] = max_loss;
+
+    // Get current NEWS result for history/logging (set by UpdateLiveNEWS)
+    int news_result = g_symbol_data.news_results[tf_idx];
 
     // Update last tracking
     g_symbol_data.signals_last[tf_idx] = signal;
@@ -1780,112 +1777,71 @@ int DetectCASCADE_New() {
     return highest_result;
 }
 
-// Check if active NEWS direction has reversed based on timeframe | Kiem tra huong NEWS dang hoat dong co dao nguoc khong
-bool DirectionReversed() {
-    if(g_news_active_level == 0) return false;  // No active state
-
-    // L1: No reversal check - will reset naturally when CASCADE expires
-    if(g_news_active_level == 1) return false;
-
-    // Map level to timeframe index for reset check
-    int check_index = -1;
-
-    switch(g_news_active_level) {
-        case 2: check_index = 1; break;  // L2 (M15?M5?M1) - reset when M5 reverses
-        case 3: check_index = 2; break;  // L3 (M30?M15?M5) - reset when M15 reverses
-        case 4: check_index = 6; break;  // L4 (H1?M30?M15) - reset when D1 reverses
-        case 5: check_index = 6; break;  // L5 (H4?H1?M30) - reset when D1 reverses
-        case 6: check_index = 6; break;  // L6 (D1?H4?H1) - reset when D1 reverses
-    }
-
-    if(check_index < 0) return false;
-
-    // Get signal from g_symbol_data
-    int tf_signal = g_symbol_data.signals[check_index];
-
-    // Check reversal
-    if(tf_signal != 0 && tf_signal != g_news_active_direction) {
-        return true;
-    }
-
-    return false;
-}
-
-// Activate NEWS state with level and direction | Kich hoat trang thai NEWS voi cap do va huong
-void ActivateNewsState(int level, int direction) {
-    if(level < 1 || level > 6) return;  // ??i 5?6 ?? support L6
-    
-    // CH? update n?u level cao h?n
-    if(level > g_news_active_level) {
-        g_news_active_level = level;
-        g_news_active_direction = direction;
-        
-    }
-}
-
-// Reset NEWS state to inactive | Dat lai trang thai NEWS ve khong hoat dong
-void ResetNewsState() {
-    g_news_active_level = 0;       // Clear level | Xoa cap do
-    g_news_active_direction = 0;   // Clear direction | Xoa huong
-}
-
-// Main NEWS analysis function with cascade detection and state management | Ham phan tich NEWS chinh voi phat hien cascade va quan ly trang thai
+// Main NEWS analysis function - LIVE mode (simplified, no state) | Ham phan tich NEWS - che do LIVE don gian
 int AnalyzeNEWS() {
-    // Get M1 signal from g_symbol_data
-    int m1_signal = g_symbol_data.signals[0];
-    double m1_price = g_symbol_data.prices[0];
-    long m1_timestamp = g_symbol_data.timestamps[0];
+    // Simply detect and return CASCADE result directly
+    int cascade_result = DetectCASCADE_New();
+    return cascade_result;  // Return ±0 to ±30
+}
 
-    if(m1_signal == 0) return 0;
-
-    // Step 0: CHECK DIRECTION REVERSAL - RESET STATE - 2025-10-15
-    // L1: Natural reset when CASCADE expires (không check reversal)
-    // L2: Reset when M5 reverses
-    // L3: Reset when M15 reverses
-    // L4, L5, L6: Reset when D1 reverses
-    if(g_news_active_level > 0) {
-        if(DirectionReversed()) {
-            ResetNewsState();
-        }
-    }
-
-
-    // Step 3: CASCADE detection (NEW ENCODING)
+// Update LIVE NEWS for all 7 timeframes independently | Cap nhat NEWS LIVE cho 7 khung thoi gian doc lap
+void UpdateLiveNEWS() {
+    // Get CASCADE result
     int cascade_result = DetectCASCADE_New();
 
-    // Step 4: State management (NEW LOGIC)
-    if(cascade_result != 0) {
-        int level = MathAbs(cascade_result);
-        int direction = cascade_result > 0 ? 1 : -1;
+    if(cascade_result == 0) {
+        // Clear all NEWS results when no cascade
+        for(int i = 0; i < 7; i++) {
+            g_symbol_data.news_results[i] = 0;
+        }
+        return;
+    }
 
-        // Priority: activate if higher level or direction changed
-        if(level > g_news_active_level ||
-           (level == g_news_active_level && direction != g_news_active_direction)) {
-            ActivateNewsState(level, direction);
+    // Extract level and direction
+    int abs_result = MathAbs(cascade_result);
+    int direction = cascade_result > 0 ? 1 : -1;
 
+    // Map result to level and write to corresponding row
+    // L1: ±1, ±16 → news_results[1] (M5 row)
+    // L2: ±2, ±12, ±17 → news_results[2] (M15 row)
+    // L3: ±3, ±13, ±18 → news_results[3] (M30 row)
+    // L4: ±4, ±14, ±19 → news_results[4] (H1 row)
+    // L5: ±5, ±15, ±20 → news_results[5] (H4 row)
+    // L6: ±6, ±16, ±30 → news_results[6] (D1 row)
+
+    // Clear all first
+    for(int i = 0; i < 7; i++) {
+        g_symbol_data.news_results[i] = 0;
+    }
+
+    // Write to correct row based on result value
+    if(abs_result == 1 || abs_result == 16) {
+        // L1 or L6 - need to distinguish
+        // Check if it's L6 (D1→H4→H1) by checking higher TF alignment
+        if(abs_result == 16 && g_symbol_data.signals[6] != 0) {  // D1 signal exists
+            g_symbol_data.news_results[6] = cascade_result;  // L6
+        } else {
+            g_symbol_data.news_results[1] = cascade_result;  // L1 (M5)
         }
     }
-    else {
-        // No CASCADE detected
-        // L1: Natural reset when CASCADE expires (live h?t thì t? reset)
-        if(g_news_active_level == 1) {
-            ResetNewsState();
-        }
+    else if(abs_result == 2 || abs_result == 12 || abs_result == 17) {
+        g_symbol_data.news_results[2] = cascade_result;  // L2 (M15)
+    }
+    else if(abs_result == 3 || abs_result == 13 || abs_result == 18) {
+        g_symbol_data.news_results[3] = cascade_result;  // L3 (M30)
+    }
+    else if(abs_result == 4 || abs_result == 14 || abs_result == 19) {
+        g_symbol_data.news_results[4] = cascade_result;  // L4 (H1)
+    }
+    else if(abs_result == 5 || abs_result == 15 || abs_result == 20) {
+        g_symbol_data.news_results[5] = cascade_result;  // L5 (H4)
+    }
+    else if(abs_result == 6 || abs_result == 30) {
+        g_symbol_data.news_results[6] = cascade_result;  // L6 (D1)
     }
 
-    // Step 5: Return active state OR CASCADE result
-    // If state active, return state (keep level until reset conditions met)
-    if(g_news_active_level > 0) {
-        int active_result = g_news_active_direction * g_news_active_level;
-        return active_result;
-    }
-
-    // If no active state, return cascade result
-    if(cascade_result != 0) {
-        return cascade_result;  // Return encoded value: +1 to +30 or -1 to -30
-    }
-
-    return 0;
+    // Write to file
+    WriteCSDL1ArrayToFile();
 }
 
 //==============================================================================
@@ -2682,6 +2638,7 @@ void OnTimer() {
     // (KHONG LIEN QUAN MODE CHINH)
     // ========================================
     if(current_second % 2 == 0) {  // Giay chan (0, 2, 4, 6, 8...)
+        UpdateLiveNEWS();            // Update NEWS LIVE (cot 9) - doc lap signal WT
         RunStartupReset();
         RunMidnightAndHealthCheck();
         RunDashboardUpdate();
