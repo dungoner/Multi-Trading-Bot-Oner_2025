@@ -872,7 +872,7 @@ void PrintDashboard() {
 
     ObjectCreate(0, news_obj, OBJ_LABEL, 0, 0, 0);
     ObjectSetInteger(0, news_obj, OBJPROP_CORNER, CORNER_LEFT_UPPER);
-    ObjectSetInteger(0, news_obj, OBJPROP_XDISTANCE, 390);  // X position closer (removed trailing | from line4)
+    ObjectSetInteger(0, news_obj, OBJPROP_XDISTANCE, 470);  // Moved further right to avoid overlapping TimeDiff
     ObjectSetInteger(0, news_obj, OBJPROP_YDISTANCE, y_start + (3 * y_spacing));
     ObjectSetInteger(0, news_obj, OBJPROP_COLOR, clrGold);  // Gold color
     ObjectSetInteger(0, news_obj, OBJPROP_FONTSIZE, 8);
