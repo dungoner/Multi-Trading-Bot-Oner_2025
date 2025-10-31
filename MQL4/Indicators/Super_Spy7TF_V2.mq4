@@ -2709,9 +2709,9 @@ void ProcessAllSignals() {
         int current_signal = (int)GlobalVariableGet(signal_var);
         long current_signal_time = (long)GlobalVariableGet(time_var);
 
-        // KIEM TRA: signal MOI != 0 && signal MOI != signal CU && time MOI > time CU
+        // KIEM TRA: signal MOI != 0 && signal MOI != signal CU && time MOI > time CU -> TẮT: current_signal != g_symbol_data.signals[i]
         if(current_signal != 0 &&
-           current_signal != g_symbol_data.signals[i] &&
+//           current_signal != g_symbol_data.signals[i] &&
            current_signal_time > g_symbol_data.processed_timestamps[i]) {
             ProcessSignalForTF(i, current_signal, current_signal_time);
         }
