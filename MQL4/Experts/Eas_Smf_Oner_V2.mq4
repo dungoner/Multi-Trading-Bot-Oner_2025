@@ -271,17 +271,7 @@ int OrderSendSafe(int tf, string symbol, int cmd, double lot_smart,
     int ticket = OrderSend(symbol, cmd, lot_smart, price, slippage, 0, 0, comment, magic, 0, clrNONE);
 
     if(ticket > 0) {
-        // Build detailed log with CSDL data | Tao log chi tiet voi du lieu CSDL
-        string direction = (g_ea.csdl_rows[tf].signal == 1) ? "BUY" : "SELL";
-        long ts = g_ea.csdl_rows[tf].timestamp;
-        datetime dt = (datetime)ts;
-        string time_str = StringFormat("%02d:%02d:%02d", TimeHour(dt), TimeMinute(dt), TimeSeconds(dt));
-        double pricediff = g_ea.csdl_rows[tf].pricediff;
-
-        Print(">>>", comment, " #", ticket, " ", DoubleToStr(lot_smart, 2), " lot ",
-              "[", direction, ":", DoubleToStr(price, Digits), "] ",
-              "[", ts, ":(", time_str, ")] ",
-              "price_diff:", DoubleToStr(pricediff, 2), " >>> OPEN_OK");
+        Print(">>> OPEN #", ticket, " ", comment, " ", DoubleToStr(lot_smart, 2), " lot @ ", DoubleToStr(price, Digits));
         return ticket;
     }
 
@@ -296,17 +286,7 @@ int OrderSendSafe(int tf, string symbol, int cmd, double lot_smart,
         ticket = OrderSend(symbol, cmd, 0.01, price, slippage, 0, 0, comment + "_Min", magic, 0, clrNONE);
 
         if(ticket > 0) {
-            // Build detailed log with CSDL data | Tao log chi tiet voi du lieu CSDL
-            string direction = (g_ea.csdl_rows[tf].signal == 1) ? "BUY" : "SELL";
-            long ts = g_ea.csdl_rows[tf].timestamp;
-            datetime dt = (datetime)ts;
-            string time_str = StringFormat("%02d:%02d:%02d", TimeHour(dt), TimeMinute(dt), TimeSeconds(dt));
-            double pricediff = g_ea.csdl_rows[tf].pricediff;
-
-            Print("[>>>] ", comment, "_Min #", ticket, " 0.01 lot ",
-                  "[", direction, ":", DoubleToStr(price, Digits), "] ",
-                  "[", ts, ":(", time_str, ")] ",
-                  "price_diff:", DoubleToStr(pricediff, 2), " [>>>] Min_OK");
+            Print(">>> OPEN #", ticket, " ", comment, "_Min 0.01 lot @ ", DoubleToStr(price, Digits));
             return ticket;
         }
 
@@ -328,17 +308,7 @@ int OrderSendSafe(int tf, string symbol, int cmd, double lot_smart,
         ticket = OrderSend(symbol, cmd, lot_smart, price, slippage, 0, 0, comment, magic, 0, clrNONE);
 
         if(ticket > 0) {
-            // Build detailed log with CSDL data | Tao log chi tiet voi du lieu CSDL
-            string direction = (g_ea.csdl_rows[tf].signal == 1) ? "BUY" : "SELL";
-            long ts = g_ea.csdl_rows[tf].timestamp;
-            datetime dt = (datetime)ts;
-            string time_str = StringFormat("%02d:%02d:%02d", TimeHour(dt), TimeMinute(dt), TimeSeconds(dt));
-            double pricediff = g_ea.csdl_rows[tf].pricediff;
-
-            Print(">>>", comment, " #", ticket, " ", DoubleToStr(lot_smart, 2), " lot ",
-                  "[", direction, ":", DoubleToStr(price, Digits), "] ",
-                  "[", ts, ":(", time_str, ")] ",
-                  "price_diff:", DoubleToStr(pricediff, 2), " >>>OPEN_OK (Retry)");
+            Print(">>> OPEN #", ticket, " ", comment, " ", DoubleToStr(lot_smart, 2), " lot @ ", DoubleToStr(price, Digits), " (Retry)");
             return ticket;
         }
 
