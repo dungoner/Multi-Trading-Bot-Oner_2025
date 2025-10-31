@@ -534,25 +534,23 @@ bool TryReadFile(string filename) {
 void ReadCSDLFile() {
     bool success = false;
 
-    // ========== MODE 2: LOCAL FILE (FOLDER_1 / FOLDER_2 / FOLDER_3) ==========
-    else {
-        // TRY 1: Read main local file | Lan 1: Doc file local chinh
+    // ========== READ FROM LOCAL FILE (FOLDER_1 / FOLDER_2 / FOLDER_3) ==========
+    // TRY 1: Read main local file | Lan 1: Doc file local chinh
+    success = TryReadFile(g_ea.csdl_filename);
+
+    if(!success) {
+        // TRY 2: Wait 100ms and retry | Lan 2: Cho 100ms va doc lai
+        Sleep(100);
         success = TryReadFile(g_ea.csdl_filename);
+    }
 
-        if(!success) {
-            // TRY 2: Wait 100ms and retry | Lan 2: Cho 100ms va doc lai
-            Sleep(100);
-            success = TryReadFile(g_ea.csdl_filename);
-        }
+    if(!success) {
+        // TRY 3: Read backup file in DataAutoOner (FOLDER_1) | Lan 3: Doc file du phong trong DataAutoOner
+        string backup_file = "DataAutoOner\\" + g_ea.symbol_name + "_LIVE.json";
+        success = TryReadFile(backup_file);
 
-        if(!success) {
-            // TRY 3: Read backup file in DataAutoOner (FOLDER_1) | Lan 3: Doc file du phong trong DataAutoOner
-            string backup_file = "DataAutoOner\\" + g_ea.symbol_name + "_LIVE.json";
-            success = TryReadFile(backup_file);
-
-            if(success) {
-                Print("[BACKUP] Using DataAutoOner (FOLDER_1) file");
-            }
+        if(success) {
+            Print("[BACKUP] Using DataAutoOner (FOLDER_1) file");
         }
     }
 
