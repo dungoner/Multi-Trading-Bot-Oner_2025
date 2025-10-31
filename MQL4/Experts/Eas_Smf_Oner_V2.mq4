@@ -11,84 +11,84 @@
 //=============================================================================
 
 //-----------------------------------------------------------------------------
-// SECTION A: CORE SETTINGS (13 inputs) | CAU HINH CHINH
+// SECTION A: CORE SETTINGS (13 inputs)
 //-----------------------------------------------------------------------------
 
-//--- A.1 Timeframe toggles (7) | Bat/tat khung thoi gian
-input bool TF_M1 = true;   // M1 (1 minute) | 1 phut
-input bool TF_M5 = true;   // M5 (5 minutes) | 5 phut
-input bool TF_M15 = true;  // M15 (15 minutes) | 15 phut
-input bool TF_M30 = true;  // M30 (30 minutes) | 30 phut
-input bool TF_H1 = true;   // H1 (1 hour) | 1 gio
-input bool TF_H4 = true;   // H4 (4 hours) | 4 gio
-input bool TF_D1 = true;   // D1 (1 day) | 1 ngay
+//--- A.1 Timeframe toggles (7)
+input bool TF_M1 = true;   // M1
+input bool TF_M5 = true;   // M5
+input bool TF_M15 = true;  // M15
+input bool TF_M30 = true;  // M30
+input bool TF_H1 = true;   // H1
+input bool TF_H4 = true;   // H4
+input bool TF_D1 = true;   // D1
 
-//--- A.2 Strategy toggles (3) | Bat/tat chien luoc
-input bool S1_HOME = true;   // S1: Binary Trading | Giao dich nhi phan
-input bool S2_TREND = true;  // S2: Trend Following | Theo xu huong
-input bool S3_NEWS = true;   // S3: News Alignment | Theo tin tuc
+//--- A.2 Strategy toggles (3)
+input bool S1_HOME = true;   // S1: Binary
+input bool S2_TREND = true;  // S2: Trend
+input bool S3_NEWS = true;   // S3: News
 
-//--- A.3 Risk management (2) | Quan ly rui ro
-input double FixedLotSize = 0.1;           // Base lot size (0.01-100) | Khoi luong goc
-input double MaxLoss_Fallback = -1000.0;   // Layer1 fallback if CSDL empty | Du phong SL
+//--- A.3 Risk management (2)
+input double FixedLotSize = 0.1;           // Lot size
+input double MaxLoss_Fallback = -1000.0;   // Max loss fallback
 
-//--- A.4 Data source (1) | Nguon du lieu
+//--- A.4 Data source (1)
 enum CSDL_SOURCE_ENUM {
-    FOLDER_1 = 0,  // DataAutoOner (Local file)
-    FOLDER_2 = 1,  // DataAutoOner2 (Local file) - DEFAULT
-    FOLDER_3 = 2,  // DataAutoOner3 (Local file)
+    FOLDER_1 = 0,  // DataAutoOner
+    FOLDER_2 = 1,  // DataAutoOner2 (Default)
+    FOLDER_3 = 2,  // DataAutoOner3
 };
-input CSDL_SOURCE_ENUM CSDL_Source = FOLDER_2;  // CSDL source | Nguon CSDL (Default: DataAutoOner2)
+input CSDL_SOURCE_ENUM CSDL_Source = FOLDER_2;  // CSDL folder
 
 //-----------------------------------------------------------------------------
-// SECTION B: STRATEGY CONFIGURATIONS (8 inputs) | CAU HINH CHIEN LUOC
+// SECTION B: STRATEGY CONFIGURATIONS (8 inputs)
 //-----------------------------------------------------------------------------
 
-//--- B.1 S1 NEWS Filter (3) | Bo loc tin tuc cho S1
-input bool S1_UseNewsFilter = false;           // S1: Require NEWS filter | Yeu cau bo loc tin tuc
-input int MinNewsLevelS1 = 20;                 // S1: Min NEWS level (10-70) | Muc NEWS toi thieu
-input bool S1_RequireNewsDirection = true;     // S1: Match NEWS direction | Khop huong tin tuc
+//--- B.1 S1 NEWS Filter (3)
+input bool S1_UseNewsFilter = false;           // S1: Use NEWS filter
+input int MinNewsLevelS1 = 20;                 // S1: Min NEWS level
+input bool S1_RequireNewsDirection = true;     // S1: Match NEWS direction
 
-//--- B.2 S2 TREND Mode (1) | Che do xu huong cho S2
+//--- B.2 S2 TREND Mode (1)
 enum S2_TREND_MODE {
-    S2_FOLLOW_D1 = 0,    // Follow D1 Trend (auto) | Theo xu huong D1 (tu dong)
-    S2_FORCE_BUY = 1,    // Force BUY only | Chi danh BUY
-    S2_FORCE_SELL = -1   // Force SELL only | Chi danh SELL
+    S2_FOLLOW_D1 = 0,    // Follow D1 (auto)
+    S2_FORCE_BUY = 1,    // Force BUY
+    S2_FORCE_SELL = -1   // Force SELL
 };
-input S2_TREND_MODE S2_TrendMode = S2_FOLLOW_D1;  // S2: Trend mode | Che do xu huong
+input S2_TREND_MODE S2_TrendMode = S2_FOLLOW_D1;  // S2: Trend mode
 
-//--- B.3 S3 NEWS Configuration (4) | Cau hinh S3 tin tuc
-input int MinNewsLevelS3 = 20;         // S3: Min NEWS level (10-70) | Muc NEWS toi thieu
-input bool EnableBonusNews = true;     // S3: Enable Bonus NEWS | Bat tin tuc bonus
-input int BonusOrderCount = 2;         // S3: Bonus orders count (1-5) | So lenh bonus
-input int MinNewsLevelBonus = 20;      // S3: Min NEWS for Bonus (10-70) | Muc NEWS cho bonus
+//--- B.3 S3 NEWS Configuration (4)
+input int MinNewsLevelS3 = 20;         // S3: Min NEWS level
+input bool EnableBonusNews = true;     // S3: Enable Bonus
+input int BonusOrderCount = 2;         // S3: Bonus count
+input int MinNewsLevelBonus = 20;      // S3: Min NEWS for Bonus
 
 //-----------------------------------------------------------------------------
-// SECTION C: RISK PROTECTION (4 inputs) | BAO VE RUI RO
+// SECTION C: RISK PROTECTION (4 inputs)
 //-----------------------------------------------------------------------------
 
-//--- C.1 Stoploss mode (2) | Che do cat lo
+//--- C.1 Stoploss mode (2)
 enum STOPLOSS_MODE {
-    LAYER1_MAXLOSS = 1,  // Layer1: max_loss × lot
-    LAYER2_MARGIN = 2    // Layer2: margin / divisor(emergency)
+    LAYER1_MAXLOSS = 1,  // Layer1
+    LAYER2_MARGIN = 2    // Layer2
 };
-input STOPLOSS_MODE StoplossMode = LAYER1_MAXLOSS;  // Stoploss mode | Che do cat lo
-input double Layer2_Divisor = 20.0;  // Layer2 margin divisor (default 20) | So chia margin tang 2 (mac dinh 20)
+input STOPLOSS_MODE StoplossMode = LAYER1_MAXLOSS;  // Stoploss mode
+input double Layer2_Divisor = 20.0;  // Layer2 divisor
 
-//--- C.2 Health check & reset (2) | Kiem tra suc khoe va reset
-input bool EnableWeekendReset = true;   // Enable weekend reset (Saturday 00:01, M1 only) | Bat reset cuoi tuan (Thu 7 00:01, chi M1)
-input bool EnableHealthCheck = true;    // Enable health check (8h/16h, M1 only) | Bat kiem tra suc khoe (8h/16h, chi M1)
+//--- C.2 Health check & reset (2)
+input bool EnableWeekendReset = true;   // Weekend reset
+input bool EnableHealthCheck = true;    // Health check
 
 //-----------------------------------------------------------------------------
-// SECTION D: AUXILIARY SETTINGS (3 inputs) | CAU HINH PHU TRO
+// SECTION D: AUXILIARY SETTINGS (3 inputs)
 //-----------------------------------------------------------------------------
 
-//--- D.1 Performance (1) | Hieu suat
-input bool UseEvenOddMode = false;  // Use even/odd split (for weak network) | Chia giay chan/le (khi mang yeu)
+//--- D.1 Performance (1)
+input bool UseEvenOddMode = false;  // Even/odd split mode
 
-//--- D.2 Display (2) | Hien thi
-input bool ShowDashboard = true;  // Show dashboard on chart | Hien thi bang dieu khien tren chart
-input bool DebugMode = false;      // Enable debug logs | Bat log debug
+//--- D.2 Display (2)
+input bool ShowDashboard = true;  // Show dashboard
+input bool DebugMode = false;      // Debug mode
 
 //=============================================================================
 
@@ -900,6 +900,9 @@ bool HasValidS2BaseCondition(int tf) {
 // OPTIMIZED: Uses pre-calculated lot + reads signal directly from CSDL | TOI UU: Dung lot da tinh + doc tin hieu truc tiep tu CSDL
 // ENHANCED: Optional NEWS filter for higher quality signals | CAI TIEN: Bo loc tin tuc tuy chon cho tin hieu chat luong cao
 void ProcessS1Strategy(int tf) {
+    string tf_names[7] = {"M1", "M5", "M15", "M30", "H1", "H4", "D1"};
+    int current_signal = g_ea.csdl_rows[tf].signal;
+
     // NEW: Check NEWS filter if enabled | Kiem tra bo loc tin tuc neu bat
     if(S1_UseNewsFilter) {
         int tf_news = g_ea.csdl_rows[tf].news;
@@ -907,29 +910,22 @@ void ProcessS1Strategy(int tf) {
 
         // Check NEWS level >= MinNewsLevelS1 | Kiem tra muc NEWS >= nguong
         if(news_abs < MinNewsLevelS1) {
-            DebugPrint("S1_NEWS_FILTER: TF" + IntegerToString(tf) +
-                       " NEWS=" + IntegerToString(news_abs) +
-                       " < " + IntegerToString(MinNewsLevelS1) + ", skip");
+            DebugPrint("S1_FILTER: " + tf_names[tf] + " NEWS=" + IntegerToString(news_abs) + " < Min, skip");
             return;
         }
 
         // Check NEWS direction matches signal if required | Kiem tra huong NEWS khop signal neu yeu cau
         if(S1_RequireNewsDirection) {
             int news_direction = (tf_news > 0) ? 1 : -1;
-            int current_signal_check = g_ea.csdl_rows[tf].signal;
 
-            if(current_signal_check != news_direction) {
-                DebugPrint("S1_NEWS_FILTER: Signal=" + IntegerToString(current_signal_check) +
-                           " != NewsDir=" + IntegerToString(news_direction) + ", skip");
+            if(current_signal != news_direction) {
+                DebugPrint("S1_FILTER: " + tf_names[tf] + " Signal!=NewsDir, skip");
                 return;
             }
         }
     }
 
     RefreshRates();
-
-    string tf_names[7] = {"M1", "M5", "M15", "M30", "H1", "H4", "D1"};
-    int current_signal = g_ea.csdl_rows[tf].signal;
 
     if(current_signal == 1) {
         int ticket = OrderSendSafe(tf, Symbol(), OP_BUY, g_ea.lot_sizes[tf][0],
