@@ -10,7 +10,7 @@
 //  PART 1: USER INPUTS (35 inputs) | CAU HINH NGUOI DUNG
 //=============================================================================
 
-input string Sep_A = "━━━━━━━━━━ A. CORE SETTINGS ━━━━━━━━━━";  //
+input string Sep_A = "__________ A. CORE SETTINGS __________";  //
 
 //--- A.1 Timeframe toggles (7) | Bat/tat khung thoi gian
 input bool TF_M1 = true;   // M1 (1 minute)
@@ -38,7 +38,7 @@ enum CSDL_SOURCE_ENUM {
 };
 input CSDL_SOURCE_ENUM CSDL_Source = FOLDER_2;  // CSDL folder (signal source)
 
-input string Sep_B = "━━━━━━━ B. STRATEGY CONFIGURATIONS ━━━━━━━";  //
+input string Sep_B = "_______ B. STRATEGY CONFIGURATIONS _______";  //
 
 //--- B.1 S1 NEWS Filter (3) | Loc tin tuc cho S1
 input bool S1_UseNewsFilter = true;            // S1: Use NEWS filter (TRUE=strict, FALSE=basic)
@@ -59,7 +59,7 @@ input bool EnableBonusNews = true;     // S3: Enable Bonus (extra orders on high
 input int BonusOrderCount = 2;         // S3: Bonus count (1-5 orders)
 input int MinNewsLevelBonus = 20;      // S3: Min NEWS for Bonus (threshold)
 
-input string Sep_C = "━━━━━━━━━ C. RISK PROTECTION ━━━━━━━━━";  //
+input string Sep_C = "_________ C. RISK PROTECTION _________";  //
 
 //--- C.1 Stoploss mode (3) | Che do cat lo
 enum STOPLOSS_MODE {
@@ -78,7 +78,7 @@ input double TakeProfit_Multiplier = 0.5;  // TP multiplier (0.5=50%, 1.0=100%, 
 input bool EnableWeekendReset = true;   // Weekend reset (auto close Friday 23:50)
 input bool EnableHealthCheck = true;    // Health check (8h/16h SPY bot status)
 
-input string Sep_D = "━━━━━━━━ D. AUXILIARY SETTINGS ━━━━━━━━";  //
+input string Sep_D = "________ D. AUXILIARY SETTINGS ________";  //
 
 //--- D.1 Performance (1) | Hieu suat
 input bool UseEvenOddMode = false;  // Even/odd split mode (load balancing)
@@ -613,28 +613,31 @@ bool GenerateMagicNumbers() {
 //  PART 9: LOT SIZE CALCULATION (3 functions) | TINH TOAN KHOI LUONG
 //=============================================================================
 
-// Calculate smart lot with 2 groups | Tinh khoi luong thong minh chia 2 nhom
-// Group 1 (M1-H1): S first + TF second | Nhom 1: S truoc + TF sau
-// Group 2 (H4-D1): TF first + S second (SMALLER) | Nhom 2: TF truoc + S sau (NHO HON)
+// Calculate lot with progressive formula | Tinh lot theo cong thuc luy tien
+// Formula: (base × strategy_multiplier) + tf_increment | Cong thuc: (goc × he so chien luoc) + tang TF
+// Result format: X.YZ where Y=strategy(1-3), Z=TF(1-7) | Dinh dang: X.YZ voi Y=chien luoc, Z=khung
 double CalculateSmartLotSize(double base_lot, int tf_index, int strategy_index) {
-    double lot = 0.0;
+    // NEW FORMULA: (base × strategy_multiplier) + tf_increment
+    // LOT FORMAT: X.YZ where X=strategy base, Y=same as X, Z=TF identifier (1-7)
+    //
+    // Strategy multipliers: S2=×1 (standard), S1=×2 (strong), S3=×3 (strongest)
+    // TF increments: M1=+0.01, M5=+0.02, M15=+0.03, M30=+0.04, H1=+0.05, H4=+0.06, D1=+0.07
+    //
+    // EXAMPLES (base_lot = 0.10):
+    //   M1_S2 = (0.10×1) + 0.01 = 0.11
+    //   M1_S1 = (0.10×2) + 0.01 = 0.21
+    //   M1_S3 = (0.10×3) + 0.01 = 0.31
+    //   M5_S2 = (0.10×1) + 0.02 = 0.12
+    //   D1_S3 = (0.10×3) + 0.07 = 0.37
 
-    // GROUP 1: M1-H1 (tf_index 0-4) | NHOM 1: M1-H1
-    // Formula: base + (S × 0.01) + (TF_row × 0.1) | Cong thuc: goc + S + TF
-    if(tf_index <= 4) {
-        double tf_increments[5] = {0.00, 0.10, 0.20, 0.30, 0.40};
-        double strategy_increment = 0.01 * (strategy_index + 1);
-        lot = base_lot + strategy_increment + tf_increments[tf_index];
-    }
+    // Strategy multipliers: index 0=S1(×2), 1=S2(×1), 2=S3(×3)
+    double strategy_multipliers[3] = {2.0, 1.0, 3.0};
 
-    // GROUP 2: H4-D1 (tf_index 5-6) | NHOM 2: H4-D1 (NGUOC LAI + NHO HON)
-    // Formula: (base × 0.6) + (TF_row × 0.01) + (S × 0.01) | Cong thuc: TF + S (nguoc lai)
-    else {
-        double base_small = base_lot * 0.6;  // Smaller than group 1 | Nho hon nhom 1
-        double tf_increment = 0.01 * (tf_index + 1);  // H4=0.06, D1=0.07
-        double strategy_increment = 0.01 * (strategy_index + 1);
-        lot = base_small + tf_increment + strategy_increment;
-    }
+    // TF increments: index 0=M1(+0.01), 1=M5(+0.02), ..., 6=D1(+0.07)
+    double tf_increments[7] = {0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.07};
+
+    // Calculate final lot
+    double lot = (base_lot * strategy_multipliers[strategy_index]) + tf_increments[tf_index];
 
     return NormalizeLotSize(lot);
 }
