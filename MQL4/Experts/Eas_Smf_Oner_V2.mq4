@@ -45,7 +45,7 @@ input CSDL_SOURCE_ENUM CSDL_Source = FOLDER_2;  // CSDL folder
 //-----------------------------------------------------------------------------
 
 //--- B.1 S1 NEWS Filter (3)
-input bool S1_UseNewsFilter = false;           // S1: Use NEWS filter
+input bool S1_UseNewsFilter = true;            // S1: Use NEWS filter
 input int MinNewsLevelS1 = 20;                 // S1: Min NEWS level
 input bool S1_RequireNewsDirection = true;     // S1: Match NEWS direction
 
@@ -896,34 +896,11 @@ bool HasValidS2BaseCondition(int tf) {
 //  PART 14: STRATEGY PROCESSING (3 functions) | XU LY CHIEN LUOC
 //=============================================================================
 
-// Process S1 (Binary Trading) strategy for TF | Xu ly chien luoc S1 (Giao dich nhi phan)
-// OPTIMIZED: Uses pre-calculated lot + reads signal directly from CSDL | TOI UU: Dung lot da tinh + doc tin hieu truc tiep tu CSDL
-// ENHANCED: Optional NEWS filter for higher quality signals | CAI TIEN: Bo loc tin tuc tuy chon cho tin hieu chat luong cao
-void ProcessS1Strategy(int tf) {
+// S1 Basic: Open order when signal comes (no NEWS filter) | S1 Co ban: Mo lenh khi tin hieu ve (khong loc NEWS)
+// Used when S1_UseNewsFilter = FALSE | Dung khi S1_UseNewsFilter = FALSE
+void ProcessS1BasicStrategy(int tf) {
     string tf_names[7] = {"M1", "M5", "M15", "M30", "H1", "H4", "D1"};
     int current_signal = g_ea.csdl_rows[tf].signal;
-
-    // NEW: Check NEWS filter if enabled | Kiem tra bo loc tin tuc neu bat
-    if(S1_UseNewsFilter) {
-        int tf_news = g_ea.csdl_rows[tf].news;
-        int news_abs = MathAbs(tf_news);
-
-        // Check NEWS level >= MinNewsLevelS1 | Kiem tra muc NEWS >= nguong
-        if(news_abs < MinNewsLevelS1) {
-            DebugPrint("S1_FILTER: " + tf_names[tf] + " NEWS=" + IntegerToString(news_abs) + " < Min, skip");
-            return;
-        }
-
-        // Check NEWS direction matches signal if required | Kiem tra huong NEWS khop signal neu yeu cau
-        if(S1_RequireNewsDirection) {
-            int news_direction = (tf_news > 0) ? 1 : -1;
-
-            if(current_signal != news_direction) {
-                DebugPrint("S1_FILTER: " + tf_names[tf] + " Signal!=NewsDir, skip");
-                return;
-            }
-        }
-    }
 
     RefreshRates();
 
@@ -933,10 +910,10 @@ void ProcessS1Strategy(int tf) {
                                    "S1_" + tf_names[tf], g_ea.magic_numbers[tf][0], clrBlue);
         if(ticket > 0) {
             g_ea.position_flags[tf][0] = 1;
-            DebugPrint("[S1_" + tf_names[tf] + "] Opened #" + IntegerToString(ticket) + " BUY " + DoubleToStr(g_ea.lot_sizes[tf][0], 2));
+            DebugPrint("[S1_BASIC_" + tf_names[tf] + "] BUY #" + IntegerToString(ticket));
         } else {
             g_ea.position_flags[tf][0] = 0;
-            Print("[S1_", tf_names[tf], "] Failed: ", GetLastError());
+            Print("[S1_BASIC_", tf_names[tf], "] Failed: ", GetLastError());
         }
     }
     else if(current_signal == -1) {
@@ -945,11 +922,78 @@ void ProcessS1Strategy(int tf) {
                                    "S1_" + tf_names[tf], g_ea.magic_numbers[tf][0], clrRed);
         if(ticket > 0) {
             g_ea.position_flags[tf][0] = 1;
-            DebugPrint("[S1_" + tf_names[tf] + "] Opened #" + IntegerToString(ticket) + " SELL " + DoubleToStr(g_ea.lot_sizes[tf][0], 2));
+            DebugPrint("[S1_BASIC_" + tf_names[tf] + "] SELL #" + IntegerToString(ticket));
         } else {
             g_ea.position_flags[tf][0] = 0;
-            Print("[S1_", tf_names[tf], "] Failed: ", GetLastError());
+            Print("[S1_BASIC_", tf_names[tf], "] Failed: ", GetLastError());
         }
+    }
+}
+
+// S1 NEWS Filter: Check NEWS before opening order | S1 Loc NEWS: Kiem tra NEWS truoc khi mo lenh
+// Used when S1_UseNewsFilter = TRUE | Dung khi S1_UseNewsFilter = TRUE
+// Conditions: 1) news_abs >= MinNewsLevelS1, 2) signal == news_direction (if required)
+void ProcessS1NewsFilterStrategy(int tf) {
+    string tf_names[7] = {"M1", "M5", "M15", "M30", "H1", "H4", "D1"};
+    int current_signal = g_ea.csdl_rows[tf].signal;
+    int tf_news = g_ea.csdl_rows[tf].news;
+    int news_abs = MathAbs(tf_news);
+
+    // Condition 1: Check NEWS level >= MinNewsLevelS1 | Dieu kien 1: Kiem tra muc NEWS
+    if(news_abs < MinNewsLevelS1) {
+        DebugPrint("S1_NEWS: " + tf_names[tf] + " NEWS=" + IntegerToString(news_abs) +
+                   " < Min=" + IntegerToString(MinNewsLevelS1) + ", SKIP");
+        return;
+    }
+
+    // Condition 2: Check NEWS direction matches signal (if required) | Dieu kien 2: Kiem tra huong NEWS khop signal
+    if(S1_RequireNewsDirection) {
+        int news_direction = (tf_news > 0) ? 1 : -1;
+
+        if(current_signal != news_direction) {
+            DebugPrint("S1_NEWS: " + tf_names[tf] + " Signal=" + IntegerToString(current_signal) +
+                       " != NewsDir=" + IntegerToString(news_direction) + ", SKIP");
+            return;
+        }
+    }
+
+    // PASS all conditions → Open order | PASS tat ca dieu kien → Mo lenh
+    RefreshRates();
+
+    if(current_signal == 1) {
+        int ticket = OrderSendSafe(tf, Symbol(), OP_BUY, g_ea.lot_sizes[tf][0],
+                                   Ask, 3,
+                                   "S1_" + tf_names[tf], g_ea.magic_numbers[tf][0], clrBlue);
+        if(ticket > 0) {
+            g_ea.position_flags[tf][0] = 1;
+            DebugPrint("[S1_NEWS_" + tf_names[tf] + "] BUY #" + IntegerToString(ticket) +
+                       " (NEWS=" + IntegerToString(tf_news) + ")");
+        } else {
+            g_ea.position_flags[tf][0] = 0;
+            Print("[S1_NEWS_", tf_names[tf], "] Failed: ", GetLastError());
+        }
+    }
+    else if(current_signal == -1) {
+        int ticket = OrderSendSafe(tf, Symbol(), OP_SELL, g_ea.lot_sizes[tf][0],
+                                   Bid, 3,
+                                   "S1_" + tf_names[tf], g_ea.magic_numbers[tf][0], clrRed);
+        if(ticket > 0) {
+            g_ea.position_flags[tf][0] = 1;
+            DebugPrint("[S1_NEWS_" + tf_names[tf] + "] SELL #" + IntegerToString(ticket) +
+                       " (NEWS=" + IntegerToString(tf_news) + ")");
+        } else {
+            g_ea.position_flags[tf][0] = 0;
+            Print("[S1_NEWS_", tf_names[tf], "] Failed: ", GetLastError());
+        }
+    }
+}
+
+// S1 Strategy Router: Call appropriate function based on filter setting | Bo dinh tuyen S1: Goi ham tuong ung theo cai dat
+void ProcessS1Strategy(int tf) {
+    if(S1_UseNewsFilter) {
+        ProcessS1NewsFilterStrategy(tf);
+    } else {
+        ProcessS1BasicStrategy(tf);
     }
 }
 
