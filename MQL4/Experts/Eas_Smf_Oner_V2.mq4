@@ -27,7 +27,7 @@ input bool S3_NEWS = true;   // S3: News Alignment | Theo tin tuc
 
 //--- 1.3 S3 NEWS Configuration (4) | Cau hinh S3 tin tuc
 input int MinNewsLevelS3 = 20;         // S3: Min NEWS level (10-70) | Muc NEWS toi thieu
-input bool EnableBonusNews = false;    // S3: Enable Bonus NEWS | Bat tin tuc bonus
+input bool EnableBonusNews = true;     // S3: Enable Bonus NEWS | Bat tin tuc bonus
 input int BonusOrderCount = 2;         // S3: Bonus orders count (1-5) | So lenh bonus
 input int MinNewsLevelBonus = 20;      // S3: Min NEWS for Bonus (10-70) | Muc NEWS cho bonus
 
