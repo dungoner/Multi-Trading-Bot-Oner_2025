@@ -7,11 +7,14 @@
 #property strict
 
 //=============================================================================
-//  PART 1: USER INPUTS (27 inputs) | CAU HINH NGUOI DUNG
+//  PART 1: USER INPUTS (28 inputs) | CAU HINH NGUOI DUNG
 //=============================================================================
-// 7 TF toggles + 3 Strategy toggles + 3 S1 NEWS + 4 S3 NEWS + 2 Stoploss + 2 Risk + 1 Data source + 2 Health + 1 Debug + 1 Dashboard + 1 Performance = 27
 
-//--- 1.1 Timeframe toggles (7) | Bat/tat khung thoi gian
+//-----------------------------------------------------------------------------
+// SECTION A: CORE SETTINGS (13 inputs) | CAU HINH CHINH
+//-----------------------------------------------------------------------------
+
+//--- A.1 Timeframe toggles (7) | Bat/tat khung thoi gian
 input bool TF_M1 = true;   // M1 (1 minute) | 1 phut
 input bool TF_M5 = true;   // M5 (5 minutes) | 5 phut
 input bool TF_M15 = true;  // M15 (15 minutes) | 15 phut
@@ -20,35 +23,16 @@ input bool TF_H1 = true;   // H1 (1 hour) | 1 gio
 input bool TF_H4 = true;   // H4 (4 hours) | 4 gio
 input bool TF_D1 = true;   // D1 (1 day) | 1 ngay
 
-//--- 1.2 Strategy toggles (3) | Bat/tat chien luoc
+//--- A.2 Strategy toggles (3) | Bat/tat chien luoc
 input bool S1_HOME = true;   // S1: Binary Trading | Giao dich nhi phan
 input bool S2_TREND = true;  // S2: Trend Following | Theo xu huong
 input bool S3_NEWS = true;   // S3: News Alignment | Theo tin tuc
 
-//--- 1.3 S1 NEWS Filter (3) | Bo loc tin tuc cho S1
-input bool S1_UseNewsFilter = false;           // S1: Require NEWS filter | Yeu cau bo loc tin tuc
-input int MinNewsLevelS1 = 20;                 // S1: Min NEWS level (10-70) | Muc NEWS toi thieu
-input bool S1_RequireNewsDirection = true;     // S1: Match NEWS direction | Khop huong tin tuc
-
-//--- 1.4 S3 NEWS Configuration (4) | Cau hinh S3 tin tuc
-input int MinNewsLevelS3 = 20;         // S3: Min NEWS level (10-70) | Muc NEWS toi thieu
-input bool EnableBonusNews = true;     // S3: Enable Bonus NEWS | Bat tin tuc bonus
-input int BonusOrderCount = 2;         // S3: Bonus orders count (1-5) | So lenh bonus
-input int MinNewsLevelBonus = 20;      // S3: Min NEWS for Bonus (10-70) | Muc NEWS cho bonus
-
-//--- 1.5 Stoploss mode (2) | Che do cat lo
-enum STOPLOSS_MODE {
-    LAYER1_MAXLOSS = 1,  // Layer1: max_loss × lot 
-    LAYER2_MARGIN = 2    // Layer2: margin / divisor(emergency)
-};
-input STOPLOSS_MODE StoplossMode = LAYER1_MAXLOSS;  // Stoploss mode | Che do cat lo
-input double Layer2_Divisor = 20.0;  // Layer2 margin divisor (default 20) | So chia margin tang 2 (mac dinh 20)
-
-//--- 1.6 Risk management (2) | Quan ly rui ro
+//--- A.3 Risk management (2) | Quan ly rui ro
 input double FixedLotSize = 0.1;           // Base lot size (0.01-100) | Khoi luong goc
 input double MaxLoss_Fallback = -1000.0;   // Layer1 fallback if CSDL empty | Du phong SL
 
-//--- 1.7 Data source (1 input) | Nguon du lieu
+//--- A.4 Data source (1) | Nguon du lieu
 enum CSDL_SOURCE_ENUM {
     FOLDER_1 = 0,  // DataAutoOner (Local file)
     FOLDER_2 = 1,  // DataAutoOner2 (Local file) - DEFAULT
@@ -56,23 +40,56 @@ enum CSDL_SOURCE_ENUM {
 };
 input CSDL_SOURCE_ENUM CSDL_Source = FOLDER_2;  // CSDL source | Nguon CSDL (Default: DataAutoOner2)
 
+//-----------------------------------------------------------------------------
+// SECTION B: STRATEGY CONFIGURATIONS (8 inputs) | CAU HINH CHIEN LUOC
+//-----------------------------------------------------------------------------
 
-//--- 1.8 Health check & reset (2) | Kiem tra suc khoe va reset
+//--- B.1 S1 NEWS Filter (3) | Bo loc tin tuc cho S1
+input bool S1_UseNewsFilter = false;           // S1: Require NEWS filter | Yeu cau bo loc tin tuc
+input int MinNewsLevelS1 = 20;                 // S1: Min NEWS level (10-70) | Muc NEWS toi thieu
+input bool S1_RequireNewsDirection = true;     // S1: Match NEWS direction | Khop huong tin tuc
+
+//--- B.2 S2 TREND Mode (1) | Che do xu huong cho S2
+enum S2_TREND_MODE {
+    S2_FOLLOW_D1 = 0,    // Follow D1 Trend (auto) | Theo xu huong D1 (tu dong)
+    S2_FORCE_BUY = 1,    // Force BUY only | Chi danh BUY
+    S2_FORCE_SELL = -1   // Force SELL only | Chi danh SELL
+};
+input S2_TREND_MODE S2_TrendMode = S2_FOLLOW_D1;  // S2: Trend mode | Che do xu huong
+
+//--- B.3 S3 NEWS Configuration (4) | Cau hinh S3 tin tuc
+input int MinNewsLevelS3 = 20;         // S3: Min NEWS level (10-70) | Muc NEWS toi thieu
+input bool EnableBonusNews = true;     // S3: Enable Bonus NEWS | Bat tin tuc bonus
+input int BonusOrderCount = 2;         // S3: Bonus orders count (1-5) | So lenh bonus
+input int MinNewsLevelBonus = 20;      // S3: Min NEWS for Bonus (10-70) | Muc NEWS cho bonus
+
+//-----------------------------------------------------------------------------
+// SECTION C: RISK PROTECTION (4 inputs) | BAO VE RUI RO
+//-----------------------------------------------------------------------------
+
+//--- C.1 Stoploss mode (2) | Che do cat lo
+enum STOPLOSS_MODE {
+    LAYER1_MAXLOSS = 1,  // Layer1: max_loss × lot
+    LAYER2_MARGIN = 2    // Layer2: margin / divisor(emergency)
+};
+input STOPLOSS_MODE StoplossMode = LAYER1_MAXLOSS;  // Stoploss mode | Che do cat lo
+input double Layer2_Divisor = 20.0;  // Layer2 margin divisor (default 20) | So chia margin tang 2 (mac dinh 20)
+
+//--- C.2 Health check & reset (2) | Kiem tra suc khoe va reset
 input bool EnableWeekendReset = true;   // Enable weekend reset (Saturday 00:01, M1 only) | Bat reset cuoi tuan (Thu 7 00:01, chi M1)
 input bool EnableHealthCheck = true;    // Enable health check (8h/16h, M1 only) | Bat kiem tra suc khoe (8h/16h, chi M1)
 
-//--- 1.9 Debug (1) | Che do debug
-input bool DebugMode = false;  // Enable debug logs | Bat log debug
+//-----------------------------------------------------------------------------
+// SECTION D: AUXILIARY SETTINGS (3 inputs) | CAU HINH PHU TRO
+//-----------------------------------------------------------------------------
 
-//--- 1.10 Dashboard (1) | Bang dieu khien
-input bool ShowDashboard = true;  // Show dashboard on chart | Hien thi bang dieu khien tren chart
-
-//--- 1.11 Performance (1) | Hieu suat
+//--- D.1 Performance (1) | Hieu suat
 input bool UseEvenOddMode = false;  // Use even/odd split (for weak network) | Chia giay chan/le (khi mang yeu)
 
+//--- D.2 Display (2) | Hien thi
+input bool ShowDashboard = true;  // Show dashboard on chart | Hien thi bang dieu khien tren chart
+input bool DebugMode = false;      // Enable debug logs | Bat log debug
 
-//=============================================================================
-//  PART 2: CSDL STRUCT (7 rows × 6 cols) | CAU TRUC DU LIEU CSDL
 //=============================================================================
 
 struct CSDLLoveRow {
@@ -942,12 +959,27 @@ void ProcessS1Strategy(int tf) {
 
 // Process S2 (Trend Following) strategy for TF | Xu ly chien luoc S2 (Theo xu huong)
 // OPTIMIZED: Uses single g_trend_d1 + pre-calculated lot + reads signal from CSDL | TOI UU: Dung g_trend_d1 don + lot da tinh + doc tin hieu tu CSDL
+// ENHANCED: Support 3 modes (auto D1 / force BUY / force SELL) | CAI TIEN: Ho tro 3 che do (tu dong D1 / chi BUY / chi SELL)
 void ProcessS2Strategy(int tf) {
     int current_signal = g_ea.csdl_rows[tf].signal;
 
-    // Check signal matches SINGLE D1 trend variable | Kiem tra tin hieu khop voi bien xu huong D1 don
-    if(current_signal != g_ea.trend_d1) {
-        DebugPrint("S2_TREND: Signal != Trend, skip");
+    // NEW: Determine trend based on mode | Xac dinh xu huong theo che do
+    int trend_to_follow = 0;
+
+    if(S2_TrendMode == S2_FOLLOW_D1) {
+        trend_to_follow = g_ea.trend_d1;  // Follow D1 trend (auto) | Theo xu huong D1 (tu dong)
+    }
+    else if(S2_TrendMode == S2_FORCE_BUY) {
+        trend_to_follow = 1;  // Force BUY only | Chi danh BUY
+    }
+    else if(S2_TrendMode == S2_FORCE_SELL) {
+        trend_to_follow = -1;  // Force SELL only | Chi danh SELL
+    }
+
+    // Check signal matches trend | Kiem tra tin hieu khop voi xu huong
+    if(current_signal != trend_to_follow) {
+        DebugPrint("S2_TREND: Signal=" + IntegerToString(current_signal) +
+                   " != Trend=" + IntegerToString(trend_to_follow) + ", skip");
         return;
     }
 
