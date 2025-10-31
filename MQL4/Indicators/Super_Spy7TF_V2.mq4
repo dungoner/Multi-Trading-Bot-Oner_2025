@@ -25,7 +25,7 @@ input string TargetSymbol = "";                              // Target Symbol - 
 input bool   EnableHealthCheck = true;                       // Health check at 8h & 16h | Kiem tra suc khoe luc 8h va 16h
 input bool   EnableMidnightReset = true;                     // Midnight reset at 0h daily | Reset luc 0h hang ngay
 input bool   EnableStartupReset = true;                      // Startup reset 1 minute after MT4 starts | Reset khoi dong 1 phut sau khi MT4 chay
-input bool   ProcessSignalOnOddSecond = true;                // Process Signal on ODD second only | Xu ly tin hieu giay le (tranh conflict)
+input bool   ProcessSignalOnOddSecond = false;               // Process Signal on ODD second only | Xu ly tin hieu giay le (tranh conflict)
 input bool   EnableMonthlyStats = true;                      // Monthly stats on 1st day of month | Thong ke thang vao ngay 1
 input string DataFolder = "DataAutoOner\\";                  // Data Storage Folder | Thu muc luu tru du lieu
 
@@ -878,7 +878,7 @@ void PrintDashboard() {
 
     ObjectCreate(0, news_obj, OBJ_LABEL, 0, 0, 0);
     ObjectSetInteger(0, news_obj, OBJPROP_CORNER, CORNER_LEFT_UPPER);
-    ObjectSetInteger(0, news_obj, OBJPROP_XDISTANCE, 390);  // X position closer (removed trailing | from line4)
+    ObjectSetInteger(0, news_obj, OBJPROP_XDISTANCE, 460);  // X position moved farther to avoid overlapping TIMEDIFF
     ObjectSetInteger(0, news_obj, OBJPROP_YDISTANCE, y_start + (3 * y_spacing));
     ObjectSetInteger(0, news_obj, OBJPROP_COLOR, clrGold);  // Gold color
     ObjectSetInteger(0, news_obj, OBJPROP_FONTSIZE, 8);
