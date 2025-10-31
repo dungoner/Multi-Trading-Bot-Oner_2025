@@ -67,10 +67,11 @@ input int MinNewsLevelBonus = 20;      // S3: Min NEWS for Bonus
 // SECTION C: RISK PROTECTION (4 inputs)
 //-----------------------------------------------------------------------------
 
-//--- C.1 Stoploss mode (2)
+//--- C.1 Stoploss mode (3)
 enum STOPLOSS_MODE {
-    LAYER1_MAXLOSS = 1,  // Layer1
-    LAYER2_MARGIN = 2    // Layer2
+    NONE = 0,            // No stoploss (close by signal only)
+    LAYER1_MAXLOSS = 1,  // Layer1: max_loss × lot
+    LAYER2_MARGIN = 2    // Layer2: margin / divisor
 };
 input STOPLOSS_MODE StoplossMode = LAYER1_MAXLOSS;  // Stoploss mode
 input double Layer2_Divisor = 20.0;  // Layer2 divisor
@@ -1179,10 +1180,15 @@ void CloseAllBonusOrders() {
 //  PART 15: STOPLOSS CHECKS (2 functions) | KIEM TRA CAT LO
 //=============================================================================
 
-// Check Layer1 stoploss (max_loss × lot) for all 21 orders | Kiem tra cat lo tang 1 cho 21 lenh
-void CheckLayer1Stoploss() {
-    if(StoplossMode != LAYER1_MAXLOSS) return;
+// Check stoploss for all 21 orders (unified function) | Kiem tra cat lo cho 21 lenh (ham hop nhat)
+// Supports 3 modes: NONE (0), LAYER1 (1), LAYER2 (2) | Ho tro 3 che do
+void CheckStoploss() {
+    // Mode 0: No stoploss, close by signal only | Che do 0: Khong chot lo, chi dong theo tin hieu
+    if(StoplossMode == NONE) return;
 
+    if(OrdersTotal() == 0) return;
+
+    // Scan all orders once | Quet tat ca lenh 1 lan duy nhat
     for(int i = OrdersTotal() - 1; i >= 0; i--) {
         if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) continue;
         if(OrderSymbol() != Symbol()) continue;
@@ -1191,70 +1197,49 @@ void CheckLayer1Stoploss() {
         int ticket = OrderTicket();
         double profit = OrderProfit() + OrderSwap() + OrderCommission();
 
+        // Find TF + Strategy from magic | Tim TF + Chien luoc tu magic
+        bool found = false;
         for(int tf = 0; tf < 7; tf++) {
-            // Check all 3 strategies using loop | Kiem tra 3 chien luoc bang vong lap
-            bool found = false;
             for(int s = 0; s < 3; s++) {
                 if(magic == g_ea.magic_numbers[tf][s] &&
-                   g_ea.position_flags[tf][s] == 1 &&
-                   profit <= g_ea.layer1_thresholds[tf][s]) {
-                    string strategy_names[3] = {"S1", "S2", "S3"};
-                    Print("[LAYER1_SL] ", strategy_names[s], "_TF", tf, " #", ticket, " Loss=$", DoubleToStr(profit, 2));
-                    if(CloseOrderSafely(ticket, "LAYER1_SL")) {
-                        g_ea.position_flags[tf][s] = 0;
+                   g_ea.position_flags[tf][s] == 1) {
+
+                    // Calculate threshold based on mode | Tinh nguong theo che do
+                    double threshold = 0.0;
+                    string mode_name = "";
+
+                    if(StoplossMode == LAYER1_MAXLOSS) {
+                        // Layer1: Use pre-calculated threshold (max_loss × lot) | Dung nguong da tinh (max_loss × lot)
+                        threshold = g_ea.layer1_thresholds[tf][s];
+                        mode_name = "LAYER1_SL";
                     }
+                    else if(StoplossMode == LAYER2_MARGIN) {
+                        // Layer2: Calculate from margin (emergency) | Tinh tu margin (khan cap)
+                        double margin_usd = OrderLots() * MarketInfo(Symbol(), MODE_MARGINREQUIRED);
+                        threshold = -(margin_usd / Layer2_Divisor);
+                        mode_name = "LAYER2_SL";
+                    }
+
+                    // Check and close if loss exceeds threshold | Kiem tra va dong neu lo vuot nguong
+                    if(profit <= threshold) {
+                        string strategy_names[3] = {"S1", "S2", "S3"};
+                        string tf_names[7] = {"M1", "M5", "M15", "M30", "H1", "H4", "D1"};
+
+                        Print("[", mode_name, "] ", strategy_names[s], "_", tf_names[tf],
+                              " #", ticket, " Loss=$", DoubleToStr(profit, 2),
+                              " Threshold=$", DoubleToStr(threshold, 2));
+
+                        if(CloseOrderSafely(ticket, mode_name)) {
+                            g_ea.position_flags[tf][s] = 0;
+                        }
+                    }
+
                     found = true;
                     break;
                 }
             }
             if(found) break;
         }
-    }
-}
-
-// Check Layer2 stoploss (margin/divisor emergency) for all 21 orders | Kiem tra cat lo tang 2 khan cap cho 21 lenh
-void CheckLayer2Stoploss() {
-    if(StoplossMode != LAYER2_MARGIN) return;
-
-    if(OrdersTotal() == 0) return;
-
-    for(int i = OrdersTotal() - 1; i >= 0; i--) {
-        if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) continue;
-        if(OrderSymbol() != Symbol()) continue;
-
-        int magic = OrderMagicNumber();
-        int ticket = OrderTicket();
-
-        bool found = false;
-        for(int tf = 0; tf < 7; tf++) {
-            // Check if magic belongs to this TF | Kiem tra magic thuoc TF nay
-            int strategy = -1;
-            for(int s = 0; s < 3; s++) {
-                if(magic == g_ea.magic_numbers[tf][s]) {
-                    strategy = s;
-                    break;
-                }
-            }
-            if(strategy < 0) continue;
-
-            bool has_flag = (g_ea.position_flags[tf][strategy] == 1);
-            if(!has_flag) continue;
-
-            double profit = OrderProfit() + OrderSwap() + OrderCommission();
-            double margin_usd = OrderLots() * MarketInfo(Symbol(), MODE_MARGINREQUIRED);
-            double threshold = -(margin_usd / Layer2_Divisor);  // Use input parameter | Dung tham so input
-
-            if(profit <= threshold) {
-                string strategy_names[3] = {"S1", "S2", "S3"};
-                Print("[LAYER2_SL] EMERGENCY ", strategy_names[strategy], "_TF", tf, " #", ticket, " Loss=$", DoubleToStr(profit, 2), " (Margin/", DoubleToStr(Layer2_Divisor, 1), ")");
-                if(CloseOrderSafely(ticket, "LAYER2_SL")) {
-                    g_ea.position_flags[tf][strategy] = 0;
-                }
-            }
-            found = true;
-            break;
-        }
-        if(found) continue;
     }
 }
 
@@ -1817,9 +1802,8 @@ void OnTimer() {
     // NOTE: Always runs on ODD seconds, independent of UseEvenOddMode | Luon chay giay LE, doc lap voi UseEvenOddMode
     if(current_second % 2 != 0) {
 
-        // STEP 1: Check stoploss (both layers) | Kiem tra cat lo (ca 2 tang)
-        CheckLayer1Stoploss();
-        CheckLayer2Stoploss();
+        // STEP 1: Check stoploss (unified function) | Kiem tra cat lo (ham hop nhat)
+        CheckStoploss();
 
         // STEP 2: Update dashboard | Cap nhat bang dieu khien
         UpdateDashboard();
