@@ -7,9 +7,9 @@
 #property strict
 
 //=============================================================================
-//  PART 1: USER INPUTS (20 inputs) | CAU HINH NGUOI DUNG
+//  PART 1: USER INPUTS (19 inputs) | CAU HINH NGUOI DUNG
 //=============================================================================
-// 7 TF toggles + 3 Strategy toggles + 2 Stoploss + 2 Risk + 1 Data source + 1 Advanced + 2 Health + 1 Debug + 1 Dashboard = 20
+// 7 TF toggles + 3 Strategy toggles + 2 Stoploss + 2 Risk + 1 Data source + 2 Health + 1 Debug + 1 Dashboard = 19
 
 //--- 1.1 Timeframe toggles (7) | Bat/tat khung thoi gian
 input bool TF_M1 = true;   // M1 (1 minute) | 1 phut
@@ -46,17 +46,14 @@ enum CSDL_SOURCE_ENUM {
 input CSDL_SOURCE_ENUM CSDL_Source = FOLDER_2;  // CSDL source | Nguon CSDL (Default: DataAutoOner2)
 
 
-//--- 1.6 Advanced mode (1) | Che do toi uu
-input bool UseAdvancedMode = false;  // FALSE = Mode 1 (each TF own NEWS), TRUE = Mode 2 (all use M1 NEWS) | CHE DO TOI UU: FALSE = Moi TF dung NEWS rieng, TRUE = Tat ca dung NEWS M1
-
-//--- 1.7 Health check & reset (2) | Kiem tra suc khoe va reset
+//--- 1.6 Health check & reset (2) | Kiem tra suc khoe va reset
 input bool EnableWeekendReset = true;   // Enable weekend reset (Saturday 00:01, M1 only) | Bat reset cuoi tuan (Thu 7 00:01, chi M1)
 input bool EnableHealthCheck = true;    // Enable health check (8h/16h, M1 only) | Bat kiem tra suc khoe (8h/16h, chi M1)
 
-//--- 1.8 Debug (1) | Che do debug
+//--- 1.7 Debug (1) | Che do debug
 input bool DebugMode = false;  // Enable debug logs | Bat log debug
 
-//--- 1.9 Dashboard (1) | Bang dieu khien
+//--- 1.8 Dashboard (1) | Bang dieu khien
 input bool ShowDashboard = true;  // Show dashboard on chart | Hien thi bang dieu khien tren chart
 
 
@@ -666,40 +663,22 @@ void MapCSDLToEAVariables() {
     // S2: TREND - Always use D1 (row 6) for all TF | Luon dung D1 cho tat ca TF
     g_ea.trend_d1 = g_ea.csdl_rows[6].signal;
 
-    // S3: NEWS - Smart mode selection | Che do thong minh
-    // This function now uses SINGLE NEWS variable but sources it intelligently:
-    // Ham nay dung BIEN NEWS DON nhung lay nguon thong minh:
-    //
-    // Mode 1 (UseAdvancedMode=false, DEFAULT): Representative approach
-    // Use STRONGEST NEWS from all 7 TF as single decision point
-    // Dung TIN TUC MANH NHAT tu 7 khung lam diem quyet dinh duy nhat
-    //
-    // Mode 2 (UseAdvancedMode=true): Fixed M1 approach
-    // Use M1 (row 0) NEWS only for all TF decisions
-    // Chi dung TIN TUC M1 cho tat ca quyet dinh
-
-    if(UseAdvancedMode) {
-        // Mode 2: Fixed M1 source | Nguon co dinh M1
-        g_ea.news_level = MathAbs(g_ea.csdl_rows[0].news);
-        g_ea.news_direction = (g_ea.csdl_rows[0].news > 0) ? 1 :
-                           (g_ea.csdl_rows[0].news < 0) ? -1 : 0;
-    } else {
-        // Mode 1 (DEFAULT): Find strongest NEWS across all 7 TF | Tim tin tuc manh nhat trong 7 khung
-        int strongest_news = g_ea.csdl_rows[0].news;
-        for(int tf = 1; tf < 7; tf++) {
-            if(MathAbs(g_ea.csdl_rows[tf].news) > MathAbs(strongest_news)) {
-                strongest_news = g_ea.csdl_rows[tf].news;
-            }
+    // S3: NEWS - Use STRONGEST NEWS from all 7 TF | Dung TIN TUC MANH NHAT tu 7 khung
+    // Find strongest NEWS across all 7 TF as single decision point
+    // Tim tin tuc manh nhat trong 7 khung lam diem quyet dinh duy nhat
+    int strongest_news = g_ea.csdl_rows[0].news;
+    for(int tf = 1; tf < 7; tf++) {
+        if(MathAbs(g_ea.csdl_rows[tf].news) > MathAbs(strongest_news)) {
+            strongest_news = g_ea.csdl_rows[tf].news;
         }
-        g_ea.news_level = MathAbs(strongest_news);
-        g_ea.news_direction = (strongest_news > 0) ? 1 :
-                           (strongest_news < 0) ? -1 : 0;
     }
+    g_ea.news_level = MathAbs(strongest_news);
+    g_ea.news_direction = (strongest_news > 0) ? 1 :
+                       (strongest_news < 0) ? -1 : 0;
 
     DebugPrint("Mapped 7 TF | signal[0]=" + IntegerToString(g_ea.csdl_rows[0].signal) +
                " trend_d1=" + IntegerToString(g_ea.trend_d1) +
-               " news_lv=" + IntegerToString(g_ea.news_level) +
-               " mode=" + (UseAdvancedMode ? "M1_FIXED" : "STRONGEST"));
+               " news_lv=" + IntegerToString(g_ea.news_level) + " (STRONGEST)");
 }
 
 //=============================================================================
@@ -1318,7 +1297,6 @@ int OnInit() {
     if(StringLen(strat_status) > 0) strat_status = StringSubstr(strat_status, 0, StringLen(strat_status) - 1);
 
     string sl_mode = (StoplossMode == LAYER1_MAXLOSS) ? "L1" : ("L2/" + DoubleToStr(Layer2_Divisor, 0));
-    string news_mode = UseAdvancedMode ? "M1" : "STRONGEST";
     string master_mode = (Period()==PERIOD_M1) ? "M1" : "M5-D1";
 
     // CSDL source name | Ten nguon CSDL
@@ -1332,7 +1310,7 @@ int OnInit() {
     string news_str = "Lv" + IntegerToString(g_ea.news_level) + "_" + SignalToString(g_ea.news_direction);
 
     g_ea.init_summary = "[INIT] " + g_ea.symbol_name + " | SL:" + sl_mode +
-                        " News:" + news_mode + "(" + news_str + ") Trend:" + trend_str +
+                        " News:STRONGEST(" + news_str + ") Trend:" + trend_str +
                         " | Lot:" + DoubleToStr(g_ea.lot_sizes[0][0], 2) + "-" + DoubleToStr(g_ea.lot_sizes[6][2], 2) +
                         " | TF:" + IntegerToString(tf_count) + " S:" + IntegerToString(strat_count) +
                         " | Folder:" + folder_name + " Master:" + master_mode +
