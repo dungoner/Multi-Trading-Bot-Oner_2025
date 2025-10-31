@@ -532,8 +532,6 @@ bool TryReadFile(string filename) {
     return true;  // SUCCESS | Thanh cong
 }
 
-}
-
 // Read CSDL from local file only | Chi doc CSDL tu file local
 // Supports 3 sources: FOLDER_1, FOLDER_2, FOLDER_3 | Ho tro 3 nguon: 3 folder local
 void ReadCSDLFile() {
