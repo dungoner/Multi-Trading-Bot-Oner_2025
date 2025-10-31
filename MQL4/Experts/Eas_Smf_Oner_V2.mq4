@@ -1704,7 +1704,8 @@ void OnTimer() {
     //=============================================================================
     // WHY ODD: These functions don't need fresh CSDL data ? Run independently ? Reduce load on EVEN seconds
     // TAI SAO LE: Cac ham nay khong can CSDL moi ? Chay doc lap ? Giam tai cho giay CHAN
-    if(!UseEvenOddMode || (current_second % 2 != 0)) {
+    // NOTE: Always runs on ODD seconds, independent of UseEvenOddMode | Luon chay giay LE, doc lap voi UseEvenOddMode
+    if(current_second % 2 != 0) {
 
         // STEP 1: Check stoploss (both layers) | Kiem tra cat lo (ca 2 tang)
         CheckLayer1Stoploss();
