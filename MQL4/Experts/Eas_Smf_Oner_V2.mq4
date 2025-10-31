@@ -7,9 +7,9 @@
 #property strict
 
 //=============================================================================
-//  PART 1: USER INPUTS (23 inputs) | CAU HINH NGUOI DUNG
+//  PART 1: USER INPUTS (20 inputs) | CAU HINH NGUOI DUNG
 //=============================================================================
-// 7 TF toggles + 3 Strategy toggles + 2 Stoploss + 2 Risk + 4 Data source + 1 Advanced + 2 Health + 1 Debug + 1 Dashboard = 23
+// 7 TF toggles + 3 Strategy toggles + 2 Stoploss + 2 Risk + 1 Data source + 1 Advanced + 2 Health + 1 Debug + 1 Dashboard = 20
 
 //--- 1.1 Timeframe toggles (7) | Bat/tat khung thoi gian
 input bool TF_M1 = true;   // M1 (1 minute) | 1 phut
@@ -37,20 +37,14 @@ input double Layer2_Divisor = 20.0;  // Layer2 margin divisor (default 20) | So 
 input double FixedLotSize = 0.1;           // Base lot size (0.01-100) | Khoi luong goc
 input double MaxLoss_Fallback = -1000.0;   // Layer1 fallback if CSDL empty | Du phong SL
 
-//--- 1.5 Data source (4 inputs) | Nguon du lieu
+//--- 1.5 Data source (1 input) | Nguon du lieu
 enum CSDL_SOURCE_ENUM {
     FOLDER_1 = 0,  // DataAutoOner (Local file)
     FOLDER_2 = 1,  // DataAutoOner2 (Local file) - DEFAULT
     FOLDER_3 = 2,  // DataAutoOner3 (Local file)
-    HTTP_API = 3   // HTTP API (Remote VPS or Localhost)
 };
 input CSDL_SOURCE_ENUM CSDL_Source = FOLDER_2;  // CSDL source | Nguon CSDL (Default: DataAutoOner2)
 
-// HTTP settings (only used if CSDL_Source = HTTP_API)
-// IMPORTANT: MT4 must allow URL in Tools->Options->Expert Advisors
-input string HTTP_Server_IP = "147.189.173.121"; // HTTP Server IP | Dia chi IP VPS (change if different)
-input int HTTP_Server_Port = 9079;               // HTTP Server Port | Cong server
-input string HTTP_API_Key = "";                  // API Key | Khoa bao mat (MUST match Python Bot, EMPTY=not configured)
 
 //--- 1.6 Advanced mode (1) | Che do toi uu
 input bool UseAdvancedMode = false;  // FALSE = Mode 1 (each TF own NEWS), TRUE = Mode 2 (all use M1 NEWS) | CHE DO TOI UU: FALSE = Moi TF dung NEWS rieng, TRUE = Tat ca dung NEWS M1
@@ -419,13 +413,12 @@ void BuildCSDLFilename() {
 }
 
 //=============================================================================
-//  PART 7: CSDL PARSING (5 functions) | PHAN TICH DU LIEU CSDL
+//  PART 7: CSDL PARSING (3 functions) | PHAN TICH DU LIEU CSDL
 //=============================================================================
 // ParseLoveRow() - Parse single row | Phan tich 1 dong
 // ParseCSDLLoveJSON() - Parse entire JSON | Phan tich toan bo JSON
 // TryReadFile() - Try read local file | Thu doc file local
-// ReadCSDLFromHTTP() - Read from HTTP API (new) | Doc tu HTTP API (moi)
-// ReadCSDLFile() - Smart routing (HTTP or Local) | Dinh tuyen thong minh
+// ReadCSDLFile() - Local file reading only | Chi doc file local
 
 // Parse one row of CSDL data (6 columns) | Phan tich 1 hang du lieu CSDL (6 cot)
 bool ParseLoveRow(string row_data, int row_index) {
@@ -539,103 +532,30 @@ bool TryReadFile(string filename) {
     return true;  // SUCCESS | Thanh cong
 }
 
-// Read CSDL from HTTP API (Remote VPS) | Doc CSDL tu HTTP API (VPS tu xa)
-bool ReadCSDLFromHTTP() {
-    // Build URL: http://IP:PORT/api/csdl/SYMBOL
-    string url = "http://" + HTTP_Server_IP + ":" + IntegerToString(HTTP_Server_Port) + "/api/csdl/" + g_ea.symbol_name;
-
-    // Build headers with API key
-    string headers = "X-API-Key: " + HTTP_API_Key + "\r\n";
-
-    // Prepare WebRequest
-    char post_data[];
-    char result[];
-    string result_headers;
-
-    int timeout = 3000;  // 3 seconds timeout
-
-    // Send HTTP GET request
-    int res = WebRequest("GET", url, headers, timeout, post_data, result, result_headers);
-
-    // Check for errors
-    if(res == -1) {
-        int error = GetLastError();
-        Print("[HTTP_ERROR] Cannot connect to API: ", url, " Error:", error);
-
-        // Common errors:
-        // 4060 = URL not allowed (need to add URL in MT4 settings)
-        // 4014 = WebRequest not allowed
-        if(error == 4060) {
-            Print("[HTTP_ERROR] URL not allowed! Add this URL in MT4: Tools ? Options ? Expert Advisors ? Allow WebRequest");
-        }
-
-        return false;
-    }
-
-    // Check HTTP status code (200 = OK)
-    if(res != 200) {
-        Print("[HTTP_ERROR] Server returned status code: ", res);
-        return false;
-    }
-
-    // Convert response to string
-    string json_content = CharArrayToString(result);
-
-    // Check if response is valid JSON
-    if(StringLen(json_content) < 20) {
-        Print("[HTTP_ERROR] Response too short: ", StringLen(json_content), " bytes");
-        return false;
-    }
-
-    // Parse JSON response (reuse existing function)
-    if(!ParseCSDLLoveJSON(json_content)) {
-        Print("[HTTP_ERROR] Failed to parse JSON response");
-        return false;
-    }
-
-    DebugPrint("[HTTP_OK] Successfully loaded CSDL from API");
-    return true;  // SUCCESS | Thanh cong
 }
 
-// Read CSDL with smart routing (HTTP or Local file) | Doc CSDL voi dinh tuyen thong minh (HTTP hoac file local)
-// Supports 4 sources: FOLDER_1, FOLDER_2, FOLDER_3, HTTP_API | Ho tro 4 nguon: 3 folder + HTTP API
+// Read CSDL from local file only | Chi doc CSDL tu file local
+// Supports 3 sources: FOLDER_1, FOLDER_2, FOLDER_3 | Ho tro 3 nguon: 3 folder local
 void ReadCSDLFile() {
     bool success = false;
 
-    // ========== MODE 1: HTTP API (Remote VPS or Localhost) ==========
-    if(CSDL_Source == HTTP_API) {
-        // TRY 1: Read from HTTP API | Lan 1: Doc tu HTTP API
-        success = ReadCSDLFromHTTP();
+    // ========== LOCAL FILE (FOLDER_1 / FOLDER_2 / FOLDER_3) ==========
+    // TRY 1: Read main local file | Lan 1: Doc file local chinh
+    success = TryReadFile(g_ea.csdl_filename);
 
-        if(!success) {
-            // TRY 2: Retry HTTP after 100ms | Lan 2: Thu lai HTTP sau 100ms
-            Sleep(100);
-            success = ReadCSDLFromHTTP();
-        }
-
-        // NO FALLBACK to local file - If HTTP fails, something is seriously wrong
-        // KHONG fallback sang file local - Neu HTTP loi, co van de nghiem trong
-        // User should check: 1) Python Bot running? 2) Network OK? 3) API Key correct?
-    }
-    // ========== MODE 2: LOCAL FILE (FOLDER_1 / FOLDER_2 / FOLDER_3) ==========
-    else {
-        // TRY 1: Read main local file | Lan 1: Doc file local chinh
+    if(!success) {
+        // TRY 2: Wait 100ms and retry | Lan 2: Cho 100ms va doc lai
+        Sleep(100);
         success = TryReadFile(g_ea.csdl_filename);
+    }
 
-        if(!success) {
-            // TRY 2: Wait 100ms and retry | Lan 2: Cho 100ms va doc lai
-            Sleep(100);
-            success = TryReadFile(g_ea.csdl_filename);
-        }
+    if(!success) {
+        // TRY 3: Read backup file in DataAutoOner (FOLDER_1) | Lan 3: Doc file du phong trong DataAutoOner
+        string backup_file = "DataAutoOner\\" + g_ea.symbol_name + "_LIVE.json";
+        success = TryReadFile(backup_file);
 
-        if(!success) {
-            // TRY 3: Read backup file in DataAutoOner (FOLDER_1) | Lan 3: Doc file du phong trong DataAutoOner
-            string backup_file = "DataAutoOner\\" + g_ea.symbol_name + "_LIVE.json";
-            success = TryReadFile(backup_file);
-
-            if(success) {
-                Print("[BACKUP] Using DataAutoOner (FOLDER_1) file");
-            }
+        if(success) {
+            Print("[BACKUP] Using DataAutoOner (FOLDER_1) file");
         }
     }
 
@@ -1367,7 +1287,7 @@ int OnInit() {
     if(CSDL_Source == FOLDER_1) g_ea.csdl_folder = "DataAutoOner\\";
     else if(CSDL_Source == FOLDER_2) g_ea.csdl_folder = "DataAutoOner2\\";
     else if(CSDL_Source == FOLDER_3) g_ea.csdl_folder = "DataAutoOner3\\";
-    else g_ea.csdl_folder = "DataAutoOner2\\";  // Fallback (for HTTP_API mode, not used but must be set)
+    else g_ea.csdl_folder = "DataAutoOner2\\";  // Fallback to FOLDER_2
 
     // PART 3: Build filename & Read file | Xay dung ten file va doc file
     BuildCSDLFilename();
@@ -1438,7 +1358,6 @@ int OnInit() {
     if(CSDL_Source == FOLDER_1) folder_name = "DA1";
     else if(CSDL_Source == FOLDER_2) folder_name = "DA2";
     else if(CSDL_Source == FOLDER_3) folder_name = "DA3";
-    else if(CSDL_Source == HTTP_API) folder_name = "HTTP:" + HTTP_Server_IP + ":" + IntegerToString(HTTP_Server_Port);
 
     // Build init_summary with CSDL data (after MapCSDLToEAVariables) | Tao init_summary voi du lieu CSDL
     string trend_str = SignalToString(g_ea.trend_d1);
@@ -1592,7 +1511,6 @@ void UpdateDashboard() {
     if(CSDL_Source == FOLDER_1) folder = "DA1";
     else if(CSDL_Source == FOLDER_2) folder = "DA2";
     else if(CSDL_Source == FOLDER_3) folder = "DA3";
-    else if(CSDL_Source == HTTP_API) folder = "HTTP";
     string trend = (g_ea.trend_d1 == 1) ? "[^]" : (g_ea.trend_d1 == -1 ? "" : ">");
     string news_dir = (g_ea.news_direction == 1) ? "[^]" : (g_ea.news_direction == -1 ? "" : ">");
 
