@@ -7,9 +7,9 @@
 #property strict
 
 //=============================================================================
-//  PART 1: USER INPUTS (23 inputs) | CAU HINH NGUOI DUNG
+//  PART 1: USER INPUTS (24 inputs) | CAU HINH NGUOI DUNG
 //=============================================================================
-// 7 TF toggles + 3 Strategy toggles + 4 S3 NEWS + 2 Stoploss + 2 Risk + 1 Data source + 2 Health + 1 Debug + 1 Dashboard = 23
+// 7 TF toggles + 3 Strategy toggles + 4 S3 NEWS + 2 Stoploss + 2 Risk + 1 Data source + 2 Health + 1 Debug + 1 Dashboard + 1 Performance = 24
 
 //--- 1.1 Timeframe toggles (7) | Bat/tat khung thoi gian
 input bool TF_M1 = true;   // M1 (1 minute) | 1 phut
@@ -61,6 +61,9 @@ input bool DebugMode = false;  // Enable debug logs | Bat log debug
 
 //--- 1.9 Dashboard (1) | Bang dieu khien
 input bool ShowDashboard = true;  // Show dashboard on chart | Hien thi bang dieu khien tren chart
+
+//--- 1.10 Performance (1) | Hieu suat
+input bool UseEvenOddMode = false;  // Use even/odd split (for weak network) | Chia giay chan/le (khi mang yeu)
 
 
 //=============================================================================
@@ -1656,7 +1659,7 @@ void OnTimer() {
     //=============================================================================
     // WHY EVEN: SPY Bot writes CSDL on ODD seconds ? EA reads on EVEN ? No file lock conflict
     // TAI SAO CHAN: SPY Bot ghi CSDL giay LE ? EA doc giay CHAN ? Khong xung dot file
-    if(current_second % 2 == 0) {
+    if(!UseEvenOddMode || (current_second % 2 == 0)) {
 
         // STEP 1: Read CSDL file | Doc file CSDL
         ReadCSDLFile();
@@ -1701,7 +1704,7 @@ void OnTimer() {
     //=============================================================================
     // WHY ODD: These functions don't need fresh CSDL data ? Run independently ? Reduce load on EVEN seconds
     // TAI SAO LE: Cac ham nay khong can CSDL moi ? Chay doc lap ? Giam tai cho giay CHAN
-    else {
+    if(!UseEvenOddMode || (current_second % 2 != 0)) {
 
         // STEP 1: Check stoploss (both layers) | Kiem tra cat lo (ca 2 tang)
         CheckLayer1Stoploss();
