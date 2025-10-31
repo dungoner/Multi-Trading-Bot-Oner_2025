@@ -7,9 +7,9 @@
 #property strict
 
 //=============================================================================
-//  PART 1: USER INPUTS (24 inputs) | CAU HINH NGUOI DUNG
+//  PART 1: USER INPUTS (27 inputs) | CAU HINH NGUOI DUNG
 //=============================================================================
-// 7 TF toggles + 3 Strategy toggles + 4 S3 NEWS + 2 Stoploss + 2 Risk + 1 Data source + 2 Health + 1 Debug + 1 Dashboard + 1 Performance = 24
+// 7 TF toggles + 3 Strategy toggles + 3 S1 NEWS + 4 S3 NEWS + 2 Stoploss + 2 Risk + 1 Data source + 2 Health + 1 Debug + 1 Dashboard + 1 Performance = 27
 
 //--- 1.1 Timeframe toggles (7) | Bat/tat khung thoi gian
 input bool TF_M1 = true;   // M1 (1 minute) | 1 phut
@@ -25,13 +25,18 @@ input bool S1_HOME = true;   // S1: Binary Trading | Giao dich nhi phan
 input bool S2_TREND = true;  // S2: Trend Following | Theo xu huong
 input bool S3_NEWS = true;   // S3: News Alignment | Theo tin tuc
 
-//--- 1.3 S3 NEWS Configuration (4) | Cau hinh S3 tin tuc
+//--- 1.3 S1 NEWS Filter (3) | Bo loc tin tuc cho S1
+input bool S1_UseNewsFilter = false;           // S1: Require NEWS filter | Yeu cau bo loc tin tuc
+input int MinNewsLevelS1 = 20;                 // S1: Min NEWS level (10-70) | Muc NEWS toi thieu
+input bool S1_RequireNewsDirection = true;     // S1: Match NEWS direction | Khop huong tin tuc
+
+//--- 1.4 S3 NEWS Configuration (4) | Cau hinh S3 tin tuc
 input int MinNewsLevelS3 = 20;         // S3: Min NEWS level (10-70) | Muc NEWS toi thieu
 input bool EnableBonusNews = true;     // S3: Enable Bonus NEWS | Bat tin tuc bonus
 input int BonusOrderCount = 2;         // S3: Bonus orders count (1-5) | So lenh bonus
 input int MinNewsLevelBonus = 20;      // S3: Min NEWS for Bonus (10-70) | Muc NEWS cho bonus
 
-//--- 1.4 Stoploss mode (2) | Che do cat lo
+//--- 1.5 Stoploss mode (2) | Che do cat lo
 enum STOPLOSS_MODE {
     LAYER1_MAXLOSS = 1,  // Layer1: max_loss × lot 
     LAYER2_MARGIN = 2    // Layer2: margin / divisor(emergency)
@@ -39,11 +44,11 @@ enum STOPLOSS_MODE {
 input STOPLOSS_MODE StoplossMode = LAYER1_MAXLOSS;  // Stoploss mode | Che do cat lo
 input double Layer2_Divisor = 20.0;  // Layer2 margin divisor (default 20) | So chia margin tang 2 (mac dinh 20)
 
-//--- 1.5 Risk management (2) | Quan ly rui ro
+//--- 1.6 Risk management (2) | Quan ly rui ro
 input double FixedLotSize = 0.1;           // Base lot size (0.01-100) | Khoi luong goc
 input double MaxLoss_Fallback = -1000.0;   // Layer1 fallback if CSDL empty | Du phong SL
 
-//--- 1.6 Data source (1 input) | Nguon du lieu
+//--- 1.7 Data source (1 input) | Nguon du lieu
 enum CSDL_SOURCE_ENUM {
     FOLDER_1 = 0,  // DataAutoOner (Local file)
     FOLDER_2 = 1,  // DataAutoOner2 (Local file) - DEFAULT
@@ -52,17 +57,17 @@ enum CSDL_SOURCE_ENUM {
 input CSDL_SOURCE_ENUM CSDL_Source = FOLDER_2;  // CSDL source | Nguon CSDL (Default: DataAutoOner2)
 
 
-//--- 1.7 Health check & reset (2) | Kiem tra suc khoe va reset
+//--- 1.8 Health check & reset (2) | Kiem tra suc khoe va reset
 input bool EnableWeekendReset = true;   // Enable weekend reset (Saturday 00:01, M1 only) | Bat reset cuoi tuan (Thu 7 00:01, chi M1)
 input bool EnableHealthCheck = true;    // Enable health check (8h/16h, M1 only) | Bat kiem tra suc khoe (8h/16h, chi M1)
 
-//--- 1.8 Debug (1) | Che do debug
+//--- 1.9 Debug (1) | Che do debug
 input bool DebugMode = false;  // Enable debug logs | Bat log debug
 
-//--- 1.9 Dashboard (1) | Bang dieu khien
+//--- 1.10 Dashboard (1) | Bang dieu khien
 input bool ShowDashboard = true;  // Show dashboard on chart | Hien thi bang dieu khien tren chart
 
-//--- 1.10 Performance (1) | Hieu suat
+//--- 1.11 Performance (1) | Hieu suat
 input bool UseEvenOddMode = false;  // Use even/odd split (for weak network) | Chia giay chan/le (khi mang yeu)
 
 
@@ -876,7 +881,34 @@ bool HasValidS2BaseCondition(int tf) {
 
 // Process S1 (Binary Trading) strategy for TF | Xu ly chien luoc S1 (Giao dich nhi phan)
 // OPTIMIZED: Uses pre-calculated lot + reads signal directly from CSDL | TOI UU: Dung lot da tinh + doc tin hieu truc tiep tu CSDL
+// ENHANCED: Optional NEWS filter for higher quality signals | CAI TIEN: Bo loc tin tuc tuy chon cho tin hieu chat luong cao
 void ProcessS1Strategy(int tf) {
+    // NEW: Check NEWS filter if enabled | Kiem tra bo loc tin tuc neu bat
+    if(S1_UseNewsFilter) {
+        int tf_news = g_ea.csdl_rows[tf].news;
+        int news_abs = MathAbs(tf_news);
+
+        // Check NEWS level >= MinNewsLevelS1 | Kiem tra muc NEWS >= nguong
+        if(news_abs < MinNewsLevelS1) {
+            DebugPrint("S1_NEWS_FILTER: TF" + IntegerToString(tf) +
+                       " NEWS=" + IntegerToString(news_abs) +
+                       " < " + IntegerToString(MinNewsLevelS1) + ", skip");
+            return;
+        }
+
+        // Check NEWS direction matches signal if required | Kiem tra huong NEWS khop signal neu yeu cau
+        if(S1_RequireNewsDirection) {
+            int news_direction = (tf_news > 0) ? 1 : -1;
+            int current_signal_check = g_ea.csdl_rows[tf].signal;
+
+            if(current_signal_check != news_direction) {
+                DebugPrint("S1_NEWS_FILTER: Signal=" + IntegerToString(current_signal_check) +
+                           " != NewsDir=" + IntegerToString(news_direction) + ", skip");
+                return;
+            }
+        }
+    }
+
     RefreshRates();
 
     string tf_names[7] = {"M1", "M5", "M15", "M30", "H1", "H4", "D1"};
@@ -1010,6 +1042,9 @@ void ProcessBonusNews() {
 
     // Scan all 7 TF | Quet tat ca 7 TF
     for(int tf = 0; tf < 7; tf++) {
+        // BUGFIX: Skip if TF disabled | Bo qua neu TF bi tat
+        if(!IsTFEnabled(tf)) continue;
+
         int tf_news = g_ea.csdl_rows[tf].news;
         int news_abs = MathAbs(tf_news);
 
@@ -1047,6 +1082,9 @@ void ProcessBonusNews() {
 void CloseAllBonusOrders() {
     // Scan all 7 TF magic numbers | Quet tat ca 7 magic cua TF
     for(int tf = 0; tf < 7; tf++) {
+        // BUGFIX: Skip if TF disabled | Bo qua neu TF bi tat
+        if(!IsTFEnabled(tf)) continue;
+
         int target_magic = g_ea.magic_numbers[tf][2];
 
         // Scan all orders on MT4 | Quet tat ca lenh tren MT4
