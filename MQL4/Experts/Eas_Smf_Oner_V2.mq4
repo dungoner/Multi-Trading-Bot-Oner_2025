@@ -10,16 +10,16 @@
 //  PART 1: USER INPUTS (35 inputs) | CAU HINH NGUOI DUNG
 //=============================================================================
 
-input string Sep_A = "__________ A. CORE SETTINGS __________";  //
+input string Sep_A = "____ A. CORE SETTINGS ____";  //
 
 //--- A.1 Timeframe toggles (7) | Bat/tat khung thoi gian
-input bool TF_M1 = true;   // M1 (1 minute)
-input bool TF_M5 = true;   // M5 (5 minutes)
-input bool TF_M15 = true;  // M15 (15 minutes)
-input bool TF_M30 = true;  // M30 (30 minutes)
-input bool TF_H1 = true;   // H1 (1 hour)
-input bool TF_H4 = true;   // H4 (4 hours)
-input bool TF_D1 = true;   // D1 (1 day)
+input bool TF_M1 = true;   // M1 (Signal Sym_M1 Time)
+input bool TF_M5 = true;   // M5 (Buy/Sell Symbol_M5)
+input bool TF_M15 = true;  // M15 (Signal Symbol_15)
+input bool TF_M30 = true;  // M30 (Buy/Sell Symbol_M30)
+input bool TF_H1 = true;   // H1 (Signal Symbol_H1 )
+input bool TF_H4 = true;   // H4 (Buy/Sell Symbol_H4 )
+input bool TF_D1 = true;   // D1 (Signal Symbol_D1)
 
 //--- A.2 Strategy toggles (3) | Bat/tat chien luoc
 input bool S1_HOME = true;   // S1: Binary (Home signal)
@@ -38,173 +38,54 @@ enum CSDL_SOURCE_ENUM {
 };
 input CSDL_SOURCE_ENUM CSDL_Source = FOLDER_2;  // CSDL folder (signal source)
 
-input string Sep_B = "_______ B. STRATEGY CONFIGURATIONS _______";  //
+input string Sep_B = "____ B. STRATEGY CONFIGURATIONS ____";  //
 
 //--- B.1 S1 NEWS Filter (3) | Loc tin tuc cho S1
 input bool S1_UseNewsFilter = true;            // S1: Use NEWS filter (TRUE=strict, FALSE=basic)
-input int MinNewsLevelS1 = 20;                 // S1: Min NEWS level (20-100, higher=stricter)
-input bool S1_RequireNewsDirection = true;     // S1: Match NEWS direction (signal==news?)
+input int MinNewsLevelS1 = 20;                 // S1: Min NEWS level (20-70, higher=stricter)
+input bool S1_RequireNewsDirection = true;     // S1: Match NEWS direction (signal==news!)
 
 //--- B.2 S2 TREND Mode (1) | Che do xu huong
 enum S2_TREND_MODE {
-    S2_FOLLOW_D1 = 0,    // Follow D1 (auto)
+    S2_FOLLOW_D1 = 0,    // Follow D1 (Auto)
     S2_FORCE_BUY = 1,    // Force BUY (manual override)
     S2_FORCE_SELL = -1   // Force SELL (manual override)
 };
-input S2_TREND_MODE S2_TrendMode = S2_FOLLOW_D1;  // S2: Trend mode (D1 auto/manual)
+input S2_TREND_MODE S2_TrendMode = S2_FOLLOW_D1;  // S2: Trend (D1 auto/manual)
 
 //--- B.3 S3 NEWS Configuration (4) | Cau hinh tin tuc
 input int MinNewsLevelS3 = 20;         // S3: Min NEWS level (20-100)
-input bool EnableBonusNews = true;     // S3: Enable Bonus (extra orders on high NEWS)
+input bool EnableBonusNews = true;     // S3: Enable Bonus (extra on high NEWS)
 input int BonusOrderCount = 2;         // S3: Bonus count (1-5 orders)
 input int MinNewsLevelBonus = 20;      // S3: Min NEWS for Bonus (threshold)
 
-input string Sep_C = "_________ C. RISK PROTECTION _________";  //
+input string Sep_C = "____ C. RISK PROTECTION ____";  //
 
 //--- C.1 Stoploss mode (3) | Che do cat lo
 enum STOPLOSS_MODE {
     NONE = 0,            // No stoploss (close by signal only)
     LAYER1_MAXLOSS = 1,  // Layer1: max_loss × lot (from CSDL)
-    LAYER2_MARGIN = 2    // Layer2: margin / divisor (emergency)
+    LAYER2_MARGIN = 2    // Layer2: margin/divisor (emergency)
 };
 input STOPLOSS_MODE StoplossMode = LAYER1_MAXLOSS;  // Stoploss mode (0=OFF, 1=CSDL, 2=Margin)
-input double Layer2_Divisor = 20.0;  // Layer2 divisor (margin/-20 = threshold)
+input double Layer2_Divisor = 5.0;  // Layer2 divisor (margin/-5 = threshold)
 
 //--- C.2 Take profit (2) | Chot loi
 input bool   UseTakeProfit = false;  // Enable take profit (FALSE=OFF, TRUE=ON)
-input double TakeProfit_Multiplier = 0.5;  // TP multiplier (0.5=50%, 1.0=100%, 2.0=200%)
+input double TakeProfit_Multiplier = 5;  // TP multiplier (0.5=5%, 1.0=10%, 5.0=50%)
 
-//--- C.3 Health check & reset (2) | Kiem tra suc khoe
-input bool EnableWeekendReset = true;   // Weekend reset (auto close Friday 23:50)
-input bool EnableHealthCheck = true;    // Health check (8h/16h SPY bot status)
-
-input string Sep_D = "________ D. AUXILIARY SETTINGS ________";  //
+input string Sep_D = "____ D. AUXILIARY SETTINGS ____";  //
 
 //--- D.1 Performance (1) | Hieu suat
 input bool UseEvenOddMode = false;  // Even/odd split mode (load balancing)
 
-//--- D.2 Display (2) | Hien thi
+//--- D.2 Health check & reset (2) | Kiem tra suc khoe
+input bool EnableWeekendReset = true;   // Weekend reset (auto close Friday 23:50)
+input bool EnableHealthCheck = true;    // Health check (8h/16h SPY bot status)
+
+//--- D.3 Display (2) | Hien thi
 input bool ShowDashboard = true;  // Show dashboard (on-chart info)
 input bool DebugMode = false;      // Debug mode (verbose logging)
-
-//=============================================================================
-//  PART 2: JSON CONFIG LOADER (4 functions) | TAI CAU HINH TU JSON
-//=============================================================================
-
-// Parse boolean value from JSON line | Phan tich gia tri boolean tu dong JSON
-// Example: "TF_M1": true, → returns true
-bool ParseBoolValue(string line) {
-    if(StringFind(line, "true") >= 0) return true;
-    if(StringFind(line, "false") >= 0) return false;
-    return false; // Default
-}
-
-// Parse integer value from JSON line | Phan tich gia tri nguyen tu dong JSON
-// Example: "MinNewsLevelS1": 20, → returns 20
-int ParseIntValue(string line) {
-    int colon_pos = StringFind(line, ":");
-    if(colon_pos < 0) return 0;
-
-    string value_str = StringSubstr(line, colon_pos + 1);
-    StringReplace(value_str, ",", "");
-    StringReplace(value_str, " ", "");
-
-    return (int)StringToInteger(value_str);
-}
-
-// Parse double value from JSON line | Phan tich gia tri thap phan tu dong JSON
-// Example: "FixedLotSize": 0.1, → returns 0.1
-double ParseDoubleValue(string line) {
-    int colon_pos = StringFind(line, ":");
-    if(colon_pos < 0) return 0.0;
-
-    string value_str = StringSubstr(line, colon_pos + 1);
-    StringReplace(value_str, ",", "");
-    StringReplace(value_str, " ", "");
-
-    return StringToDouble(value_str);
-}
-
-// Load configuration from JSON file | Tai cau hinh tu file JSON
-// Returns: true (loaded), false (not found or error, use INPUT defaults) | Tra ve: true (da tai), false (khong tim thay, dung INPUT mac dinh)
-bool LoadConfigFromJSON() {
-    // Build filename based on CSDL_Source | Tao ten file dua tren nguon CSDL
-    string folder_names[3] = {"DataAutoOner", "DataAutoOner2", "DataAutoOner3"};
-    string folder = folder_names[CSDL_Source];
-    string filename = folder + "\\config_" + Symbol() + ".json";
-
-    int handle = FileOpen(filename, FILE_READ|FILE_TXT);
-
-    if(handle == INVALID_HANDLE) {
-        Print("[CONFIG] JSON not found: ", filename, " - Using INPUT defaults");
-        return false;
-    }
-
-    Print("[CONFIG] Loading from: ", filename);
-
-    // Parse file line by line | Phan tich file tung dong
-    while(!FileIsEnding(handle)) {
-        string line = FileReadString(handle);
-
-        // Skip comments and empty lines | Bo qua comment va dong trong
-        if(StringFind(line, "_comment") >= 0 || StringFind(line, "_description") >= 0 ||
-           StringFind(line, "_note") >= 0 || StringFind(line, "_version") >= 0 ||
-           StringFind(line, "_last_update") >= 0) continue;
-
-        // A. CORE SETTINGS | CAI DAT GOC
-        if(StringFind(line, "TF_M1") >= 0) TF_M1 = ParseBoolValue(line);
-        else if(StringFind(line, "TF_M5") >= 0) TF_M5 = ParseBoolValue(line);
-        else if(StringFind(line, "TF_M15") >= 0) TF_M15 = ParseBoolValue(line);
-        else if(StringFind(line, "TF_M30") >= 0) TF_M30 = ParseBoolValue(line);
-        else if(StringFind(line, "TF_H1") >= 0) TF_H1 = ParseBoolValue(line);
-        else if(StringFind(line, "TF_H4") >= 0) TF_H4 = ParseBoolValue(line);
-        else if(StringFind(line, "TF_D1") >= 0) TF_D1 = ParseBoolValue(line);
-
-        else if(StringFind(line, "S1_HOME") >= 0) S1_HOME = ParseBoolValue(line);
-        else if(StringFind(line, "S2_TREND") >= 0) S2_TREND = ParseBoolValue(line);
-        else if(StringFind(line, "S3_NEWS") >= 0) S3_NEWS = ParseBoolValue(line);
-
-        else if(StringFind(line, "FixedLotSize") >= 0) FixedLotSize = ParseDoubleValue(line);
-        else if(StringFind(line, "MaxLoss_Fallback") >= 0) MaxLoss_Fallback = ParseDoubleValue(line);
-
-        // Note: CSDL_Source not loaded from JSON (use INPUT to choose which config file)
-
-        // B. STRATEGY CONFIGURATIONS | CAU HINH CHIEN LUOC
-        else if(StringFind(line, "S1_UseNewsFilter") >= 0) S1_UseNewsFilter = ParseBoolValue(line);
-        else if(StringFind(line, "MinNewsLevelS1") >= 0) MinNewsLevelS1 = ParseIntValue(line);
-        else if(StringFind(line, "S1_RequireNewsDirection") >= 0) S1_RequireNewsDirection = ParseBoolValue(line);
-
-        else if(StringFind(line, "S2_TrendMode") >= 0) S2_TrendMode = (S2_TREND_MODE)ParseIntValue(line);
-
-        else if(StringFind(line, "MinNewsLevelS3") >= 0) MinNewsLevelS3 = ParseIntValue(line);
-        else if(StringFind(line, "EnableBonusNews") >= 0) EnableBonusNews = ParseBoolValue(line);
-        else if(StringFind(line, "BonusOrderCount") >= 0) BonusOrderCount = ParseIntValue(line);
-        else if(StringFind(line, "MinNewsLevelBonus") >= 0) MinNewsLevelBonus = ParseIntValue(line);
-
-        // C. RISK PROTECTION | BAO VE RUI RO
-        else if(StringFind(line, "StoplossMode") >= 0) StoplossMode = (STOPLOSS_MODE)ParseIntValue(line);
-        else if(StringFind(line, "Layer2_Divisor") >= 0) Layer2_Divisor = ParseDoubleValue(line);
-
-        else if(StringFind(line, "UseTakeProfit") >= 0) UseTakeProfit = ParseBoolValue(line);
-        else if(StringFind(line, "TakeProfit_Multiplier") >= 0) TakeProfit_Multiplier = ParseDoubleValue(line);
-
-        else if(StringFind(line, "EnableWeekendReset") >= 0) EnableWeekendReset = ParseBoolValue(line);
-        else if(StringFind(line, "EnableHealthCheck") >= 0) EnableHealthCheck = ParseBoolValue(line);
-
-        // D. AUXILIARY SETTINGS | CAI DAT PHU TRO
-        else if(StringFind(line, "UseEvenOddMode") >= 0) UseEvenOddMode = ParseBoolValue(line);
-
-        else if(StringFind(line, "ShowDashboard") >= 0) ShowDashboard = ParseBoolValue(line);
-        else if(StringFind(line, "DebugMode") >= 0) DebugMode = ParseBoolValue(line);
-    }
-
-    FileClose(handle);
-
-    Print("[CONFIG] Loaded successfully from JSON");
-    Print("[CONFIG] TF_M1=", TF_M1, " S1_HOME=", S1_HOME, " FixedLotSize=", FixedLotSize);
-
-    return true;
-}
 
 //=============================================================================
 
@@ -1543,9 +1424,6 @@ void CheckSPYBotHealth() {
 // EA initialization - setup all components | Khoi tao EA - cai dat tat ca thanh phan
 // OPTIMIZED V3.4: Struct-based data isolation for multi-symbol support | TOI UU: Cach ly du lieu theo struct cho da ky hieu
 int OnInit() {
-    // PART 0: Load JSON config (overrides INPUT if file exists) | Tai cau hinh JSON (ghi de INPUT neu file ton tai)
-    LoadConfigFromJSON();
-
     // PART 1: Symbol recognition | Nhan dien ky hieu
     if(!InitializeSymbolRecognition()) return(INIT_FAILED);
     InitializeSymbolPrefix();
