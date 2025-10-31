@@ -1,9 +1,0 @@
-[
-  {"max_loss":-2396.77,"timestamp":1761841500,"signal":1,"pricediff":-11.60,"timediff":2,"news":0},
-  {"max_loss":-2396.77,"timestamp":1761840300,"signal":-1,"pricediff":0.00,"timediff":0,"news":0},
-  {"max_loss":-2399.75,"timestamp":1761838200,"signal":-1,"pricediff":0.00,"timediff":0,"news":0},
-  {"max_loss":-2396.77,"timestamp":1761838200,"signal":-1,"pricediff":0.00,"timediff":0,"news":0},
-  {"max_loss":-2399.75,"timestamp":1761836400,"signal":1,"pricediff":0.00,"timediff":0,"news":0},
-  {"max_loss":-2399.75,"timestamp":1761811200,"signal":-1,"pricediff":0.00,"timediff":0,"news":0},
-  {"max_loss":0.00,"timestamp":0,"signal":0,"pricediff":0.00,"timediff":0,"news":0}
-]
