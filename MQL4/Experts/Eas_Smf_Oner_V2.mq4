@@ -88,6 +88,91 @@ input bool ShowDashboard = true;  // Show dashboard (on-chart info)
 input bool DebugMode = false;      // Debug mode (verbose logging)
 
 //=============================================================================
+//  PART 2: AUTO-LOAD CONFIG FROM .SET FILE (1 function) | TU DONG TAI CAU HINH
+//=============================================================================
+
+// Auto-load configuration from hardcoded .SET file | Tu dong tai cau hinh tu file .SET co dinh
+// File: MQL4/Presets/config_ea/config_ea_oner.set
+// Called ONCE in OnInit() - overrides INPUT defaults | Goi MOT LAN trong OnInit() - ghi de gia tri INPUT
+void LoadConfigFromSetFile() {
+    string filename = "..\\Presets\\config_ea\\config_ea_oner.set";
+    int handle = FileOpen(filename, FILE_READ|FILE_TXT);
+
+    if(handle == INVALID_HANDLE) {
+        Print("[CONFIG] .SET file not found: ", filename, " - Using INPUT defaults");
+        return;
+    }
+
+    Print("[CONFIG] Auto-loading from: ", filename);
+
+    // Parse file line by line | Phan tich tung dong
+    while(!FileIsEnding(handle)) {
+        string line = FileReadString(handle);
+
+        // Skip separator lines | Bo qua dong phan cach
+        if(StringFind(line, "Sep_") >= 0) continue;
+
+        // Find = position | Tim vi tri dau =
+        int eq_pos = StringFind(line, "=");
+        if(eq_pos < 0) continue;
+
+        // Extract key and value | Trich xuat key va value
+        string key = StringSubstr(line, 0, eq_pos);
+        string value = StringSubstr(line, eq_pos + 1);
+
+        // Parse based on parameter name | Phan tich theo ten tham so
+
+        // A. CORE SETTINGS
+        if(key == "TF_M1") TF_M1 = (value == "true");
+        else if(key == "TF_M5") TF_M5 = (value == "true");
+        else if(key == "TF_M15") TF_M15 = (value == "true");
+        else if(key == "TF_M30") TF_M30 = (value == "true");
+        else if(key == "TF_H1") TF_H1 = (value == "true");
+        else if(key == "TF_H4") TF_H4 = (value == "true");
+        else if(key == "TF_D1") TF_D1 = (value == "true");
+
+        else if(key == "S1_HOME") S1_HOME = (value == "true");
+        else if(key == "S2_TREND") S2_TREND = (value == "true");
+        else if(key == "S3_NEWS") S3_NEWS = (value == "true");
+
+        else if(key == "FixedLotSize") FixedLotSize = StringToDouble(value);
+        else if(key == "MaxLoss_Fallback") MaxLoss_Fallback = StringToDouble(value);
+        else if(key == "CSDL_Source") CSDL_Source = (CSDL_SOURCE_ENUM)StringToInteger(value);
+
+        // B. STRATEGY CONFIGURATIONS
+        else if(key == "S1_UseNewsFilter") S1_UseNewsFilter = (value == "true");
+        else if(key == "MinNewsLevelS1") MinNewsLevelS1 = (int)StringToInteger(value);
+        else if(key == "S1_RequireNewsDirection") S1_RequireNewsDirection = (value == "true");
+
+        else if(key == "S2_TrendMode") S2_TrendMode = (S2_TREND_MODE)StringToInteger(value);
+
+        else if(key == "MinNewsLevelS3") MinNewsLevelS3 = (int)StringToInteger(value);
+        else if(key == "EnableBonusNews") EnableBonusNews = (value == "true");
+        else if(key == "BonusOrderCount") BonusOrderCount = (int)StringToInteger(value);
+        else if(key == "MinNewsLevelBonus") MinNewsLevelBonus = (int)StringToInteger(value);
+
+        // C. RISK PROTECTION
+        else if(key == "StoplossMode") StoplossMode = (STOPLOSS_MODE)StringToInteger(value);
+        else if(key == "Layer2_Divisor") Layer2_Divisor = StringToDouble(value);
+
+        else if(key == "UseTakeProfit") UseTakeProfit = (value == "true");
+        else if(key == "TakeProfit_Multiplier") TakeProfit_Multiplier = StringToDouble(value);
+
+        else if(key == "EnableWeekendReset") EnableWeekendReset = (value == "true");
+        else if(key == "EnableHealthCheck") EnableHealthCheck = (value == "true");
+
+        // D. AUXILIARY SETTINGS
+        else if(key == "UseEvenOddMode") UseEvenOddMode = (value == "true");
+        else if(key == "ShowDashboard") ShowDashboard = (value == "true");
+        else if(key == "DebugMode") DebugMode = (value == "true");
+    }
+
+    FileClose(handle);
+
+    Print("[CONFIG] Loaded successfully - TF_M1=", TF_M1, " FixedLot=", FixedLotSize, " StopMode=", StoplossMode);
+}
+
+//=============================================================================
 
 struct CSDLLoveRow {
     double max_loss;   // Col 1: Max loss per 1 LOT | Lo toi da tren 1 lot
@@ -1424,6 +1509,9 @@ void CheckSPYBotHealth() {
 // EA initialization - setup all components | Khoi tao EA - cai dat tat ca thanh phan
 // OPTIMIZED V3.4: Struct-based data isolation for multi-symbol support | TOI UU: Cach ly du lieu theo struct cho da ky hieu
 int OnInit() {
+    // PART 0: Auto-load config from .SET file (ONCE) | Tu dong tai cau hinh tu file .SET (MOT LAN)
+    LoadConfigFromSetFile();
+
     // PART 1: Symbol recognition | Nhan dien ky hieu
     if(!InitializeSymbolRecognition()) return(INIT_FAILED);
     InitializeSymbolPrefix();
