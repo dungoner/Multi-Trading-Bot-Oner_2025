@@ -7,9 +7,9 @@
 #property strict
 
 //=============================================================================
-//  PART 1: USER INPUTS (19 inputs) | CAU HINH NGUOI DUNG
+//  PART 1: USER INPUTS (23 inputs) | CAU HINH NGUOI DUNG
 //=============================================================================
-// 7 TF toggles + 3 Strategy toggles + 2 Stoploss + 2 Risk + 1 Data source + 2 Health + 1 Debug + 1 Dashboard = 19
+// 7 TF toggles + 3 Strategy toggles + 4 S3 NEWS + 2 Stoploss + 2 Risk + 1 Data source + 2 Health + 1 Debug + 1 Dashboard = 23
 
 //--- 1.1 Timeframe toggles (7) | Bat/tat khung thoi gian
 input bool TF_M1 = true;   // M1 (1 minute) | 1 phut
@@ -25,7 +25,13 @@ input bool S1_HOME = true;   // S1: Binary Trading | Giao dich nhi phan
 input bool S2_TREND = true;  // S2: Trend Following | Theo xu huong
 input bool S3_NEWS = true;   // S3: News Alignment | Theo tin tuc
 
-//--- 1.3 Stoploss mode (2) | Che do cat lo
+//--- 1.3 S3 NEWS Configuration (4) | Cau hinh S3 tin tuc
+input int MinNewsLevelS3 = 20;         // S3: Min NEWS level (10-70) | Muc NEWS toi thieu
+input bool EnableBonusNews = false;    // S3: Enable Bonus NEWS | Bat tin tuc bonus
+input int BonusOrderCount = 2;         // S3: Bonus orders count (1-5) | So lenh bonus
+input int MinNewsLevelBonus = 20;      // S3: Min NEWS for Bonus (10-70) | Muc NEWS cho bonus
+
+//--- 1.4 Stoploss mode (2) | Che do cat lo
 enum STOPLOSS_MODE {
     LAYER1_MAXLOSS = 1,  // Layer1: max_loss × lot 
     LAYER2_MARGIN = 2    // Layer2: margin / divisor(emergency)
@@ -33,11 +39,11 @@ enum STOPLOSS_MODE {
 input STOPLOSS_MODE StoplossMode = LAYER1_MAXLOSS;  // Stoploss mode | Che do cat lo
 input double Layer2_Divisor = 20.0;  // Layer2 margin divisor (default 20) | So chia margin tang 2 (mac dinh 20)
 
-//--- 1.4 Risk management (2) | Quan ly rui ro
+//--- 1.5 Risk management (2) | Quan ly rui ro
 input double FixedLotSize = 0.1;           // Base lot size (0.01-100) | Khoi luong goc
 input double MaxLoss_Fallback = -1000.0;   // Layer1 fallback if CSDL empty | Du phong SL
 
-//--- 1.5 Data source (1 input) | Nguon du lieu
+//--- 1.6 Data source (1 input) | Nguon du lieu
 enum CSDL_SOURCE_ENUM {
     FOLDER_1 = 0,  // DataAutoOner (Local file)
     FOLDER_2 = 1,  // DataAutoOner2 (Local file) - DEFAULT
@@ -46,14 +52,14 @@ enum CSDL_SOURCE_ENUM {
 input CSDL_SOURCE_ENUM CSDL_Source = FOLDER_2;  // CSDL source | Nguon CSDL (Default: DataAutoOner2)
 
 
-//--- 1.6 Health check & reset (2) | Kiem tra suc khoe va reset
+//--- 1.7 Health check & reset (2) | Kiem tra suc khoe va reset
 input bool EnableWeekendReset = true;   // Enable weekend reset (Saturday 00:01, M1 only) | Bat reset cuoi tuan (Thu 7 00:01, chi M1)
 input bool EnableHealthCheck = true;    // Enable health check (8h/16h, M1 only) | Bat kiem tra suc khoe (8h/16h, chi M1)
 
-//--- 1.7 Debug (1) | Che do debug
+//--- 1.8 Debug (1) | Che do debug
 input bool DebugMode = false;  // Enable debug logs | Bat log debug
 
-//--- 1.8 Dashboard (1) | Bang dieu khien
+//--- 1.9 Dashboard (1) | Bang dieu khien
 input bool ShowDashboard = true;  // Show dashboard on chart | Hien thi bang dieu khien tren chart
 
 
@@ -941,19 +947,24 @@ void ProcessS2Strategy(int tf) {
 }
 
 // Process S3 (News Alignment) strategy for TF | Xu ly chien luoc S3 (Theo tin tuc)
-// OPTIMIZED: Uses single g_news variables + pre-calculated lot + reads signal from CSDL | TOI UU: Dung bien g_news don + lot da tinh + doc tin hieu tu CSDL
+// OPTIMIZED: Uses per-TF NEWS + pre-calculated lot + reads signal from CSDL | TOI UU: Dung NEWS theo TF + lot da tinh + doc tin hieu tu CSDL
 void ProcessS3Strategy(int tf) {
-    // Check SINGLE news level variable (all TF use same) | Kiem tra bien muc tin tuc don (tat ca TF dung chung)
-    if(g_ea.news_level < 2) {
-        DebugPrint("S3_NEWS: Level<2, skip");
+    // Read NEWS for this TF | Doc NEWS cua TF nay
+    int tf_news = g_ea.csdl_rows[tf].news;
+    int news_abs = MathAbs(tf_news);
+
+    // Check NEWS level >= MinNewsLevelS3 | Kiem tra muc NEWS >= nguong
+    if(news_abs < MinNewsLevelS3) {
+        DebugPrint("S3_NEWS: TF" + IntegerToString(tf) + " NEWS=" + IntegerToString(news_abs) + " < " + IntegerToString(MinNewsLevelS3) + ", skip");
         return;
     }
 
+    // Check NEWS direction matches signal | Kiem tra huong NEWS khop signal
+    int news_direction = (tf_news > 0) ? 1 : -1;
     int current_signal = g_ea.csdl_rows[tf].signal;
 
-    // Check signal matches SINGLE news direction | Kiem tra tin hieu khop voi huong tin tuc don
-    if(current_signal != g_ea.news_direction) {
-        DebugPrint("S3_NEWS: Signal != News, skip");
+    if(current_signal != news_direction) {
+        DebugPrint("S3_NEWS: Signal=" + IntegerToString(current_signal) + " != NewsDir=" + IntegerToString(news_direction) + ", skip");
         return;
     }
 
@@ -984,6 +995,70 @@ void ProcessS3Strategy(int tf) {
             g_ea.position_flags[tf][2] = 0;
             Print("[S3_", tf_names[tf], "] Failed: ", GetLastError());
         }
+    }
+}
+
+// Process Bonus NEWS - Scan all 7 TF and open multiple orders if NEWS detected
+// Xu ly tin tuc Bonus - Quet 7 TF va mo nhieu lenh neu phat hien tin tuc
+void ProcessBonusNews() {
+    if(!EnableBonusNews) return;
+
+    string tf_names[7] = {"M1", "M5", "M15", "M30", "H1", "H4", "D1"};
+
+    // Scan all 7 TF | Quet tat ca 7 TF
+    for(int tf = 0; tf < 7; tf++) {
+        int tf_news = g_ea.csdl_rows[tf].news;
+        int news_abs = MathAbs(tf_news);
+
+        // Skip if NEWS below threshold | Bo qua neu NEWS duoi nguong
+        if(news_abs < MinNewsLevelBonus) continue;
+
+        // Determine direction | Xac dinh huong
+        int news_direction = (tf_news > 0) ? 1 : -1;
+
+        RefreshRates();
+
+        // Open BonusOrderCount orders | Mo so luong lenh Bonus
+        for(int count = 0; count < BonusOrderCount; count++) {
+            if(news_direction == 1) {
+                int ticket = OrderSendSafe(tf, Symbol(), OP_BUY, g_ea.lot_sizes[tf][2],
+                                           Ask, 3,
+                                           "BONUS_" + tf_names[tf], g_ea.magic_numbers[tf][2], clrGold);
+                if(ticket > 0) {
+                    DebugPrint("[BONUS_" + tf_names[tf] + "] Opened #" + IntegerToString(ticket) + " BUY " + DoubleToStr(g_ea.lot_sizes[tf][2], 2));
+                }
+            } else {
+                int ticket = OrderSendSafe(tf, Symbol(), OP_SELL, g_ea.lot_sizes[tf][2],
+                                           Bid, 3,
+                                           "BONUS_" + tf_names[tf], g_ea.magic_numbers[tf][2], clrOrange);
+                if(ticket > 0) {
+                    DebugPrint("[BONUS_" + tf_names[tf] + "] Opened #" + IntegerToString(ticket) + " SELL " + DoubleToStr(g_ea.lot_sizes[tf][2], 2));
+                }
+            }
+        }
+    }
+}
+
+// Close all Bonus NEWS orders when M1 signal arrives
+// Dong tat ca lenh Bonus khi tin hieu M1 den
+void CloseAllBonusOrders() {
+    // Scan all 7 TF magic numbers | Quet tat ca 7 magic cua TF
+    for(int tf = 0; tf < 7; tf++) {
+        int target_magic = g_ea.magic_numbers[tf][2];
+
+        // Scan all orders on MT4 | Quet tat ca lenh tren MT4
+        for(int i = OrdersTotal() - 1; i >= 0; i--) {
+            if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) continue;
+            if(OrderSymbol() != Symbol()) continue;
+
+            // If magic matches, close it | Neu magic khop, dong lenh
+            if(OrderMagicNumber() == target_magic) {
+                CloseOrderSafely(OrderTicket(), "BONUS_M1_CLOSE");
+            }
+        }
+
+        // Reset flag | Dat lai co
+        g_ea.position_flags[tf][2] = 0;
     }
 }
 
@@ -1589,6 +1664,11 @@ void OnTimer() {
         // STEP 2: Map data for all 7 TF | Anh xa du lieu cho 7 khung
         MapCSDLToEAVariables();
 
+        // STEP 2.5: Close Bonus orders if M1 signal changed | Dong lenh Bonus neu M1 doi tin hieu
+        if(EnableBonusNews && HasValidS2BaseCondition(0)) {
+            CloseAllBonusOrders();
+        }
+
         // STEP 3: Strategy processing loop for 7 TF | Vong lap xu ly chien luoc cho 7 khung
         // IMPORTANT: CLOSE function runs on ALL 7 TF (no TF filter) | QUAN TRONG: Ham dong chay TAT CA 7 TF (khong loc TF)
         // OPEN function respects TF/Strategy toggles | Ham mo tuan theo bat/tat TF/Chien luoc
@@ -1610,6 +1690,9 @@ void OnTimer() {
                 g_ea.timestamp_old[tf] = (datetime)g_ea.csdl_rows[tf].timestamp;
             }
         }
+
+        // STEP 4: Process Bonus NEWS (scan all 7 TF) | Xu ly Bonus tin tuc (quet 7 TF)
+        ProcessBonusNews();
     }
 
     //=============================================================================
