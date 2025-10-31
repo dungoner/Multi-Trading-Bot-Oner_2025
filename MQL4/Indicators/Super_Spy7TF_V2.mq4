@@ -2574,12 +2574,29 @@ void RunStartupReset() {
     string gv_done = g_target_symbol + "_StartupResetDone";      // 0 = not executed, 1 = executed
     string gv_init_time = g_target_symbol + "_StartupInitTime";  // timestamp
 
+    // Check if GlobalVariables exist
+    bool gv_done_exists = GlobalVariableCheck(gv_done);
+    bool gv_time_exists = GlobalVariableCheck(gv_init_time);
+
+    // If init_time exists and is too old (>2 hours), this is a new MT4 session - reset everything
+    if(gv_time_exists) {
+        datetime old_init_time = (datetime)GlobalVariableGet(gv_init_time);
+        if(TimeCurrent() - old_init_time > 7200) {  // 2 hours = 7200 seconds
+            Print("StartupReset: Detected stale session (>2h old) - Resetting GlobalVariables");
+            GlobalVariableDel(gv_done);
+            GlobalVariableDel(gv_init_time);
+            gv_done_exists = false;
+            gv_time_exists = false;
+        }
+    }
+
     // Initialize GlobalVariables if they don't exist
-    if(GlobalVariableCheck(gv_done) == false) {
+    if(!gv_done_exists) {
         GlobalVariableSet(gv_done, 0);  // Not executed yet
     }
-    if(GlobalVariableCheck(gv_init_time) == false) {
+    if(!gv_time_exists) {
         GlobalVariableSet(gv_init_time, TimeCurrent());  // Set init time
+        Print("StartupReset: Init timer started - Reset will trigger in 60 seconds");
     }
 
     // Get current values
@@ -2588,9 +2605,10 @@ void RunStartupReset() {
 
     // Execute only if not done yet AND 60 seconds passed
     if(reset_done == 0 && (TimeCurrent() - init_time >= 60)) {
-        Print("StartupReset: ", g_target_symbol, " | 1 min after MT4 start");
+        Print("StartupReset: ", g_target_symbol, " | 1 min after MT4 start - Executing SmartTFReset()");
         SmartTFReset();
         GlobalVariableSet(gv_done, 1);  // Mark as executed - NEVER runs again until MT4 restarts
+        Print("StartupReset: Completed and marked as done");
     }
 }
 
