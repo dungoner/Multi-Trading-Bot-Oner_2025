@@ -25,7 +25,7 @@ input string TargetSymbol = "";                              // Target Symbol - 
 input bool   EnableHealthCheck = true;                       // Health check at 8h & 16h | Kiem tra suc khoe luc 8h va 16h
 input bool   EnableMidnightReset = true;                     // Midnight reset at 0h daily | Reset luc 0h hang ngay
 input bool   EnableStartupReset = true;                      // Startup reset 1 minute after MT4 starts | Reset khoi dong 1 phut sau khi MT4 chay
-input bool   ProcessSignalOnOddSecond = true;                // Process Signal on ODD second only | Xu ly tin hieu giay le (tranh conflict)
+input bool   ProcessSignalOnOddSecond = false;               // Process Signal on ODD second only | Xu ly tin hieu giay le (tranh conflict)
 input bool   EnableMonthlyStats = true;                      // Monthly stats on 1st day of month | Thong ke thang vao ngay 1
 input string DataFolder = "DataAutoOner\\";                  // Data Storage Folder | Thu muc luu tru du lieu
 
@@ -2817,20 +2817,20 @@ void SmartTFReset() {
         temp_chart = ChartNext(temp_chart);
     }
 
-    // Step 2: Reset 6 TF con lai TRUOC (W1 -> original TF, delay 1s)
+    // Step 2: Reset 6 TF con lai TRUOC (W1 -> original TF, delay 2s)
     for(int i = 0; i < total_charts; i++) {
         int other_period = ChartPeriod(chart_ids[i]);
         ChartSetSymbolPeriod(chart_ids[i], current_symbol, PERIOD_W1);
-        Sleep(1000);  // Delay 1s
+        Sleep(2000);  // Delay 2s (slower for MT4 stability)
         ChartSetSymbolPeriod(chart_ids[i], current_symbol, other_period);
-        Sleep(1000);  // Delay 1s
+        Sleep(2000);  // Delay 2s (slower for MT4 stability)
     }
 
     // Step 3: Reset chart HIEN TAI CUOI CUNG (de nhan dien lai 6 TF con lai)
     ChartSetSymbolPeriod(current_chart_id, current_symbol, PERIOD_W1);
-    Sleep(1000);  // Delay 1s
+    Sleep(2000);  // Delay 2s (slower for MT4 stability)
     ChartSetSymbolPeriod(current_chart_id, current_symbol, current_period);
-    Sleep(1000);  // Delay 1s
+    Sleep(2000);  // Delay 2s (slower for MT4 stability)
 
     Print("SmartTFReset: ", current_symbol, " | ", (total_charts + 1), " charts reset");
 }
