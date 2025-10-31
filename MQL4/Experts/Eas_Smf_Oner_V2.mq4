@@ -7,12 +7,10 @@
 #property strict
 
 //=============================================================================
-//  PART 1: USER INPUTS (31 inputs) | CAU HINH NGUOI DUNG
+//  PART 1: USER INPUTS (35 inputs) | CAU HINH NGUOI DUNG
 //=============================================================================
 
-//=============================================================================
-//  A. CORE SETTINGS (13 inputs)
-//=============================================================================
+input string Sep_A = "━━━━━━━━━━ A. CORE SETTINGS ━━━━━━━━━━";  //
 
 //--- A.1 Timeframe toggles (7) | Bat/tat khung thoi gian
 input bool TF_M1 = true;   // M1 (1 minute)
@@ -40,9 +38,7 @@ enum CSDL_SOURCE_ENUM {
 };
 input CSDL_SOURCE_ENUM CSDL_Source = FOLDER_2;  // CSDL folder (signal source)
 
-//=============================================================================
-//  B. STRATEGY CONFIGURATIONS (8 inputs)
-//=============================================================================
+input string Sep_B = "━━━━━━━ B. STRATEGY CONFIGURATIONS ━━━━━━━";  //
 
 //--- B.1 S1 NEWS Filter (3) | Loc tin tuc cho S1
 input bool S1_UseNewsFilter = true;            // S1: Use NEWS filter (TRUE=strict, FALSE=basic)
@@ -63,9 +59,7 @@ input bool EnableBonusNews = true;     // S3: Enable Bonus (extra orders on high
 input int BonusOrderCount = 2;         // S3: Bonus count (1-5 orders)
 input int MinNewsLevelBonus = 20;      // S3: Min NEWS for Bonus (threshold)
 
-//=============================================================================
-//  C. RISK PROTECTION (7 inputs)
-//=============================================================================
+input string Sep_C = "━━━━━━━━━ C. RISK PROTECTION ━━━━━━━━━";  //
 
 //--- C.1 Stoploss mode (3) | Che do cat lo
 enum STOPLOSS_MODE {
@@ -84,9 +78,7 @@ input double TakeProfit_Multiplier = 0.5;  // TP multiplier (0.5=50%, 1.0=100%, 
 input bool EnableWeekendReset = true;   // Weekend reset (auto close Friday 23:50)
 input bool EnableHealthCheck = true;    // Health check (8h/16h SPY bot status)
 
-//=============================================================================
-//  D. AUXILIARY SETTINGS (3 inputs)
-//=============================================================================
+input string Sep_D = "━━━━━━━━ D. AUXILIARY SETTINGS ━━━━━━━━";  //
 
 //--- D.1 Performance (1) | Hieu suat
 input bool UseEvenOddMode = false;  // Even/odd split mode (load balancing)
