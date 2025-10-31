@@ -7,93 +7,93 @@
 #property strict
 
 //=============================================================================
-//  PART 1: USER INPUTS (28 inputs) | CAU HINH NGUOI DUNG
+//  PART 1: USER INPUTS (31 inputs) | CAU HINH NGUOI DUNG
 //=============================================================================
 
-//-----------------------------------------------------------------------------
-// SECTION A: CORE SETTINGS (13 inputs)
-//-----------------------------------------------------------------------------
+//=============================================================================
+//  A. CORE SETTINGS (13 inputs)
+//=============================================================================
 
-//--- A.1 Timeframe toggles (7)
-input bool TF_M1 = true;   // M1
-input bool TF_M5 = true;   // M5
-input bool TF_M15 = true;  // M15
-input bool TF_M30 = true;  // M30
-input bool TF_H1 = true;   // H1
-input bool TF_H4 = true;   // H4
-input bool TF_D1 = true;   // D1
+//--- A.1 Timeframe toggles (7) | Bat/tat khung thoi gian
+input bool TF_M1 = true;   // M1 (1 minute)
+input bool TF_M5 = true;   // M5 (5 minutes)
+input bool TF_M15 = true;  // M15 (15 minutes)
+input bool TF_M30 = true;  // M30 (30 minutes)
+input bool TF_H1 = true;   // H1 (1 hour)
+input bool TF_H4 = true;   // H4 (4 hours)
+input bool TF_D1 = true;   // D1 (1 day)
 
-//--- A.2 Strategy toggles (3)
-input bool S1_HOME = true;   // S1: Binary
-input bool S2_TREND = true;  // S2: Trend
-input bool S3_NEWS = true;   // S3: News
+//--- A.2 Strategy toggles (3) | Bat/tat chien luoc
+input bool S1_HOME = true;   // S1: Binary (Home signal)
+input bool S2_TREND = true;  // S2: Trend (Follow D1)
+input bool S3_NEWS = true;   // S3: News (High impact)
 
-//--- A.3 Risk management (2)
-input double FixedLotSize = 0.1;           // Lot size
-input double MaxLoss_Fallback = -1000.0;   // Max loss fallback
+//--- A.3 Risk management (2) | Quan ly rui ro
+input double FixedLotSize = 0.1;           // Lot size (0.01-1.0 recommended)
+input double MaxLoss_Fallback = -1000.0;   // Max loss fallback ($USD if CSDL fails)
 
-//--- A.4 Data source (1)
+//--- A.4 Data source (1) | Nguon du lieu
 enum CSDL_SOURCE_ENUM {
     FOLDER_1 = 0,  // DataAutoOner
     FOLDER_2 = 1,  // DataAutoOner2 (Default)
     FOLDER_3 = 2,  // DataAutoOner3
 };
-input CSDL_SOURCE_ENUM CSDL_Source = FOLDER_2;  // CSDL folder
+input CSDL_SOURCE_ENUM CSDL_Source = FOLDER_2;  // CSDL folder (signal source)
 
-//-----------------------------------------------------------------------------
-// SECTION B: STRATEGY CONFIGURATIONS (8 inputs)
-//-----------------------------------------------------------------------------
+//=============================================================================
+//  B. STRATEGY CONFIGURATIONS (8 inputs)
+//=============================================================================
 
-//--- B.1 S1 NEWS Filter (3)
-input bool S1_UseNewsFilter = true;            // S1: Use NEWS filter
-input int MinNewsLevelS1 = 20;                 // S1: Min NEWS level
-input bool S1_RequireNewsDirection = true;     // S1: Match NEWS direction
+//--- B.1 S1 NEWS Filter (3) | Loc tin tuc cho S1
+input bool S1_UseNewsFilter = true;            // S1: Use NEWS filter (TRUE=strict, FALSE=basic)
+input int MinNewsLevelS1 = 20;                 // S1: Min NEWS level (20-100, higher=stricter)
+input bool S1_RequireNewsDirection = true;     // S1: Match NEWS direction (signal==news?)
 
-//--- B.2 S2 TREND Mode (1)
+//--- B.2 S2 TREND Mode (1) | Che do xu huong
 enum S2_TREND_MODE {
     S2_FOLLOW_D1 = 0,    // Follow D1 (auto)
-    S2_FORCE_BUY = 1,    // Force BUY
-    S2_FORCE_SELL = -1   // Force SELL
+    S2_FORCE_BUY = 1,    // Force BUY (manual override)
+    S2_FORCE_SELL = -1   // Force SELL (manual override)
 };
-input S2_TREND_MODE S2_TrendMode = S2_FOLLOW_D1;  // S2: Trend mode
+input S2_TREND_MODE S2_TrendMode = S2_FOLLOW_D1;  // S2: Trend mode (D1 auto/manual)
 
-//--- B.3 S3 NEWS Configuration (4)
-input int MinNewsLevelS3 = 20;         // S3: Min NEWS level
-input bool EnableBonusNews = true;     // S3: Enable Bonus
-input int BonusOrderCount = 2;         // S3: Bonus count
-input int MinNewsLevelBonus = 20;      // S3: Min NEWS for Bonus
+//--- B.3 S3 NEWS Configuration (4) | Cau hinh tin tuc
+input int MinNewsLevelS3 = 20;         // S3: Min NEWS level (20-100)
+input bool EnableBonusNews = true;     // S3: Enable Bonus (extra orders on high NEWS)
+input int BonusOrderCount = 2;         // S3: Bonus count (1-5 orders)
+input int MinNewsLevelBonus = 20;      // S3: Min NEWS for Bonus (threshold)
 
-//-----------------------------------------------------------------------------
-// SECTION C: RISK PROTECTION (7 inputs)
-//-----------------------------------------------------------------------------
+//=============================================================================
+//  C. RISK PROTECTION (7 inputs)
+//=============================================================================
 
-//--- C.1 Stoploss mode (3)
+//--- C.1 Stoploss mode (3) | Che do cat lo
 enum STOPLOSS_MODE {
     NONE = 0,            // No stoploss (close by signal only)
-    LAYER1_MAXLOSS = 1,  // Layer1: max_loss × lot
-    LAYER2_MARGIN = 2    // Layer2: margin / divisor
+    LAYER1_MAXLOSS = 1,  // Layer1: max_loss × lot (from CSDL)
+    LAYER2_MARGIN = 2    // Layer2: margin / divisor (emergency)
 };
-input STOPLOSS_MODE StoplossMode = LAYER1_MAXLOSS;  // Stoploss mode
-input double Layer2_Divisor = 20.0;  // Layer2 divisor
+input STOPLOSS_MODE StoplossMode = LAYER1_MAXLOSS;  // Stoploss mode (0=OFF, 1=CSDL, 2=Margin)
+input double Layer2_Divisor = 20.0;  // Layer2 divisor (margin/-20 = threshold)
 
-//--- C.2 Take profit (2)
-input bool   UseTakeProfit = false;  // Enable take profit
-input double TakeProfit_Multiplier = 0.5;  // TP multiplier (0.5=50%, 2.0=200%)
+//--- C.2 Take profit (2) | Chot loi
+input bool   UseTakeProfit = false;  // Enable take profit (FALSE=OFF, TRUE=ON)
+input double TakeProfit_Multiplier = 0.5;  // TP multiplier (0.5=50%, 1.0=100%, 2.0=200%)
 
-//--- C.3 Health check & reset (2)
-input bool EnableWeekendReset = true;   // Weekend reset
-input bool EnableHealthCheck = true;    // Health check
+//--- C.3 Health check & reset (2) | Kiem tra suc khoe
+input bool EnableWeekendReset = true;   // Weekend reset (auto close Friday 23:50)
+input bool EnableHealthCheck = true;    // Health check (8h/16h SPY bot status)
 
-//-----------------------------------------------------------------------------
-// SECTION D: AUXILIARY SETTINGS (3 inputs)
-//-----------------------------------------------------------------------------
+//=============================================================================
+//  D. AUXILIARY SETTINGS (3 inputs)
+//=============================================================================
 
-//--- D.1 Performance (1)
-input bool UseEvenOddMode = false;  // Even/odd split mode
+//--- D.1 Performance (1) | Hieu suat
+input bool UseEvenOddMode = false;  // Even/odd split mode (load balancing)
 
-//--- D.2 Display (2)
-input bool ShowDashboard = true;  // Show dashboard
-input bool DebugMode = false;      // Debug mode
+//--- D.2 Display (2) | Hien thi
+input bool ShowDashboard = true;  // Show dashboard (on-chart info)
+input bool DebugMode = false;      // Debug mode (verbose logging)
 
 //=============================================================================
 
