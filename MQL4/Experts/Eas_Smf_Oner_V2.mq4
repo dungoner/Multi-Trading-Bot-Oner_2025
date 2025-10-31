@@ -610,7 +610,7 @@ bool GenerateMagicNumbers() {
 }
 
 //=============================================================================
-//  PART 9: LOT SIZE CALCULATION (3 functions) | TINH TOAN KHOI LUONG
+//  PART 9: LOT SIZE CALCULATION (2 functions) | TINH TOAN KHOI LUONG
 //=============================================================================
 
 // Calculate lot with progressive formula | Tinh lot theo cong thuc luy tien
