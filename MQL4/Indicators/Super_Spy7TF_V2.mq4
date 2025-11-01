@@ -730,14 +730,13 @@ bool ProcessSignalForTF(int tf_idx, int signal, long signal_time) {
     WriteCSDL1ArrayToFile();   // CSDL1: SYMBOL.json (10 columns + history)
     WriteCSDL2ArrayToFile();   // CSDL2: SYMBOL_LIVE.json (6 columns, no history, 3 folders)
 
-    // Print 2 dòng vào Expert Tab
+    // Print signal notification to Expert Tab | In thong bao tin hieu vao Expert Tab
     string signal_text = (signal > 0) ? "BUY" : "SELL";
-    // SUCCESS LOG SUPPRESSED (no spam) - Uncomment below for debugging
-    // string price_str = DoubleToString(current_price, 5);
-    // string pricediff_str = (pricediff_usd >= 0) ? "+" + DoubleToString(pricediff_usd, 2) : DoubleToString(pricediff_usd, 2);
-    // string news_str_log = (news_result >= 0) ? "+" + IntegerToString(news_result) : IntegerToString(news_result);
-    // Print("->A>" + tf_names[tf_idx] + "< " + signal_text + " @ (" + IntegerToString(signal_time) + ") " + TimeToString(signal_time, TIME_DATE|TIME_MINUTES) +
-    //       " | Price: " + price_str + " | PriceDiff: " + pricediff_str + " USD | TimeDiff: " + IntegerToString(timediff_min) + "m | NEWS: " + news_str_log);
+    string price_str = DoubleToString(current_price, 5);
+    string pricediff_str = (pricediff_usd >= 0) ? "+" + DoubleToString(pricediff_usd, 2) : DoubleToString(pricediff_usd, 2);
+    string news_str_log = (news_result >= 0) ? "+" + IntegerToString(news_result) : IntegerToString(news_result);
+    Print(">>> [SPY] " + tf_names[tf_idx] + " " + signal_text + " @ " + TimeToString(signal_time, TIME_DATE|TIME_MINUTES) +
+          " | Price: " + price_str + " | Diff: " + pricediff_str + " USD | Time: " + IntegerToString(timediff_min) + "m | NEWS: " + news_str_log + " | CSDL WRITTEN <<<");
 
     // Dashboard will be updated by OnTimer() every second
 
