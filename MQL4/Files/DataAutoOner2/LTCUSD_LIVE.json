@@ -1,9 +1,9 @@
 [
-  {"max_loss":-2396.77,"timestamp":1761841500,"signal":1,"pricediff":-11.60,"timediff":2,"news":0},
-  {"max_loss":-2396.77,"timestamp":1761840300,"signal":-1,"pricediff":0.00,"timediff":0,"news":0},
-  {"max_loss":-2399.75,"timestamp":1761838200,"signal":-1,"pricediff":0.00,"timediff":0,"news":0},
-  {"max_loss":-2396.77,"timestamp":1761838200,"signal":-1,"pricediff":0.00,"timediff":0,"news":0},
-  {"max_loss":-2399.75,"timestamp":1761836400,"signal":1,"pricediff":0.00,"timediff":0,"news":0},
-  {"max_loss":-2399.75,"timestamp":1761811200,"signal":-1,"pricediff":0.00,"timediff":0,"news":0},
-  {"max_loss":0.00,"timestamp":0,"signal":0,"pricediff":0.00,"timediff":0,"news":0}
+  {"max_loss":-1250.43,"timestamp":1761954360,"signal":-1,"pricediff":-9.90,"timediff":2,"news":0},
+  {"max_loss":-1250.48,"timestamp":1761952800,"signal":-1,"pricediff":-11.90,"timediff":10,"news":0},
+  {"max_loss":-1250.44,"timestamp":1761952500,"signal":-1,"pricediff":0.00,"timediff":0,"news":0},
+  {"max_loss":-1251.14,"timestamp":1761856200,"signal":1,"pricediff":-15.10,"timediff":60,"news":0},
+  {"max_loss":-1250.61,"timestamp":1761944400,"signal":1,"pricediff":0.00,"timediff":0,"news":0},
+  {"max_loss":-1250.61,"timestamp":1761926400,"signal":-1,"pricediff":0.00,"timediff":0,"news":0},
+  {"max_loss":-1250.60,"timestamp":1761926400,"signal":-1,"pricediff":0.00,"timediff":0,"news":0}
 ]
