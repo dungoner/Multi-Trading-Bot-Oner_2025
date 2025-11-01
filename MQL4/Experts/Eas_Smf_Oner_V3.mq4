@@ -926,6 +926,11 @@ bool HasValidS2BaseCondition(int tf) {
 void ProcessS1BasicStrategy(int tf) {
     int current_signal = g_ea.csdl_rows[tf].signal;
 
+    // Check timestamp: Only process if data is newer | Kiem tra thoi gian: Chi xu ly neu du lieu moi hon
+    datetime timestamp_old = g_ea.timestamp_old[tf];
+    datetime timestamp_new = (datetime)g_ea.csdl_rows[tf].timestamp;
+    if(timestamp_old >= timestamp_new) return;
+
     RefreshRates();
 
     if(current_signal == 1) {
@@ -984,6 +989,11 @@ void ProcessS1NewsFilterStrategy(int tf) {
             return;
         }
     }
+
+    // Check timestamp: Only process if data is newer | Kiem tra thoi gian: Chi xu ly neu du lieu moi hon
+    datetime timestamp_old = g_ea.timestamp_old[tf];
+    datetime timestamp_new = (datetime)g_ea.csdl_rows[tf].timestamp;
+    if(timestamp_old >= timestamp_new) return;
 
     // PASS all conditions → Open order | PASS tat ca dieu kien → Mo lenh
     RefreshRates();
@@ -1059,6 +1069,11 @@ void ProcessS2Strategy(int tf) {
         return;
     }
 
+    // Check timestamp: Only process if data is newer | Kiem tra thoi gian: Chi xu ly neu du lieu moi hon
+    datetime timestamp_old = g_ea.timestamp_old[tf];
+    datetime timestamp_new = (datetime)g_ea.csdl_rows[tf].timestamp;
+    if(timestamp_old >= timestamp_new) return;
+
     RefreshRates();
 
     
@@ -1119,6 +1134,11 @@ void ProcessS3Strategy(int tf) {
         return;
     }
 
+    // Check timestamp: Only process if data is newer | Kiem tra thoi gian: Chi xu ly neu du lieu moi hon
+    datetime timestamp_old = g_ea.timestamp_old[tf];
+    datetime timestamp_new = (datetime)g_ea.csdl_rows[tf].timestamp;
+    if(timestamp_old >= timestamp_new) return;
+
     RefreshRates();
 
     
@@ -1160,16 +1180,16 @@ void ProcessS3Strategy(int tf) {
 void ProcessBonusNews() {
     if(!EnableBonusNews) return;
 
-    
+    // CRITICAL: Check M1 timestamp ONLY (M1 representative for all 7 TF)
+    // QUAN TRONG: Chi kiem tra timestamp cua M1 (M1 dai dien cho ca 7 TF)
+    datetime m1_timestamp_old = g_ea.timestamp_old[0];
+    datetime m1_timestamp_new = (datetime)g_ea.csdl_rows[0].timestamp;
+    if(m1_timestamp_old >= m1_timestamp_new) return;  // M1 no new data → Skip all
 
     // Scan all 7 TF | Quet tat ca 7 TF
     for(int tf = 0; tf < 7; tf++) {
         // BUGFIX: Skip if TF disabled | Bo qua neu TF bi tat
         if(!IsTFEnabled(tf)) continue;
-
-        // CRITICAL: Only process if NEW data (signal changed AND timestamp newer)
-        // QUAN TRONG: Chi xu ly neu co du lieu MOI (tin hieu thay doi VA thoi gian moi hon)
-        if(!HasValidS2BaseCondition(tf)) continue;
 
         int tf_news = g_ea.csdl_rows[tf].news;
         int news_abs = MathAbs(tf_news);
