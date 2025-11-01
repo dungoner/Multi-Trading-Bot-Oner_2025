@@ -2017,11 +2017,6 @@ void OnTimer() {
         // STEP 2: Map data for all 7 TF | Anh xa du lieu cho 7 khung
         MapCSDLToEAVariables();
 
-        // STEP 2.5: Close Bonus orders if M1 signal changed | Dong lenh Bonus neu M1 doi tin hieu
-        if(EnableBonusNews && HasValidS2BaseCondition(0)) {
-            CloseAllBonusOrders();
-        }
-
         // STEP 3: Strategy processing loop for 7 TF | Vong lap xu ly chien luoc cho 7 khung
         // IMPORTANT: CLOSE function runs on ALL 7 TF (no TF filter) | QUAN TRONG: Ham dong chay TAT CA 7 TF (khong loc TF)
         // OPEN function respects TF/Strategy toggles | Ham mo tuan theo bat/tat TF/Chien luoc
@@ -2038,14 +2033,16 @@ void OnTimer() {
                     if(S3_NEWS) ProcessS3Strategy(tf);
                 }
 
+                // STEP 3.5: Process Bonus NEWS (scans ALL 7 TF, opens if NEWS >= threshold, must be before old=new) | Xu ly Bonus tin tuc (quet 7 TF, mo neu NEWS du, phai truoc gan old=new)
+                if(EnableBonusNews) {
+                    ProcessBonusNews();
+                }
+
                 // Update baseline from CSDL | Cap nhat moc tu CSDL
                 g_ea.signal_old[tf] = g_ea.csdl_rows[tf].signal;
                 g_ea.timestamp_old[tf] = (datetime)g_ea.csdl_rows[tf].timestamp;
             }
         }
-
-        // STEP 4: Process Bonus NEWS (scan all 7 TF) | Xu ly Bonus tin tuc (quet 7 TF)
-        ProcessBonusNews();
     }
 
     //=============================================================================
