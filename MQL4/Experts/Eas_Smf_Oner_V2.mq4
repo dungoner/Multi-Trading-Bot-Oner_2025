@@ -1725,7 +1725,108 @@ string PadRight(string text, int width) {
     return text;
 }
 
-// Main dashboard update with OBJ_LABEL (position ~200px from top) | Cap nhat dashboard voi OBJ_LABEL (vi tri 200px tu tren)
+// Calculate total P&L for specific TF (all strategies) | Tinh tong P&L cho TF cu the (tat ca chien luoc)
+double CalculateTFPnL(int tf) {
+    double total_pnl = 0;
+
+    // Loop through all 3 strategies for this TF | Lap qua 3 chien luoc cho TF nay
+    for(int s = 0; s < 3; s++) {
+        // Skip if no position open | Bo qua neu khong co vi the
+        if(g_ea.position_flags[tf][s] != 1) continue;
+
+        int target_magic = g_ea.magic_numbers[tf][s];
+
+        // Scan all orders to find matching magic | Quet tat ca lenh de tim magic khop
+        for(int i = 0; i < OrdersTotal(); i++) {
+            if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) continue;
+            if(OrderSymbol() != Symbol()) continue;
+            if(OrderMagicNumber() == target_magic) {
+                total_pnl += OrderProfit() + OrderSwap() + OrderCommission();
+            }
+        }
+    }
+
+    return total_pnl;
+}
+
+// Check if TF has BONUS orders | Kiem tra TF co lenh BONUS khong
+bool HasBonusOrders(int tf) {
+    int target_magic = g_ea.magic_numbers[tf][2]; // S3 magic for this TF | Magic S3 cho TF nay
+
+    for(int i = 0; i < OrdersTotal(); i++) {
+        if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) continue;
+        if(OrderSymbol() != Symbol()) continue;
+        if(OrderMagicNumber() == target_magic) {
+            // Check if comment contains "BONUS" | Kiem tra comment co chua "BONUS"
+            string comment = OrderComment();
+            if(StringFind(comment, "BONUS") >= 0) {
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
+
+// Format BONUS status line for dashboard | Dinh dang dong trang thai BONUS cho dashboard
+string FormatBonusStatus() {
+    // Check if BONUS is enabled | Kiem tra BONUS co bat khong
+    if(!EnableBonusNews) return "BONUS: Disabled";
+
+    string bonus_list = "";
+    string status = "IDLE";
+    int bonus_tf_count = 0;
+
+    // First check: Are there any BONUS orders currently open? | Kiem tra dau tien: Co lenh BONUS dang mo khong?
+    for(int tf = 0; tf < 7; tf++) {
+        if(!IsTFEnabled(tf)) continue;
+
+        if(HasBonusOrders(tf)) {
+            status = "OPEN";
+            bonus_tf_count++;
+
+            int news = g_ea.csdl_rows[tf].news;
+            string arrow = (news > 0) ? "^" : "v";
+
+            if(bonus_list != "") bonus_list += " ";
+            bonus_list += G_TF_NAMES[tf] + "(" + IntegerToString(BonusOrderCount) + "x " +
+                         (news > 0 ? "+" : "") + IntegerToString(news) + arrow + ")";
+        }
+    }
+
+    // Second check: If no orders open, which TFs qualify for BONUS? | Kiem tra thu hai: Neu khong co lenh, TF nao du dieu kien BONUS?
+    if(status == "IDLE") {
+        for(int tf = 0; tf < 7; tf++) {
+            if(!IsTFEnabled(tf)) continue;
+
+            int news_abs = MathAbs(g_ea.csdl_rows[tf].news);
+            if(news_abs >= MinNewsLevelBonus) {
+                status = "WAIT";
+                bonus_tf_count++;
+
+                int news = g_ea.csdl_rows[tf].news;
+                string arrow = (news > 0) ? "^" : "v";
+
+                if(bonus_list != "") bonus_list += " ";
+                bonus_list += G_TF_NAMES[tf] + "(" + IntegerToString(BonusOrderCount) + "x " +
+                             (news > 0 ? "+" : "") + IntegerToString(news) + arrow + ")";
+            }
+        }
+    }
+
+    // If no qualifying TFs, show "None" | Neu khong co TF du dieu kien, hien "None"
+    if(bonus_list == "") bonus_list = "None";
+
+    // Format timestamp (last BONUS open time) | Dinh dang timestamp (lan cuoi mo BONUS)
+    string last_time = TimeToStr(TimeCurrent(), TIME_SECONDS);
+
+    // Build final status line | Xay dung dong trang thai cuoi cung
+    string result = "BONUS: " + bonus_list + " | " + status + " | Last:" + last_time;
+
+    return result;
+}
+
+// Main dashboard update with OBJ_LABEL (12 lines, optimized) | Cap nhat dashboard voi OBJ_LABEL (12 dong, toi uu)
 void UpdateDashboard() {
     // Check if dashboard is enabled | Kiem tra dashboard co bat khong
     if(!ShowDashboard) {
@@ -1736,7 +1837,7 @@ void UpdateDashboard() {
         return;
     }
 
-    
+
     int y_start = 150;  // Start 150px from top | Bat dau tu 150px tu tren
     int line_height = 14;  // Line spacing | Khoang cach dong
     int y_pos = y_start;
@@ -1746,110 +1847,117 @@ void UpdateDashboard() {
     double balance = AccountBalance();
     double dd = (balance > 0) ? ((balance - equity) / balance) * 100 : 0;
 
-    // ===== LEVERAGE: Scan orders ONCE (with 2 USD summaries) | Quet lenh MOT LAN (co 2 tom tat USD)
+    // ===== LEVERAGE: Scan orders ONCE and count by strategy | Quet lenh MOT LAN va dem theo chien luoc
     int total_orders = 0;
     double total_profit = 0, total_loss = 0;
     string s1_summary = "", s2s3_summary = "";
     ScanAllOrdersForDashboard(total_orders, total_profit, total_loss, s1_summary, s2s3_summary);
+
+    // Count orders by strategy type for compact summary | Dem lenh theo loai chien luoc cho tom tat gon
+    int s1_count = 0, s2_count = 0, s3_count = 0;
+    double s1_pnl = 0, s2_pnl = 0, s3_pnl = 0;
+    for(int i = 0; i < OrdersTotal(); i++) {
+        if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) continue;
+        if(OrderSymbol() != Symbol()) continue;
+
+        double order_pnl = OrderProfit() + OrderSwap() + OrderCommission();
+        int magic = OrderMagicNumber();
+
+        // Check which strategy this order belongs to | Kiem tra lenh nay thuoc chien luoc nao
+        bool found = false;
+        for(int tf = 0; tf < 7; tf++) {
+            if(magic == g_ea.magic_numbers[tf][0]) { s1_count++; s1_pnl += order_pnl; found = true; break; }
+            if(magic == g_ea.magic_numbers[tf][1]) { s2_count++; s2_pnl += order_pnl; found = true; break; }
+            if(magic == g_ea.magic_numbers[tf][2]) { s3_count++; s3_pnl += order_pnl; found = true; break; }
+        }
+    }
 
     // ===== LEVERAGE: g_ea variables | Tai su dung: Bien g_ea
     string folder = "";
     if(CSDL_Source == FOLDER_1) folder = "DA1";
     else if(CSDL_Source == FOLDER_2) folder = "DA2";
     else if(CSDL_Source == FOLDER_3) folder = "DA3";
-    string trend = (g_ea.trend_d1 == 1) ? "[^]" : (g_ea.trend_d1 == -1 ? "" : ">");
-    string news_dir = (g_ea.news_direction == 1) ? "[^]" : (g_ea.news_direction == -1 ? "" : ">");
+    string trend = (g_ea.trend_d1 == 1) ? "^" : (g_ea.trend_d1 == -1 ? "v" : "-");
+    string news_dir = (g_ea.news_direction == 1) ? "^" : (g_ea.news_direction == -1 ? "v" : "-");
 
-    // ===== LINE 0: HEADER (White) | TIEU DE (Trang)
-    string header = "[" + g_ea.symbol_name + "] " + folder + " | 7TFx3S=21 | Trend:D1" + trend +
-                    " News:Lv" + IntegerToString(g_ea.news_level) + news_dir +
-                    " | Eq:$" + DoubleToStr(equity, 0) + " DD:" + DoubleToStr(dd, 1) + "%";
-    CreateOrUpdateLabel("dash_0", header, 10, y_pos, clrWhite, 9);
+    // ===== LINE 0: HEADER (YELLOW) | TIEU DE (VANG)
+    string header = "[" + g_ea.symbol_name + "] " + folder + " | 7TFx3S | D1:" + trend +
+                    " News:" + IntegerToString(g_ea.news_level) + news_dir +
+                    " | $" + DoubleToStr(equity, 0) + " DD:" + DoubleToStr(dd, 1) + "% | " +
+                    IntegerToString(total_orders) + "/21";
+    CreateOrUpdateLabel("dash_0", header, 10, y_pos, clrYellow, 9);
     y_pos += line_height;
 
-    // ===== LINE 1: SEPARATOR (White) | DUONG GACH (Trang)
-    CreateOrUpdateLabel("dash_1", "-------------------------------------------------------------", 10, y_pos, clrWhite, 9);
+    // ===== LINE 1: COLUMN HEADERS (White) | TEN COT (Trang)
+    string col_header = PadRight("TF", 5) + PadRight("Sig", 5) + PadRight("S1", 7) +
+                        PadRight("S2", 7) + PadRight("S3", 7) + PadRight("P&L", 9) + "News";
+    CreateOrUpdateLabel("dash_1", col_header, 10, y_pos, clrWhite, 9);
     y_pos += line_height;
 
-    // ===== LINE 2: COLUMN HEADERS (White) | TEN COT (Trang)
-    string col_header = PadRight("TF", 4) + PadRight("Signal", 7) + PadRight("S1", 8) +
-                        PadRight("S2", 8) + PadRight("S3", 8) + PadRight("Age", 6) +
-                        PadRight("DPrice", 8) + "News";
-    CreateOrUpdateLabel("dash_2", col_header, 10, y_pos, clrWhite, 9);
-    y_pos += line_height;
-
-    // ===== LINE 3: SEPARATOR (White) | DUONG GACH (Trang)
-    CreateOrUpdateLabel("dash_3", "-------------------------------------------------------------", 10, y_pos, clrWhite, 9);
-    y_pos += line_height;
-
-    // ===== 7 ROWS - ALTERNATING COLORS + ASCII ARROWS | 7 HANG - 2 MAU + MUI TEN ASCII
+    // ===== LINES 2-8: 7 TF ROWS - ALTERNATING COLORS + P&L | 7 HANG TF - 2 MAU XEN KE + LAI LO
     for(int tf = 0; tf < 7; tf++) {
-        // Signal with ASCII arrows ([^] up, v down, - none) | Tin hieu voi mui ten ASCII
+        // Signal with ASCII arrows (^ up, v down, - none) | Tin hieu voi mui ten ASCII
         int current_signal = g_ea.csdl_rows[tf].signal;
         string sig = "";
-        if(current_signal == 1) sig = "[^]";      // UP arrow | Mui ten len
-        else if(current_signal == -1) sig = " v "; // DOWN arrow | Mui ten xuong
-        else sig = "-";                            // NONE | Khong co
+        if(current_signal == 1) sig = "^";         // UP arrow | Mui ten len
+        else if(current_signal == -1) sig = "v";   // DOWN arrow | Mui ten xuong
+        else sig = "-";                             // NONE | Khong co
 
-        // S1/S2/S3
+        // S1/S2/S3 positions | Vi the S1/S2/S3
         string s1 = (g_ea.position_flags[tf][0] == 1) ? "*" + DoubleToStr(g_ea.lot_sizes[tf][0], 2) : "o";
         string s2 = (g_ea.position_flags[tf][1] == 1) ? "*" + DoubleToStr(g_ea.lot_sizes[tf][1], 2) : "o";
         string s3 = (g_ea.position_flags[tf][2] == 1) ? "*" + DoubleToStr(g_ea.lot_sizes[tf][2], 2) : "o";
 
-        // Age
-        string age = FormatAge((datetime)g_ea.csdl_rows[tf].timestamp);
+        // P&L for this TF (all strategies) | Lai lo cho TF nay (tat ca chien luoc)
+        double tf_pnl = CalculateTFPnL(tf);
+        string pnl_str = "";
+        if(tf_pnl > 0) pnl_str = "+" + DoubleToStr(tf_pnl, 2);
+        else if(tf_pnl < 0) pnl_str = DoubleToStr(tf_pnl, 2);
+        else pnl_str = "+0.00";
 
-        // DPrice
-        string dp = DoubleToStr(g_ea.csdl_rows[tf].pricediff, 1);
-        if(g_ea.csdl_rows[tf].pricediff > 0) dp = "+" + dp;
-
-        // News
+        // News with sign | Tin tuc voi dau
         string nw = IntegerToString(g_ea.csdl_rows[tf].news);
         if(g_ea.csdl_rows[tf].news > 0) nw = "+" + nw;
 
         // Build row with fixed-width columns | Xay dung dong voi cot co dinh
-        string row = PadRight(G_TF_NAMES[tf], 4) + PadRight(sig, 7) + PadRight(s1, 8) +
-                     PadRight(s2, 8) + PadRight(s3, 8) + PadRight(age, 6) +
-                     PadRight(dp, 8) + nw;
+        string row = PadRight(G_TF_NAMES[tf], 5) + PadRight(sig, 5) + PadRight(s1, 7) +
+                     PadRight(s2, 7) + PadRight(s3, 7) + PadRight(pnl_str, 9) + nw;
 
         // Alternating colors: Blue (even rows), White (odd rows) | Mau xen ke: Xanh (dong chan), Trang (dong le)
         color row_color = (tf % 2 == 0) ? clrDodgerBlue : clrWhite;
-        CreateOrUpdateLabel("dash_" + IntegerToString(4 + tf), row, 10, y_pos, row_color, 9);
+        CreateOrUpdateLabel("dash_" + IntegerToString(2 + tf), row, 10, y_pos, row_color, 9);
         y_pos += line_height;
     }
 
-    // ===== LINE 11: SEPARATOR (White) | DUONG GACH (Trang)
-    CreateOrUpdateLabel("dash_11", "-------------------------------------------------------------", 10, y_pos, clrWhite, 9);
+    // ===== LINE 9: BONUS STATUS (White) | TRANG THAI BONUS (Trang)
+    string bonus_status = FormatBonusStatus();
+    CreateOrUpdateLabel("dash_9", bonus_status, 10, y_pos, clrWhite, 9);
     y_pos += line_height;
 
-    // ===== LINE 12: P&L SUMMARY (White) | TOM TAT LAI LO (Trang)
+    // ===== LINE 10: NET SUMMARY (Yellow) | TOM TAT NET (Vang)
     double net = total_profit + total_loss;
-    string footer = "Orders:" + IntegerToString(total_orders) + "/21 | Net:$" + DoubleToStr(net, 2) +
-                    " | Profit:+$" + DoubleToStr(total_profit, 2) +
-                    " Loss:$" + DoubleToStr(total_loss, 2) + " | 2s";
-    CreateOrUpdateLabel("dash_12", footer, 10, y_pos, clrWhite, 9);
+    string net_summary = "NET:$" + DoubleToStr(net, 2);
+
+    // Add strategy breakdown if there are orders | Them phan tich chien luoc neu co lenh
+    if(s1_count > 0) net_summary += " | S1:" + IntegerToString(s1_count) + "x$" + DoubleToStr(s1_pnl, 0);
+    if(s2_count > 0) net_summary += " | S2:" + IntegerToString(s2_count) + "x$" + DoubleToStr(s2_pnl, 0);
+    if(s3_count > 0) net_summary += " | S3:" + IntegerToString(s3_count) + "x$" + DoubleToStr(s3_pnl, 1);
+
+    net_summary += " | " + IntegerToString(total_orders) + "/21";
+
+    CreateOrUpdateLabel("dash_10", net_summary, 10, y_pos, clrYellow, 9);
     y_pos += line_height;
 
-    // ===== LINE 13: S1 ORDERS USD (Yellow) | LENH S1 USD (Vang)
-    string s1_line = "S1 Orders: ";
-    if(s1_summary == "") s1_line += "None";
-    else s1_line += s1_summary;
-    CreateOrUpdateLabel("dash_13", s1_line, 10, y_pos, clrYellow, 9);
-    y_pos += line_height;
-
-    // ===== LINE 14: S2+S3 ORDERS USD (Yellow) | LENH S2+S3 USD (Vang)
-    string s2s3_line = "S2+S3 Orders: ";
-    if(s2s3_summary == "") s2s3_line += "None";
-    else s2s3_line += s2s3_summary;
-    CreateOrUpdateLabel("dash_14", s2s3_line, 10, y_pos, clrYellow, 9);
-    y_pos += line_height;
-
-    // ===== LINE 15: BROKER + SERVER + LEVERAGE (Yellow) | THONG TIN SAN + MAY CHU + DON BAY (Vang)
+    // ===== LINE 11: BROKER INFO (Yellow) | THONG TIN SAN (Vang)
     string broker = AccountCompany();
-    string server = AccountServer();
     int leverage = AccountLeverage();
-    string broker_info = broker + " | Server:" + server + " | Leverage:1:" + IntegerToString(leverage);
-    CreateOrUpdateLabel("dash_15", broker_info, 10, y_pos, clrYellow, 8);
+    string broker_info = broker + " | Lev:1:" + IntegerToString(leverage) + " | 2s";
+    CreateOrUpdateLabel("dash_11", broker_info, 10, y_pos, clrYellow, 8);
+
+    // Clean up old unused labels (lines 12-15 from old layout) | Don dep cac nhan cu khong dung (dong 12-15 tu giao dien cu)
+    for(int i = 12; i <= 15; i++) {
+        ObjectDelete("dash_" + IntegerToString(i));
+    }
 }
 
 // Create or update OBJ_LABEL | Tao hoac cap nhat OBJ_LABEL
