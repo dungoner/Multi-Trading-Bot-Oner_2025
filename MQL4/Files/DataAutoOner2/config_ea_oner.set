@@ -1,0 +1,137 @@
+; ============================================================================
+; EA Bot V2 - Standard Configuration File
+; ============================================================================
+; File: config_ea_oner.set
+; Version: 2.0
+; Last Update: 2025-01-31
+;
+; HOW TO USE:
+; 1. Copy this file to MQL4/Files/DataAutoOner2/ folder
+; 2. When attaching EA to chart, click "Load" button in INPUT tab
+; 3. Browse and select this file
+; 4. All parameters will be loaded automatically
+; 5. Click OK to apply
+;
+; BENEFITS:
+; - Edit values in text editor (easier than INPUT dialog)
+; - Save multiple configs (config_conservative.set, config_aggressive.set)
+; - Quick deployment: copy .set + .ex4 files
+; - MT4 native support (no code parser needed)
+; ============================================================================
+
+; ============================================================================
+; A. CORE SETTINGS (13 inputs)
+; ============================================================================
+
+; --- A.1 Timeframe toggles (7) ---
+TF_M1=1
+TF_M5=1
+TF_M15=1
+TF_M30=1
+TF_H1=1
+TF_H4=1
+TF_D1=1
+
+; --- A.2 Strategy toggles (3) ---
+S1_HOME=1
+S2_TREND=1
+S3_NEWS=1
+
+; --- A.3 Risk management (2) ---
+FixedLotSize=0.10
+MaxLoss_Fallback=-1000.00
+
+; --- A.4 Data source (1) ---
+; 0=DataAutoOner, 1=DataAutoOner2 (default), 2=DataAutoOner3
+CSDL_Source=1
+
+; ============================================================================
+; B. STRATEGY CONFIGURATIONS (8 inputs)
+; ============================================================================
+
+; --- B.1 S1 NEWS Filter (3) ---
+; TRUE=strict filtering, FALSE=basic binary mode
+S1_UseNewsFilter=1
+MinNewsLevelS1=20
+S1_RequireNewsDirection=1
+
+; --- B.2 S2 TREND Mode (1) ---
+; 0=Follow D1 (auto), 1=Force BUY, -1=Force SELL
+S2_TrendMode=0
+
+; --- B.3 S3 NEWS Configuration (4) ---
+MinNewsLevelS3=20
+EnableBonusNews=1
+BonusOrderCount=2
+MinNewsLevelBonus=20
+
+; ============================================================================
+; C. RISK PROTECTION (7 inputs)
+; ============================================================================
+
+; --- C.1 Stoploss mode (3) ---
+; 0=NONE (close by signal only)
+; 1=LAYER1 (max_loss × lot from CSDL)
+; 2=LAYER2 (margin / divisor emergency)
+StoplossMode=1
+Layer2_Divisor=20.00
+
+; --- C.2 Take profit (2) ---
+; UseTakeProfit: 0=OFF, 1=ON
+; Multiplier: 0.5=50%, 1.0=100%, 2.0=200% of max_loss
+UseTakeProfit=0
+TakeProfit_Multiplier=0.50
+
+; --- C.3 Health check & reset (2) ---
+EnableWeekendReset=1
+EnableHealthCheck=1
+
+; ============================================================================
+; D. AUXILIARY SETTINGS (3 inputs)
+; ============================================================================
+
+; --- D.1 Performance (1) ---
+UseEvenOddMode=0
+
+; --- D.2 Display (2) ---
+ShowDashboard=1
+DebugMode=0
+
+; ============================================================================
+; PRESET EXAMPLES (uncomment to use)
+; ============================================================================
+
+; --- CONSERVATIVE PRESET ---
+; FixedLotSize=0.05
+; StoplossMode=1
+; UseTakeProfit=1
+; TakeProfit_Multiplier=0.30
+
+; --- AGGRESSIVE PRESET ---
+; FixedLotSize=0.20
+; StoplossMode=0
+; UseTakeProfit=0
+
+; --- SCALPING PRESET (M1-M15 only) ---
+; TF_M1=1
+; TF_M5=1
+; TF_M15=1
+; TF_M30=0
+; TF_H1=0
+; TF_H4=0
+; TF_D1=0
+; FixedLotSize=0.01
+
+; --- SWING TRADING PRESET (H1+ only) ---
+; TF_M1=0
+; TF_M5=0
+; TF_M15=0
+; TF_M30=0
+; TF_H1=1
+; TF_H4=1
+; TF_D1=1
+; FixedLotSize=0.15
+
+; ============================================================================
+; END OF CONFIGURATION
+; ============================================================================
