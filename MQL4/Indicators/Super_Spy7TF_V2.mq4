@@ -25,7 +25,7 @@ input string TargetSymbol = "";                              // Target Symbol - 
 input bool   EnableHealthCheck = true;                       // Health check at 8h & 16h | Kiem tra suc khoe luc 8h va 16h
 input bool   EnableMidnightReset = true;                     // Midnight reset at 0h daily | Reset luc 0h hang ngay
 input bool   EnableStartupReset = true;                      // Startup reset 1 minute after MT4 starts | Reset khoi dong 1 phut sau khi MT4 chay
-input bool   ProcessSignalOnOddSecond = true;                // Process Signal on ODD second only | Xu ly tin hieu giay le (tranh conflict)
+input bool   ProcessSignalOnOddSecond = false;               // Process Signal on ODD second only | Xu ly tin hieu giay le (tranh conflict)
 input bool   EnableMonthlyStats = true;                      // Monthly stats on 1st day of month | Thong ke thang vao ngay 1
 input string DataFolder = "DataAutoOner\\";                  // Data Storage Folder | Thu muc luu tru du lieu
 
@@ -400,7 +400,7 @@ bool WriteCSDL1ArrayToFile() {
     }
 
     // =========================================================================
-    // FILE A: DataAutoOner/SYMBOL.json - WRITE IMMEDIATELY
+    // FILE A: DataAutoOner/SYMBOL.json - DIRECT WRITE (UNCHANGED)
     // =========================================================================
     if(!WriteRowsToJson(json_file_path, rows)) {
         Print("ERROR: WriteCSDL1 - Failed: ", json_file_path);
@@ -408,10 +408,10 @@ bool WriteCSDL1ArrayToFile() {
     }
 
     // =========================================================================
-    // FILE C: DataAutoOner3/SYMBOL.json - WRITE IMMEDIATELY (NEW!)
+    // FILE C: DataAutoOner3/SYMBOL.json - ATOMIC WRITE (FOR PYTHON SYNC)
     // =========================================================================
     string json_file_path_C = "DataAutoOner3\\" + symbol + ".json";
-    if(!WriteRowsToJson(json_file_path_C, rows)) {
+    if(!WriteRowsToJsonAtomic(json_file_path_C, rows)) {
         Print("ERROR: WriteCSDL1 - Failed to write to C: ", json_file_path_C);
         // Don't return false - A is already written successfully
     }
@@ -491,26 +491,26 @@ bool WriteCSDL2ArrayToFile() {
     json_content += "\n]";
 
     // =========================================================================
-    // GHI ĐỒNG BỘ 3 FILE: A, B, C (CÙNG LÚC)
+    // GHI ĐỒNG BỘ 3 FILE: A (DIRECT), B & C (ATOMIC)
     // =========================================================================
 
-    // FILE A: DataAutoOner/SYMBOL_LIVE.json
+    // FILE A: DataAutoOner/SYMBOL_LIVE.json - DIRECT WRITE (UNCHANGED)
     string fileA = DataFolder + symbol + "_LIVE.json";
     if(!WriteFileWithRetry(fileA, json_content)) {
         Print("ERROR: WriteCSDL2 - Failed to write file A: ", fileA);
         return false;
     }
 
-    // FILE B: DataAutoOner2/SYMBOL_LIVE.json - GHI ĐỒNG BỘ
+    // FILE B: DataAutoOner2/SYMBOL_LIVE.json - ATOMIC WRITE (FOR EA)
     string fileB = "DataAutoOner2\\" + symbol + "_LIVE.json";
-    if(!WriteFileWithRetry(fileB, json_content)) {
+    if(!AtomicWriteFileWithRetry(fileB, json_content)) {
         Print("ERROR: WriteCSDL2 - Failed to write file B: ", fileB);
         // Don't return false - A is already written successfully
     }
 
-    // FILE C: DataAutoOner3/SYMBOL_LIVE.json - GHI ĐỒNG BỘ
+    // FILE C: DataAutoOner3/SYMBOL_LIVE.json - ATOMIC WRITE (FOR PYTHON)
     string fileC = "DataAutoOner3\\" + symbol + "_LIVE.json";
-    if(!WriteFileWithRetry(fileC, json_content)) {
+    if(!AtomicWriteFileWithRetry(fileC, json_content)) {
         Print("ERROR: WriteCSDL2 - Failed to write file C: ", fileC);
         // Don't return false - A is already written successfully
     }
@@ -732,18 +732,12 @@ bool ProcessSignalForTF(int tf_idx, int signal, long signal_time) {
 
     // Print 2 dòng vào Expert Tab
     string signal_text = (signal > 0) ? "BUY" : "SELL";
-    string price_str = DoubleToString(current_price, 5);
-    string pricediff_str = (pricediff_usd >= 0) ? "+" + DoubleToString(pricediff_usd, 2) : DoubleToString(pricediff_usd, 2);
-    string news_str_log = (news_result >= 0) ? "+" + IntegerToString(news_result) : IntegerToString(news_result);
-
-    // DÒNG 2: CSDL1 - A (IN SAU CSDL2)
-    Print("->A>" + tf_names[tf_idx] + "< " + signal_text + " @ (" + IntegerToString(signal_time) + ") " + TimeToString(signal_time, TIME_DATE|TIME_MINUTES) +
-          " | Price: " + price_str +
-          " | PriceDiff: " + pricediff_str + " USD" +
-          " | TimeDiff: " + IntegerToString(timediff_min) + "m" +
-          " | NEWS: " + news_str_log);
-
-    // DÒNG 1: CSDL2 Copy s? in TR??C trong CopyCSDL2ToBackupFolders()
+    // SUCCESS LOG SUPPRESSED (no spam) - Uncomment below for debugging
+    // string price_str = DoubleToString(current_price, 5);
+    // string pricediff_str = (pricediff_usd >= 0) ? "+" + DoubleToString(pricediff_usd, 2) : DoubleToString(pricediff_usd, 2);
+    // string news_str_log = (news_result >= 0) ? "+" + IntegerToString(news_result) : IntegerToString(news_result);
+    // Print("->A>" + tf_names[tf_idx] + "< " + signal_text + " @ (" + IntegerToString(signal_time) + ") " + TimeToString(signal_time, TIME_DATE|TIME_MINUTES) +
+    //       " | Price: " + price_str + " | PriceDiff: " + pricediff_str + " USD | TimeDiff: " + IntegerToString(timediff_min) + "m | NEWS: " + news_str_log);
 
     // Dashboard will be updated by OnTimer() every second
 
@@ -755,13 +749,13 @@ void PrintDashboard() {
     string symbol = g_symbol_data.symbol;
     string tf_names[7] = {"M1", "M5", "M15", "M30", "H1", "H4", "D1"};
 
-    // Dòng 1: Thông tin c? b?n + LIVE values
+    // Dòng 1: Thông tin cơ bản + LIVE values
     double pip_value = GetPipValue(symbol);
     double point_value = MarketInfo(symbol, MODE_POINT);
     if(point_value <= 0) point_value = Point;
     double usd_test = GetUSDValue(symbol, 1.0);
 
-    // Calculate LIVE USD diff and Time diff (real-time t? M1)
+    // Calculate LIVE USD diff and Time diff (real-time từ M1)
     double m1_price = g_symbol_data.prices[0];           // M1 last signal price
     datetime m1_time = (datetime)g_symbol_data.timestamps[0];  // M1 last signal time
     double current_price = (Ask + Bid) / 2.0;           // Current real-time price
@@ -769,16 +763,24 @@ void PrintDashboard() {
     double live_usd_diff = GetUSDValue(symbol, MathAbs(live_diff_raw));  // USD conversion
     int live_time_diff = (int)((TimeCurrent() - m1_time) / 60);  // Minutes since M1 signal
 
-    // Format LIVE values
+    // Format LIVE price string
+    string live_price_str = DoubleToString(current_price, (Digits > 0 ? Digits : 5));
+
+    // Format LIVE USD diff
     string live_usd_str = DoubleToString(live_usd_diff, 2);
     if(live_diff_raw >= 0) live_usd_str = "+" + live_usd_str;
     else live_usd_str = "-" + live_usd_str;
 
     // =========================================================================
-    // DÒNG 2: M1 ? M30 (4 TF)
+    // DÒNG 1: Thông tin cơ bản (GIỮ NGUYÊN)
+    // =========================================================================
+    string line1 = "[" + symbol + "] SPY | CSDL1: Active | 7TF | USD:" + DoubleToString(usd_test, 2) + " pip:" + DoubleToString(pip_value, 5);
+
+    // =========================================================================
+    // DÒNG 2: M1, M5, M15 (3 TF)
     // =========================================================================
     string line2 = "";
-    for(int i = 0; i < 4; i++) {
+    for(int i = 0; i < 3; i++) {  // 0=M1, 1=M5, 2=M15
         string sig = "NONE";
         if(g_symbol_data.signals[i] > 0) sig = "BUY";
         else if(g_symbol_data.signals[i] < 0) sig = "SELL";
@@ -790,10 +792,10 @@ void PrintDashboard() {
     }
 
     // =========================================================================
-    // DÒNG 3: H1 ? D1 (3 TF)
+    // DÒNG 3: M30, H1, H4 (3 TF)
     // =========================================================================
     string line3 = "";
-    for(int i = 4; i < 7; i++) {
+    for(int i = 3; i < 6; i++) {  // 3=M30, 4=H1, 5=H4
         string sig = "NONE";
         if(g_symbol_data.signals[i] > 0) sig = "BUY";
         else if(g_symbol_data.signals[i] < 0) sig = "SELL";
@@ -805,28 +807,29 @@ void PrintDashboard() {
     }
 
     // =========================================================================
-    // DÒNG 4: TREND_D1 + NEWS + LIVE values
+    // DÒNG 4: D1 + NEWS + LIVE (giá + USD diff + time diff)
     // =========================================================================
-    string news_str = IntegerToString(g_symbol_data.news_results[0]);  // C?t 10 M1
+    // D1 signal
+    string d1_sig = "NONE";
+    if(g_symbol_data.signals[6] > 0) d1_sig = "BUY";
+    else if(g_symbol_data.signals[6] < 0) d1_sig = "SELL";
+
+    string d1_pricediff = DoubleToString(g_symbol_data.pricediffs[6], 2);
+    if(g_symbol_data.pricediffs[6] >= 0) d1_pricediff = "+" + d1_pricediff;
+
+    // NEWS score
+    string news_str = IntegerToString(g_symbol_data.news_results[0]);
     if(g_symbol_data.news_results[0] >= 0) news_str = "+" + news_str;
 
-    string trend_d1 = "NONE";
-    if(g_symbol_data.signals[6] > 0) trend_d1 = "BUY";
-    else if(g_symbol_data.signals[6] < 0) trend_d1 = "SELL";
+    // Build line 4 - NEWS moved to end for simple gold highlighting
+    string line4 = "[D1|" + d1_sig + "|" + d1_pricediff + "|" + IntegerToString(g_symbol_data.timediffs[6]) + "m] | LIVE: " + live_price_str + " (" + live_usd_str + ", " + IntegerToString(live_time_diff) + "m)";
+    string line4_news = " | NEWS:" + news_str;
 
     // =========================================================================
-    // BUILD 4 DÒNG DASHBOARD - DÙNG OBJECTCREATE() ?? TRÁNH CONFLICT V?I WT
+    // TẠO 4 OBJECTS RIÊNG BIỆT (KHÔNG CONFLICT VỚI COMMENT() CỦA WT)
     // =========================================================================
-    // DÒNG 1: Thông tin c? b?n
-    string line1 = "[" + symbol + "] SPY | CSDL1: Active | 7TF | USD:" + DoubleToString(usd_test, 2) + " pip:" + DoubleToString(pip_value, 5);
-    // DÒNG 4: TREND_D1 + NEWS + LIVE values
-    string line4 = "TREND_D1: " + trend_d1 + "  |  NEWS: " + news_str + " | LIVE: " + live_usd_str + " USD | " + IntegerToString(live_time_diff) + "m";
-
-    // =========================================================================
-    // T?O 4 OBJECTS RIÊNG BI?T (KHÔNG CONFLICT V?I COMMENT() C?A WT)
-    // =========================================================================
-    int y_start = 120;  // V? trí b?t ??u (120 pixels t? trên, d??i WT)
-    int y_spacing = 15; // Kho?ng cách gi?a các dòng
+    int y_start = 120;  // Vị trí bắt đầu (120 pixels từ trên, dưới WT)
+    int y_spacing = 15; // Khoảng cách giữa các dòng
 
     string obj_names[4];
     obj_names[0] = "SPY_Dashboard_Line1";
@@ -840,9 +843,9 @@ void PrintDashboard() {
     lines[2] = line3;
     lines[3] = line4;
 
-    // T?o 4 objects
+    // Tạo 4 objects
     for(int i = 0; i < 4; i++) {
-        // Xóa object c? n?u có
+        // Xóa object cũ nếu có
         if(ObjectFind(0, obj_names[i]) >= 0) {
             ObjectDelete(0, obj_names[i]);
         }
@@ -850,7 +853,7 @@ void PrintDashboard() {
         // Mau xen ke: Trang -> Xanh -> Trang -> Xanh | Alternating colors: White -> Blue -> White -> Blue
         color line_color = (i % 2 == 0) ? clrWhite : clrDodgerBlue;
 
-        // T?o object m?i
+        // Tạo object mới
         ObjectCreate(0, obj_names[i], OBJ_LABEL, 0, 0, 0);
         ObjectSetInteger(0, obj_names[i], OBJPROP_CORNER, CORNER_LEFT_UPPER);
         ObjectSetInteger(0, obj_names[i], OBJPROP_XDISTANCE, 10);
@@ -862,6 +865,21 @@ void PrintDashboard() {
         ObjectSetInteger(0, obj_names[i], OBJPROP_SELECTABLE, false);
         ObjectSetInteger(0, obj_names[i], OBJPROP_HIDDEN, true);
     }
+
+    // Tạo NEWS object riêng với màu vàng gold (ở cuối dòng 4)
+    string news_obj = "SPY_Dashboard_NEWS";
+    if(ObjectFind(0, news_obj) >= 0) ObjectDelete(0, news_obj);
+
+    ObjectCreate(0, news_obj, OBJ_LABEL, 0, 0, 0);
+    ObjectSetInteger(0, news_obj, OBJPROP_CORNER, CORNER_LEFT_UPPER);
+    ObjectSetInteger(0, news_obj, OBJPROP_XDISTANCE, 470);  // Moved further right to avoid overlapping TimeDiff
+    ObjectSetInteger(0, news_obj, OBJPROP_YDISTANCE, y_start + (3 * y_spacing));
+    ObjectSetInteger(0, news_obj, OBJPROP_COLOR, clrGold);  // Gold color
+    ObjectSetInteger(0, news_obj, OBJPROP_FONTSIZE, 8);
+    ObjectSetString(0, news_obj, OBJPROP_FONT, "Courier New");
+    ObjectSetString(0, news_obj, OBJPROP_TEXT, line4_news);
+    ObjectSetInteger(0, news_obj, OBJPROP_SELECTABLE, false);
+    ObjectSetInteger(0, news_obj, OBJPROP_HIDDEN, true);
 }
 
 //==============================================================================
@@ -1314,6 +1332,85 @@ bool WriteFileWithRetry(string filename, string content) {
     // ROUND 2 FAILED ? Simple warning (NO STOP BOT)
     Print("? File write failed after 2 rounds (", Retry*2, " attempts): ", filename, " - Bot continues");
     return false;
+}
+
+//==============================================================================
+// ATOMIC WRITE FUNCTIONS - SAFE FOR CONCURRENT ACCESS | HAM GHI ATOMIC - AN TOAN CHO TRUY CAP DONG THOI
+//==============================================================================
+
+// Write file atomically using TMP + Rename pattern (no logs unless error) | Ghi file atomic bang pattern TMP + Rename (khong log tru khi loi)
+bool AtomicWriteFile(string filename, string content) {
+    string tmp_filename = filename + ".tmp";
+
+    // PHASE 1: Write to TMP file
+    int handle = FileOpen(tmp_filename, FILE_WRITE|FILE_TXT);
+    if(handle == INVALID_HANDLE) {
+        Print("ERROR: AtomicWrite - Cannot create tmp: ", tmp_filename);
+        return false;
+    }
+
+    FileWrite(handle, content);
+    FileClose(handle);
+
+    // PHASE 2: Verify TMP exists
+    if(!FileIsExist(tmp_filename)) {
+        Print("ERROR: AtomicWrite - TMP not found after write: ", tmp_filename);
+        return false;
+    }
+
+    // PHASE 3: Atomic rename (delete old + rename TMP)
+    if(FileIsExist(filename)) {
+        FileDelete(filename);
+    }
+
+    if(!FileMove(tmp_filename, 0, filename, 0)) {
+        Print("ERROR: AtomicWrite - Rename failed: ", tmp_filename, " → ", filename);
+        FileDelete(tmp_filename);  // Cleanup orphan
+        return false;
+    }
+
+    return true;
+}
+
+// Atomic write with 2-round retry (no logs unless error) | Ghi atomic voi thu lai 2 vong (khong log tru khi loi)
+bool AtomicWriteFileWithRetry(string filename, string content) {
+    // ROUND 1: First 3 attempts
+    for(int retry = 0; retry < Retry; retry++) {
+        if(AtomicWriteFile(filename, content)) {
+            return true;
+        }
+        Sleep(250);
+    }
+
+    // ROUND 1 FAILED ? Try to unlock file
+    int handle_unlock = FileOpen(filename, FILE_READ|FILE_SHARE_READ|FILE_SHARE_WRITE);
+    if(handle_unlock != INVALID_HANDLE) {
+        FileClose(handle_unlock);
+    }
+    Sleep(250);
+
+    // ROUND 2: Second 3 attempts
+    for(int retry = 0; retry < Retry; retry++) {
+        if(AtomicWriteFile(filename, content)) {
+            return true;
+        }
+        Sleep(250);
+    }
+
+    Print("ERROR: AtomicWriteFileWithRetry - Failed after ", Retry*2, " attempts: ", filename);
+    return false;
+}
+
+// Write rows to JSON with atomic write (for Folder C only) | Ghi rows vao JSON voi atomic write (chi cho Folder C)
+bool WriteRowsToJsonAtomic(string file_path, string& rows[]) {
+    string json_content = BuildEnhancedJsonContent(rows);
+
+    // Use atomic write mechanism
+    if(!AtomicWriteFileWithRetry(file_path, json_content)) {
+        return false;
+    }
+
+    return true;
 }
 
 // Discover symbol from current chart or input parameter | Phat hien symbol tu bieu do hien tai hoac tham so dau vao
@@ -2592,12 +2689,9 @@ void RunMidnightAndHealthCheck() {
 
 // Dashboard Update
 void RunDashboardUpdate() {
-    static int dashboard_cycle = 0;
-    dashboard_cycle++;
-
-    if(dashboard_cycle % 5 == 0) {  // Moi 5 lan = 10 giay
-        PrintDashboard();
-    }
+    // Dashboard updates every even second (no additional cycle check needed)
+    // Giây chẵn đã đủ để cập nhật dashboard mượt mà
+    PrintDashboard();
 }
 
 // Process All Signals (7 TF)
@@ -2615,9 +2709,9 @@ void ProcessAllSignals() {
         int current_signal = (int)GlobalVariableGet(signal_var);
         long current_signal_time = (long)GlobalVariableGet(time_var);
 
-        // KIEM TRA: signal MOI != 0 && signal MOI != signal CU && time MOI > time CU
+        // KIEM TRA: signal MOI != 0 && signal MOI != signal CU && time MOI > time CU -> TẮT: current_signal != g_symbol_data.signals[i]
         if(current_signal != 0 &&
-           current_signal != g_symbol_data.signals[i] &&
+//           current_signal != g_symbol_data.signals[i] &&
            current_signal_time > g_symbol_data.processed_timestamps[i]) {
             ProcessSignalForTF(i, current_signal, current_signal_time);
         }
@@ -2723,20 +2817,20 @@ void SmartTFReset() {
         temp_chart = ChartNext(temp_chart);
     }
 
-    // Step 2: Reset 6 TF con lai TRUOC (W1 -> original TF, delay 1s)
+    // Step 2: Reset 6 TF con lai TRUOC (W1 -> original TF, delay 2s)
     for(int i = 0; i < total_charts; i++) {
         int other_period = ChartPeriod(chart_ids[i]);
         ChartSetSymbolPeriod(chart_ids[i], current_symbol, PERIOD_W1);
-        Sleep(1000);  // Delay 1s
+        Sleep(2000);  // Delay 2s (slower for MT4 stability)
         ChartSetSymbolPeriod(chart_ids[i], current_symbol, other_period);
-        Sleep(1000);  // Delay 1s
+        Sleep(2000);  // Delay 2s (slower for MT4 stability)
     }
 
     // Step 3: Reset chart HIEN TAI CUOI CUNG (de nhan dien lai 6 TF con lai)
     ChartSetSymbolPeriod(current_chart_id, current_symbol, PERIOD_W1);
-    Sleep(1000);  // Delay 1s
+    Sleep(2000);  // Delay 2s (slower for MT4 stability)
     ChartSetSymbolPeriod(current_chart_id, current_symbol, current_period);
-    Sleep(1000);  // Delay 1s
+    Sleep(2000);  // Delay 2s (slower for MT4 stability)
 
     Print("SmartTFReset: ", current_symbol, " | ", (total_charts + 1), " charts reset");
 }
@@ -2806,11 +2900,12 @@ int OnCalculate(const int rates_total,
 void OnDeinit(const int reason) {
     EventKillTimer();
 
-    // Xóa 4 dashboard objects khỏi chart
+    // Xóa dashboard objects khỏi chart
     ObjectDelete(0, "SPY_Dashboard_Line1");
     ObjectDelete(0, "SPY_Dashboard_Line2");
     ObjectDelete(0, "SPY_Dashboard_Line3");
     ObjectDelete(0, "SPY_Dashboard_Line4");
+    ObjectDelete(0, "SPY_Dashboard_NEWS");
 
     // Cleanup GlobalVariables when indicator is removed (not just reloaded)
     if(reason == REASON_REMOVE) {
