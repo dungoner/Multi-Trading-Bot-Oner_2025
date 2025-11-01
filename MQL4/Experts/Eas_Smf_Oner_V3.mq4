@@ -926,7 +926,7 @@ bool HasValidS2BaseCondition(int tf) {
 void ProcessS1BasicStrategy(int tf) {
     int current_signal = g_ea.csdl_rows[tf].signal;
 
-    // Check: valid signal AND newer timestamp | Kiem tra: tin hieu hop le VA thoi gian moi hon
+    // V3: Check signal valid AND timestamp newer | Kiem tra signal hop le VA timestamp moi hon
     if(current_signal == 0 || g_ea.timestamp_old[tf] >= (datetime)g_ea.csdl_rows[tf].timestamp) return;
 
     RefreshRates();
@@ -970,7 +970,8 @@ void ProcessS1NewsFilterStrategy(int tf) {
     int tf_news = g_ea.csdl_rows[tf].news;
     int news_abs = MathAbs(tf_news);
 
-    // Condition 1: Check NEWS level AND timestamp | Dieu kien 1: Kiem tra muc NEWS VA thoi gian
+    // Condition 1: Check NEWS level AND timestamp | Dieu kien 1: Kiem tra muc NEWS VA timestamp
+    // V3: Added timestamp check | Them kiem tra timestamp
     if(news_abs < MinNewsLevelS1 || g_ea.timestamp_old[tf] >= (datetime)g_ea.csdl_rows[tf].timestamp) {
         DebugPrint("S1_NEWS: " + G_TF_NAMES[tf] + " NEWS=" + IntegerToString(news_abs) +
                    " < Min=" + IntegerToString(MinNewsLevelS1) + " OR stale timestamp, SKIP");
@@ -1055,7 +1056,8 @@ void ProcessS2Strategy(int tf) {
         trend_to_follow = -1;  // Force SELL only | Chi danh SELL
     }
 
-    // Check signal matches trend AND newer timestamp | Kiem tra tin hieu khop xu huong VA thoi gian moi hon
+    // Check signal matches trend AND timestamp newer | Kiem tra tin hieu khop xu huong VA timestamp moi hon
+    // V3: Added timestamp check | Them kiem tra timestamp
     if(current_signal != trend_to_follow || g_ea.timestamp_old[tf] >= (datetime)g_ea.csdl_rows[tf].timestamp) {
         DebugPrint("S2_TREND: Signal=" + IntegerToString(current_signal) +
                    " != Trend=" + IntegerToString(trend_to_follow) + " OR stale timestamp, skip");
@@ -1113,10 +1115,11 @@ void ProcessS3Strategy(int tf) {
         return;
     }
 
-    // Check NEWS direction matches signal AND newer timestamp | Kiem tra huong NEWS khop signal VA thoi gian moi hon
+    // Check NEWS direction matches signal AND timestamp newer | Kiem tra huong NEWS khop signal VA timestamp moi hon
     int news_direction = (tf_news > 0) ? 1 : -1;
     int current_signal = g_ea.csdl_rows[tf].signal;
 
+    // V3: Added timestamp check | Them kiem tra timestamp
     if(current_signal != news_direction || g_ea.timestamp_old[tf] >= (datetime)g_ea.csdl_rows[tf].timestamp) {
         DebugPrint("S3_NEWS: Signal=" + IntegerToString(current_signal) + " != NewsDir=" + IntegerToString(news_direction) + " OR stale timestamp, skip");
         return;
@@ -1163,11 +1166,11 @@ void ProcessS3Strategy(int tf) {
 void ProcessBonusNews() {
     if(!EnableBonusNews) return;
 
-    // CRITICAL: Check M1 timestamp ONLY (M1 representative for all 7 TF)
-    // QUAN TRONG: Chi kiem tra timestamp cua M1 (M1 dai dien cho ca 7 TF)
-    datetime m1_timestamp_old = g_ea.timestamp_old[0];
-    datetime m1_timestamp_new = (datetime)g_ea.csdl_rows[0].timestamp;
-    if(m1_timestamp_old >= m1_timestamp_new) return;  // M1 no new data → Skip all
+    // V3: CRITICAL - Check M1 has new signal AND timestamp (stricter condition)
+    // V3: QUAN TRONG - Kiem tra M1 co signal moi VA timestamp moi (dieu kien chat hon)
+    // This ensures BONUS only opens when M1 has fresh data
+    // Dam bao BONUS chi mo khi M1 co du lieu moi
+    if(!HasValidS2BaseCondition(0)) return;
 
     // Scan all 7 TF | Quet tat ca 7 TF
     for(int tf = 0; tf < 7; tf++) {
