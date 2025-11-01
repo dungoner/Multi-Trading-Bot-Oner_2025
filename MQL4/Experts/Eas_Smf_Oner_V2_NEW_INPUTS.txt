@@ -7,7 +7,7 @@
 #property strict
 
 //=============================================================================
-//  PART 1: USER INPUTS (28 inputs) | CAU HINH NGUOI DUNG
+//  PART 1: USER INPUTS (30 inputs) | CAU HINH NGUOI DUNG
 //=============================================================================
 
 //-----------------------------------------------------------------------------
@@ -64,18 +64,23 @@ input int BonusOrderCount = 2;         // S3: Bonus orders count (1-5) | So lenh
 input int MinNewsLevelBonus = 20;      // S3: Min NEWS for Bonus (10-70) | Muc NEWS cho bonus
 
 //-----------------------------------------------------------------------------
-// SECTION C: RISK PROTECTION (4 inputs) | BAO VE RUI RO
+// SECTION C: RISK PROTECTION (6 inputs) | BAO VE RUI RO
 //-----------------------------------------------------------------------------
 
 //--- C.1 Stoploss mode (2) | Che do cat lo
 enum STOPLOSS_MODE {
+    NONE = 0,            // No stoploss (close by signal only)
     LAYER1_MAXLOSS = 1,  // Layer1: max_loss × lot
     LAYER2_MARGIN = 2    // Layer2: margin / divisor(emergency)
 };
 input STOPLOSS_MODE StoplossMode = LAYER1_MAXLOSS;  // Stoploss mode | Che do cat lo
 input double Layer2_Divisor = 20.0;  // Layer2 margin divisor (default 20) | So chia margin tang 2 (mac dinh 20)
 
-//--- C.2 Health check & reset (2) | Kiem tra suc khoe va reset
+//--- C.2 Take profit (2) | Chot loi
+input bool   UseTakeProfit = false;  // Enable take profit (FALSE=OFF, TRUE=ON) | Bat chot loi
+input double TakeProfit_Multiplier = 3.0;  // TP multiplier (0.5=50%, 1.0=100%, 3.0=300%) | He so nhan chot loi
+
+//--- C.3 Health check & reset (2) | Kiem tra suc khoe va reset
 input bool EnableWeekendReset = true;   // Enable weekend reset (Saturday 00:01, M1 only) | Bat reset cuoi tuan (Thu 7 00:01, chi M1)
 input bool EnableHealthCheck = true;    // Enable health check (8h/16h, M1 only) | Bat kiem tra suc khoe (8h/16h, chi M1)
 
