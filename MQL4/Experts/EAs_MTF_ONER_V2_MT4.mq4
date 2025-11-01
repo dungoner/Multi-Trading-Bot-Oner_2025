@@ -2064,35 +2064,35 @@ void OnTimer() {
         // STEP 2: Map data for all 7 TF | Anh xa du lieu cho 7 khung
         MapCSDLToEAVariables();
 
-        // STEP 2.5: Close ALL BONUS orders when M1 signal changes | Dong TAT CA lenh BONUS khi M1 thay doi
-        // LOGIC: M1 is TRIGGER (condition), but CLOSE action affects ALL 7 TF bonus orders
-        // LOGIC: M1 la DIEU KIEN (kich hoat), nhung hanh dong DONG anh huong TAT CA 7 khung lenh bonus
-        if(EnableBonusNews && HasValidS2BaseCondition(0)) {  // 0 = M1 index
-            CloseAllBonusOrders();  // Close magic[tf][2] for ALL 7 TF
-        }
-
         // STEP 3: Strategy processing loop for 7 TF | Vong lap xu ly chien luoc cho 7 khung
         // IMPORTANT: CLOSE function runs on ALL 7 TF (no TF filter) | QUAN TRONG: Ham dong chay TAT CA 7 TF (khong loc TF)
         // OPEN function respects TF/Strategy toggles | Ham mo tuan theo bat/tat TF/Chien luoc
         for(int tf = 0; tf < 7; tf++) {
             if(HasValidS2BaseCondition(tf)) {
 
-                // Close old orders for this TF (ALL 3 strategies) | Dong lenh cu cua TF (TAT CA 3 chien luoc)
+                // STEP 3.1: Close ALL BONUS orders when M1 signal changes | Dong TAT CA lenh BONUS khi M1 thay doi
+                // LOGIC: Check if current TF is M1 (tf==0), if yes close ALL 7 TF bonus orders
+                // LOGIC: Kiem tra neu TF hien tai la M1, neu dung dong TAT CA 7 khung lenh bonus
+                if(tf == 0 && EnableBonusNews) {
+                    CloseAllBonusOrders();  // Close magic[tf][2] for ALL 7 TF
+                }
+
+                // STEP 3.2: Close old orders for this TF (ALL 3 strategies) | Dong lenh cu cua TF (TAT CA 3 chien luoc)
                 CloseAllStrategiesByMagicForTF(tf);
 
-                // Open new orders (ONLY if TF enabled) | Mo lenh moi (CHI neu TF bat)
+                // STEP 3.3: Open new orders (ONLY if TF enabled) | Mo lenh moi (CHI neu TF bat)
                 if(IsTFEnabled(tf)) {
                     if(S1_HOME) ProcessS1Strategy(tf);
                     if(S2_TREND) ProcessS2Strategy(tf);
                     if(S3_NEWS) ProcessS3Strategy(tf);
                 }
 
-                // STEP 3.5: Process Bonus NEWS (scans ALL 7 TF, opens if NEWS >= threshold, must be before old=new) | Xu ly Bonus tin tuc (quet 7 TF, mo neu NEWS du, phai truoc gan old=new)
+                // STEP 3.4: Process Bonus NEWS (scans ALL 7 TF, opens if NEWS >= threshold, must be before old=new) | Xu ly Bonus tin tuc (quet 7 TF, mo neu NEWS du, phai truoc gan old=new)
                 if(EnableBonusNews) {
                     ProcessBonusNews();
                 }
 
-                // Update baseline from CSDL | Cap nhat moc tu CSDL
+                // STEP 3.5: Update baseline from CSDL | Cap nhat moc tu CSDL
                 g_ea.signal_old[tf] = g_ea.csdl_rows[tf].signal;
                 g_ea.timestamp_old[tf] = (datetime)g_ea.csdl_rows[tf].timestamp;
             }
@@ -2105,8 +2105,8 @@ void OnTimer() {
     //=============================================================================
     // WHY ODD: These functions don't need fresh CSDL data ? Run independently ? Reduce load on EVEN seconds
     // TAI SAO LE: Cac ham nay khong can CSDL moi ? Chay doc lap ? Giam tai cho giay CHAN
-    // NOTE: Always runs on ODD seconds, independent of UseEvenOddMode | Luon chay giay LE, doc lap voi UseEvenOddMode
-    if(current_second % 2 != 0) {
+    // NOTE: Respects UseEvenOddMode - if disabled, runs every second | Tuan theo UseEvenOddMode - neu tat, chay moi giay
+    if(!UseEvenOddMode || (current_second % 2 != 0)) {
 
         // STEP 1: Check stoploss & take profit | Kiem tra cat lo & chot loi
         CheckStoplossAndTakeProfit();
