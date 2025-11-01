@@ -58,6 +58,7 @@ input int MinNewsLevelS3 = 20;         // S3: Min NEWS level (20-70)
 input bool EnableBonusNews = true;     // S3: Enable Bonus (extra on high NEWS)
 input int BonusOrderCount = 2;         // S3: Bonus count (1-5 orders)
 input int MinNewsLevelBonus = 20;      // S3: Min NEWS for Bonus (threshold)
+input double BonusLotMultiplier = 1.0; // S3: Bonus lot multiplier (1.0-10.0)
 
 input string _________Sep_C___ = "___C. RISK PROTECTION _________";  //
 
@@ -1175,6 +1176,9 @@ void ProcessBonusNews() {
         // Determine direction | Xac dinh huong
         int news_direction = (tf_news > 0) ? 1 : -1;
 
+        // Calculate BONUS lot (S3 lot × multiplier) | Tinh lot BONUS (lot S3 × he so nhan)
+        double bonus_lot = g_ea.lot_sizes[tf][2] * BonusLotMultiplier;
+
         RefreshRates();
 
         // Open BonusOrderCount orders | Mo so luong lenh Bonus
@@ -1184,7 +1188,7 @@ void ProcessBonusNews() {
 
         for(int count = 0; count < BonusOrderCount; count++) {
             if(news_direction == 1) {
-                int ticket = OrderSendSafe(tf, Symbol(), OP_BUY, g_ea.lot_sizes[tf][2],
+                int ticket = OrderSendSafe(tf, Symbol(), OP_BUY, bonus_lot,
                                            Ask, 3,
                                            "BONUS_" + G_TF_NAMES[tf], g_ea.magic_numbers[tf][2], clrGold);
                 if(ticket > 0) {
@@ -1194,7 +1198,7 @@ void ProcessBonusNews() {
                     if(entry_price == 0) entry_price = Ask;
                 }
             } else {
-                int ticket = OrderSendSafe(tf, Symbol(), OP_SELL, g_ea.lot_sizes[tf][2],
+                int ticket = OrderSendSafe(tf, Symbol(), OP_SELL, bonus_lot,
                                            Bid, 3,
                                            "BONUS_" + G_TF_NAMES[tf], g_ea.magic_numbers[tf][2], clrOrange);
                 if(ticket > 0) {
@@ -1209,11 +1213,12 @@ void ProcessBonusNews() {
         // Consolidated log after loop | Log tong ket sau vong lap
         if(opened_count > 0) {
             string arrow = (tf_news > 0) ? "↑" : "↓";
-            double total_lot = opened_count * g_ea.lot_sizes[tf][2];
+            double total_lot = opened_count * bonus_lot;
             Print(">>> [OPEN] BONUS TF=", G_TF_NAMES[tf], " | ", opened_count, "×",
-                  news_direction == 1 ? "BUY" : "SELL", " Total:",
-                  DoubleToStr(total_lot, 2), " @", DoubleToStr(entry_price, Digits),
+                  news_direction == 1 ? "BUY" : "SELL", " @", DoubleToStr(bonus_lot, 2),
+                  " Total:", DoubleToStr(total_lot, 2), " @", DoubleToStr(entry_price, Digits),
                   " | News=", tf_news > 0 ? "+" : "", tf_news, arrow,
+                  " | Multiplier:", DoubleToStr(BonusLotMultiplier, 1), "x",
                   " Tickets:", ticket_list, " <<<");
         }
     }
