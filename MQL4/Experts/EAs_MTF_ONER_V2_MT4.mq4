@@ -1,9 +1,11 @@
 //+------------------------------------------------------------------+
-//| Eas_Smf_Oner_V2
-//| Multi Timeframe Expert Advisor | EA nhieu khung thoi gian
+//| EAs_MTF_ONER_V2_MT4
+//| Multi Timeframe Expert Advisor for MT4 | EA nhieu khung thoi gian cho MT4
 //| 7 TF × 3 Strategies = 21 orders | 7 khung x 3 chien luoc = 21 lenh
+//| Version: 2.0 (MT4) | Phien ban: 2.0 (MT4)
 //+------------------------------------------------------------------+
-#property copyright "Eas_Smf_Oner_V2"
+#property copyright "EAs_MTF_ONER_V2_MT4"
+#property version "2.00"
 #property strict
 
 //=============================================================================
