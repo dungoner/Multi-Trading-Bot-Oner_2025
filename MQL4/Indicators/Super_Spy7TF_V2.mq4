@@ -735,8 +735,9 @@ bool ProcessSignalForTF(int tf_idx, int signal, long signal_time) {
     string price_str = DoubleToString(current_price, 5);
     string pricediff_str = (pricediff_usd >= 0) ? "+" + DoubleToString(pricediff_usd, 2) : DoubleToString(pricediff_usd, 2);
     string news_str_log = (news_result >= 0) ? "+" + IntegerToString(news_result) : IntegerToString(news_result);
-    Print(">>> [SPY] " + tf_names[tf_idx] + " " + signal_text + " @ " + TimeToString(signal_time, TIME_DATE|TIME_MINUTES) +
-          " | Price: " + price_str + " | Diff: " + pricediff_str + " USD | Time: " + IntegerToString(timediff_min) + "m | NEWS: " + news_str_log + " | CSDL WRITTEN <<<");
+    Print("=> [SPY] " + tf_names[tf_idx] + " " + signal_text + " @ " + TimeToString(signal_time, TIME_DATE|TIME_MINUTES) +
+          " | Timestamp: " + IntegerToString(signal_time) +
+          " | Price: " + price_str + " | Diff: " + pricediff_str + " USD | Time: " + IntegerToString(timediff_min) + "m | NEWS: " + news_str_log + " | CSDL WRITTEN <=");
 
     // Dashboard will be updated by OnTimer() every second
 

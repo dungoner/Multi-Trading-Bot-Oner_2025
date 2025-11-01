@@ -865,6 +865,7 @@ bool RestoreOrCleanupPositions() {
 void CloseAllStrategiesByMagicForTF(int tf) {
     int signal_old = g_ea.signal_old[tf];
     int signal_new = g_ea.csdl_rows[tf].signal;
+    datetime timestamp_new = (datetime)g_ea.csdl_rows[tf].timestamp;
 
     for(int i = OrdersTotal() - 1; i >= 0; i--) {
         if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) continue;
@@ -890,7 +891,8 @@ void CloseAllStrategiesByMagicForTF(int tf) {
             Print(">> [CLOSE] SIGNAL_CHG TF=", G_TF_NAMES[tf], " S=", (strategy_index+1),
                   " | #", ticket, " ", order_type_str, " ", DoubleToStr(order_lot, 2),
                   " | Profit=$", DoubleToStr(order_profit, 2),
-                  " | Old:", signal_old, " New:", signal_new, " <<");
+                  " | Old:", signal_old, " New:", signal_new,
+                  " | Timestamp:", IntegerToString(timestamp_new), " <<");
 
             CloseOrderSafely(ticket, "SIGNAL_CHANGE");
         }
@@ -925,6 +927,7 @@ bool HasValidS2BaseCondition(int tf) {
 // Used when S1_UseNewsFilter = FALSE | Dung khi S1_UseNewsFilter = FALSE
 void ProcessS1BasicStrategy(int tf) {
     int current_signal = g_ea.csdl_rows[tf].signal;
+    datetime timestamp = (datetime)g_ea.csdl_rows[tf].timestamp;
 
     RefreshRates();
 
@@ -936,7 +939,7 @@ void ProcessS1BasicStrategy(int tf) {
             g_ea.position_flags[tf][0] = 1;
             Print(">>> [OPEN] S1_BASIC TF=", G_TF_NAMES[tf], " | #", ticket, " BUY ",
                   DoubleToStr(g_ea.lot_sizes[tf][0], 2), " @", DoubleToStr(Ask, Digits),
-                  " | Sig=+1 <<<");
+                  " | Sig=+1 | Timestamp:", IntegerToString(timestamp), " <<<");
         } else {
             g_ea.position_flags[tf][0] = 0;
             Print("[S1_BASIC_", G_TF_NAMES[tf], "] Failed: ", GetLastError());
@@ -950,7 +953,7 @@ void ProcessS1BasicStrategy(int tf) {
             g_ea.position_flags[tf][0] = 1;
             Print(">>> [OPEN] S1_BASIC TF=", G_TF_NAMES[tf], " | #", ticket, " SELL ",
                   DoubleToStr(g_ea.lot_sizes[tf][0], 2), " @", DoubleToStr(Bid, Digits),
-                  " | Sig=-1 <<<");
+                  " | Sig=-1 | Timestamp:", IntegerToString(timestamp), " <<<");
         } else {
             g_ea.position_flags[tf][0] = 0;
             Print("[S1_BASIC_", G_TF_NAMES[tf], "] Failed: ", GetLastError());
@@ -962,10 +965,11 @@ void ProcessS1BasicStrategy(int tf) {
 // Used when S1_UseNewsFilter = TRUE | Dung khi S1_UseNewsFilter = TRUE
 // Conditions: 1) news_abs >= MinNewsLevelS1, 2) signal == news_direction (if required)
 void ProcessS1NewsFilterStrategy(int tf) {
-    
+
     int current_signal = g_ea.csdl_rows[tf].signal;
     int tf_news = g_ea.csdl_rows[tf].news;
     int news_abs = MathAbs(tf_news);
+    datetime timestamp = (datetime)g_ea.csdl_rows[tf].timestamp;
 
     // Condition 1: Check NEWS level >= MinNewsLevelS1 | Dieu kien 1: Kiem tra muc NEWS
     if(news_abs < MinNewsLevelS1) {
@@ -999,7 +1003,7 @@ void ProcessS1NewsFilterStrategy(int tf) {
             Print(">>> [OPEN] S1_NEWS TF=", G_TF_NAMES[tf], " | #", ticket, " BUY ",
                   DoubleToStr(g_ea.lot_sizes[tf][0], 2), " @", DoubleToStr(Ask, Digits),
                   " | Sig=+1 News=", tf_news > 0 ? "+" : "", tf_news,
-                  " Filter:", filter_str, " Dir:", dir_str, " <<<");
+                  " Filter:", filter_str, " Dir:", dir_str, " | Timestamp:", IntegerToString(timestamp), " <<<");
         } else {
             g_ea.position_flags[tf][0] = 0;
             Print("[S1_NEWS_", G_TF_NAMES[tf], "] Failed: ", GetLastError());
@@ -1016,7 +1020,7 @@ void ProcessS1NewsFilterStrategy(int tf) {
             Print(">>> [OPEN] S1_NEWS TF=", G_TF_NAMES[tf], " | #", ticket, " SELL ",
                   DoubleToStr(g_ea.lot_sizes[tf][0], 2), " @", DoubleToStr(Bid, Digits),
                   " | Sig=-1 News=", tf_news > 0 ? "+" : "", tf_news,
-                  " Filter:", filter_str, " Dir:", dir_str, " <<<");
+                  " Filter:", filter_str, " Dir:", dir_str, " | Timestamp:", IntegerToString(timestamp), " <<<");
         } else {
             g_ea.position_flags[tf][0] = 0;
             Print("[S1_NEWS_", G_TF_NAMES[tf], "] Failed: ", GetLastError());
@@ -1038,6 +1042,7 @@ void ProcessS1Strategy(int tf) {
 // ENHANCED: Support 3 modes (auto D1 / force BUY / force SELL) | CAI TIEN: Ho tro 3 che do (tu dong D1 / chi BUY / chi SELL)
 void ProcessS2Strategy(int tf) {
     int current_signal = g_ea.csdl_rows[tf].signal;
+    datetime timestamp = (datetime)g_ea.csdl_rows[tf].timestamp;
 
     // NEW: Determine trend based on mode | Xac dinh xu huong theo che do
     int trend_to_follow = 0;
@@ -1073,7 +1078,7 @@ void ProcessS2Strategy(int tf) {
             string mode_str = (S2_TrendMode == 0) ? "AUTO" : (S2_TrendMode == 1) ? "FBUY" : "FSELL";
             Print(">>> [OPEN] S2_TREND TF=", G_TF_NAMES[tf], " | #", ticket, " BUY ",
                   DoubleToStr(g_ea.lot_sizes[tf][1], 2), " @", DoubleToStr(Ask, Digits),
-                  " | Sig=+1 Trend:", trend_str, " Mode:", mode_str, " <<<");
+                  " | Sig=+1 Trend:", trend_str, " Mode:", mode_str, " | Timestamp:", IntegerToString(timestamp), " <<<");
         } else {
             g_ea.position_flags[tf][1] = 0;
             Print("[S2_", G_TF_NAMES[tf], "] Failed: ", GetLastError());
@@ -1089,7 +1094,7 @@ void ProcessS2Strategy(int tf) {
             string mode_str = (S2_TrendMode == 0) ? "AUTO" : (S2_TrendMode == 1) ? "FBUY" : "FSELL";
             Print(">>> [OPEN] S2_TREND TF=", G_TF_NAMES[tf], " | #", ticket, " SELL ",
                   DoubleToStr(g_ea.lot_sizes[tf][1], 2), " @", DoubleToStr(Bid, Digits),
-                  " | Sig=-1 Trend:", trend_str, " Mode:", mode_str, " <<<");
+                  " | Sig=-1 Trend:", trend_str, " Mode:", mode_str, " | Timestamp:", IntegerToString(timestamp), " <<<");
         } else {
             g_ea.position_flags[tf][1] = 0;
             Print("[S2_", G_TF_NAMES[tf], "] Failed: ", GetLastError());
@@ -1103,6 +1108,7 @@ void ProcessS3Strategy(int tf) {
     // Read NEWS for this TF | Doc NEWS cua TF nay
     int tf_news = g_ea.csdl_rows[tf].news;
     int news_abs = MathAbs(tf_news);
+    datetime timestamp = (datetime)g_ea.csdl_rows[tf].timestamp;
 
     // Check NEWS level >= MinNewsLevelS3 | Kiem tra muc NEWS >= nguong
     if(news_abs < MinNewsLevelS3) {
@@ -1132,7 +1138,7 @@ void ProcessS3Strategy(int tf) {
             string arrow = (tf_news > 0) ? "↑" : "↓";
             Print(">>> [OPEN] S3_NEWS TF=", G_TF_NAMES[tf], " | #", ticket, " BUY ",
                   DoubleToStr(g_ea.lot_sizes[tf][2], 2), " @", DoubleToStr(Ask, Digits),
-                  " | Sig=+1 News=", tf_news > 0 ? "+" : "", tf_news, arrow, " <<<");
+                  " | Sig=+1 News=", tf_news > 0 ? "+" : "", tf_news, arrow, " | Timestamp:", IntegerToString(timestamp), " <<<");
         } else {
             g_ea.position_flags[tf][2] = 0;
             Print("[S3_", G_TF_NAMES[tf], "] Failed: ", GetLastError());
@@ -1147,7 +1153,7 @@ void ProcessS3Strategy(int tf) {
             string arrow = (tf_news > 0) ? "↑" : "↓";
             Print(">>> [OPEN] S3_NEWS TF=", G_TF_NAMES[tf], " | #", ticket, " SELL ",
                   DoubleToStr(g_ea.lot_sizes[tf][2], 2), " @", DoubleToStr(Bid, Digits),
-                  " | Sig=-1 News=", tf_news > 0 ? "+" : "", tf_news, arrow, " <<<");
+                  " | Sig=-1 News=", tf_news > 0 ? "+" : "", tf_news, arrow, " | Timestamp:", IntegerToString(timestamp), " <<<");
         } else {
             g_ea.position_flags[tf][2] = 0;
             Print("[S3_", G_TF_NAMES[tf], "] Failed: ", GetLastError());
