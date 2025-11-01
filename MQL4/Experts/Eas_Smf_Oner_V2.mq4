@@ -1882,14 +1882,13 @@ void UpdateDashboard() {
 
     // ===== LINE 0: HEADER (YELLOW) | TIEU DE (VANG)
     string header = "[" + g_ea.symbol_name + "] " + folder + " | 7TFx3S | D1:" + trend +
-                    " News:" + IntegerToString(g_ea.news_level) + news_dir +
                     " | $" + DoubleToStr(equity, 0) + " DD:" + DoubleToStr(dd, 1) + "% | " +
                     IntegerToString(total_orders) + "/21";
     CreateOrUpdateLabel("dash_0", header, 10, y_pos, clrYellow, 9);
     y_pos += line_height;
 
     // ===== LINE 1: SEPARATOR (White) | DUONG GACH (Trang)
-    CreateOrUpdateLabel("dash_1", "--------------------------------------------------------------", 10, y_pos, clrWhite, 9);
+    CreateOrUpdateLabel("dash_1", "---------------------------------------------", 10, y_pos, clrWhite, 9);
     y_pos += line_height;
 
     // ===== LINE 2: COLUMN HEADERS (White) | TEN COT (Trang)
@@ -1899,7 +1898,7 @@ void UpdateDashboard() {
     y_pos += line_height;
 
     // ===== LINE 3: SEPARATOR (White) | DUONG GACH (Trang)
-    CreateOrUpdateLabel("dash_3", "--------------------------------------------------------------", 10, y_pos, clrWhite, 9);
+    CreateOrUpdateLabel("dash_3", "---------------------------------------------", 10, y_pos, clrWhite, 9);
     y_pos += line_height;
 
     // ===== LINES 4-10: 7 TF ROWS - ALTERNATING COLORS + P&L | 7 HANG TF - 2 MAU XEN KE + LAI LO
@@ -1938,7 +1937,7 @@ void UpdateDashboard() {
     }
 
     // ===== LINE 11: SEPARATOR (White) | DUONG GACH (Trang)
-    CreateOrUpdateLabel("dash_11", "--------------------------------------------------------------", 10, y_pos, clrWhite, 9);
+    CreateOrUpdateLabel("dash_11", "---------------------------------------------", 10, y_pos, clrWhite, 9);
     y_pos += line_height;
 
     // ===== LINE 12: BONUS STATUS (White) | TRANG THAI BONUS (Trang)
