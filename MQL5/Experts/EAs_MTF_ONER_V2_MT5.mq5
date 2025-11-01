@@ -1382,8 +1382,8 @@ void CheckStoplossAndTakeProfit() {
 
 // Check emergency conditions (drawdown) - log only
 void CheckAllEmergencyConditions() {
-    double equity = AccountEquity();
-    double balance = AccountBalance();
+    double equity = AccountInfoDouble(ACCOUNT_EQUITY);
+    double balance = AccountInfoDouble(ACCOUNT_BALANCE);
 
     if(balance > 0) {
         double drawdown_percent = ((balance - equity) / balance) * 100;
@@ -1426,7 +1426,7 @@ void SmartTFReset() {
 
     // Step 2: Reset OTHER charts FIRST (6 charts: M1/M5/M15/M30/H1/H4 or M5/M15/M30/H1/H4/D1)
     for(int i = 0; i < total_charts; i++) {
-        int other_period = ChartPeriod(chart_ids[i]);
+        ENUM_TIMEFRAMES other_period = (ENUM_TIMEFRAMES)ChartPeriod(chart_ids[i]);
         Print("[RESET] Step ", (i+1), "/", total_charts, ": Chart TF ", other_period, " (via W1)...");
 
         ChartSetSymbolPeriod(chart_ids[i], current_symbol, PERIOD_W1);
@@ -1439,7 +1439,7 @@ void SmartTFReset() {
     Print("[RESET] Step ", (total_charts+1), "/", (total_charts+1), ": Current chart TF ", current_period, " (LAST - via W1)...");
     ChartSetSymbolPeriod(current_chart_id, current_symbol, PERIOD_W1);
     Sleep(1000);
-    ChartSetSymbolPeriod(current_chart_id, current_symbol, current_period);
+    ChartSetSymbolPeriod(current_chart_id, current_symbol, (ENUM_TIMEFRAMES)current_period);
     Sleep(1000);
 
     Print("[SMART_TF_RESET] ? Completed! ", (total_charts + 1), " charts reset");
@@ -1457,16 +1457,18 @@ void CheckWeekendReset() {
     if(Period() != PERIOD_M1) return;
 
     datetime current_time = TimeCurrent();
-    int day_of_week = TimeDayOfWeek(current_time);
-    int hour = TimeHour(current_time);
-    int minute = TimeMinute(current_time);
+    MqlDateTime dt;
+    TimeToStruct(current_time, dt);
+    int day_of_week = dt.day_of_week;
+    int hour = dt.hour;
+    int minute = dt.min;
 
     // Only on Saturday (6) at 0h:01 (minute 01 exactly)
     // IMPORTANT: NOT 0h:00 to avoid conflict with SPY Bot!
     if(day_of_week != 6 || hour != 0 || minute != 3) return;
 
     // Prevent duplicate reset (once per day)
-    int current_day = TimeDay(current_time);
+    int current_day = dt.day;
     if(current_day == g_ea.weekend_last_day) return;  // Already reset today
 
     Print("[WEEKEND_RESET] Saturday 00:03 - M1 chart triggering weekly reset...");
@@ -1488,7 +1490,9 @@ void CheckSPYBotHealth() {
     if(Period() != PERIOD_M1) return;
 
     datetime current_time = TimeCurrent();
-    int hour = TimeHour(current_time);
+    MqlDateTime dt;
+    TimeToStruct(current_time, dt);
+    int hour = dt.hour;
 
     // Only check at 8h & 16h (NOT 24h - conflicts with weekend reset)
     if(hour != 8 && hour != 16) return;
@@ -1853,8 +1857,8 @@ void UpdateDashboard() {
     int y_pos = y_start;
 
     // ===== LEVERAGE: Account info
-    double equity = AccountEquity();
-    double balance = AccountBalance();
+    double equity = AccountInfoDouble(ACCOUNT_EQUITY);
+    double balance = AccountInfoDouble(ACCOUNT_BALANCE);
     double dd = (balance > 0) ? ((balance - equity) / balance) * 100 : 0;
 
     // ===== LEVERAGE: Scan orders ONCE and count by strategy
@@ -1971,8 +1975,8 @@ void UpdateDashboard() {
     y_pos += line_height;
 
     // ===== LINE 14: BROKER INFO (Yellow)
-    string broker = AccountCompany();
-    int leverage = AccountLeverage();
+    string broker = AccountInfoString(ACCOUNT_COMPANY);
+    int leverage = (int)AccountInfoInteger(ACCOUNT_LEVERAGE);
     string broker_info = broker + " | Lev:1:" + IntegerToString(leverage) + " | 2s";
     CreateOrUpdateLabel("dash_14", broker_info, 10, y_pos, clrYellow, 8);
 
@@ -2001,7 +2005,7 @@ void CreateOrUpdateLabel(string name, string text, int x, int y, color clr, int 
 void OnTimer() {
     datetime current_time = TimeCurrent();
     MqlDateTime dt;
-    TimeToStringuct(current_time, dt);
+    TimeToStruct(current_time, dt);
     int current_second = dt.sec;
 
     // Prevent duplicate execution in same second
