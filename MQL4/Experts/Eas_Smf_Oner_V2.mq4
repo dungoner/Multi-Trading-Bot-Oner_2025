@@ -1149,32 +1149,6 @@ void ProcessBonusNews() {
     }
 }
 
-// Close all Bonus NEWS orders when M1 signal arrives
-// Dong tat ca lenh Bonus khi tin hieu M1 den
-void CloseAllBonusOrders() {
-    // Scan all 7 TF magic numbers | Quet tat ca 7 magic cua TF
-    for(int tf = 0; tf < 7; tf++) {
-        // BUGFIX: Skip if TF disabled | Bo qua neu TF bi tat
-        if(!IsTFEnabled(tf)) continue;
-
-        int target_magic = g_ea.magic_numbers[tf][2];
-
-        // Scan all orders on MT4 | Quet tat ca lenh tren MT4
-        for(int i = OrdersTotal() - 1; i >= 0; i--) {
-            if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) continue;
-            if(OrderSymbol() != Symbol()) continue;
-
-            // If magic matches, close it | Neu magic khop, dong lenh
-            if(OrderMagicNumber() == target_magic) {
-                CloseOrderSafely(OrderTicket(), "BONUS_M1_CLOSE");
-            }
-        }
-
-        // Reset flag | Dat lai co
-        g_ea.position_flags[tf][2] = 0;
-    }
-}
-
 //=============================================================================
 //  PART 15: STOPLOSS CHECKS (2 functions) | KIEM TRA CAT LO
 //=============================================================================
@@ -1787,11 +1761,6 @@ void OnTimer() {
         // STEP 2: Map data for all 7 TF | Anh xa du lieu cho 7 khung
         MapCSDLToEAVariables();
 
-        // STEP 2.5: Close Bonus orders if M1 signal changed | Dong lenh Bonus neu M1 doi tin hieu
-        if(EnableBonusNews && HasValidS2BaseCondition(0)) {
-            CloseAllBonusOrders();
-        }
-
         // STEP 3: Strategy processing loop for 7 TF | Vong lap xu ly chien luoc cho 7 khung
         // IMPORTANT: CLOSE function runs on ALL 7 TF (no TF filter) | QUAN TRONG: Ham dong chay TAT CA 7 TF (khong loc TF)
         // OPEN function respects TF/Strategy toggles | Ham mo tuan theo bat/tat TF/Chien luoc
@@ -1808,14 +1777,19 @@ void OnTimer() {
                     if(S3_NEWS) ProcessS3Strategy(tf);
                 }
 
+                // STEP 3.5: Process Bonus NEWS (scan all 7 TF when ANY TF has new signal) | Xu ly Bonus tin tuc (quet 7 TF khi BAT KY TF nao co tin hieu moi)
+                // LOGIC: ProcessBonusNews() internally scans ALL 7 TF, opens orders if NEWS >= threshold
+                // IMPORTANT: Must be placed BEFORE old=new assignment, otherwise condition never true again
+                // NO M1 CHECK NEEDED: Logic inside already scans all TF, triggered by any TF signal change
+                if(EnableBonusNews) {
+                    ProcessBonusNews();
+                }
+
                 // Update baseline from CSDL | Cap nhat moc tu CSDL
                 g_ea.signal_old[tf] = g_ea.csdl_rows[tf].signal;
                 g_ea.timestamp_old[tf] = (datetime)g_ea.csdl_rows[tf].timestamp;
             }
         }
-
-        // STEP 4: Process Bonus NEWS (scan all 7 TF) | Xu ly Bonus tin tuc (quet 7 TF)
-        ProcessBonusNews();
     }
 
     //=============================================================================
