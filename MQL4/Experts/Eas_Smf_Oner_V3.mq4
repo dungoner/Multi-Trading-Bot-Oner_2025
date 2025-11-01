@@ -1,9 +1,9 @@
 //+------------------------------------------------------------------+
-//| Eas_Smf_Oner_V2
+//| Eas_Smf_Oner_V3
 //| Multi Timeframe Expert Advisor | EA nhieu khung thoi gian
 //| 7 TF × 3 Strategies = 21 orders | 7 khung x 3 chien luoc = 21 lenh
 //+------------------------------------------------------------------+
-#property copyright "Eas_Smf_Oner_V2"
+#property copyright "Eas_Smf_Oner_V3"
 #property strict
 
 //=============================================================================
