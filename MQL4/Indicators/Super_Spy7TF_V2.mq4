@@ -400,7 +400,7 @@ bool WriteCSDL1ArrayToFile() {
     }
 
     // =========================================================================
-    // FILE A: DataAutoOner/SYMBOL.json - WRITE IMMEDIATELY
+    // FILE A: DataAutoOner/SYMBOL.json - DIRECT WRITE (UNCHANGED)
     // =========================================================================
     if(!WriteRowsToJson(json_file_path, rows)) {
         Print("ERROR: WriteCSDL1 - Failed: ", json_file_path);
@@ -408,10 +408,10 @@ bool WriteCSDL1ArrayToFile() {
     }
 
     // =========================================================================
-    // FILE C: DataAutoOner3/SYMBOL.json - WRITE IMMEDIATELY (NEW!)
+    // FILE C: DataAutoOner3/SYMBOL.json - ATOMIC WRITE (FOR PYTHON SYNC)
     // =========================================================================
     string json_file_path_C = "DataAutoOner3\\" + symbol + ".json";
-    if(!WriteRowsToJson(json_file_path_C, rows)) {
+    if(!WriteRowsToJsonAtomic(json_file_path_C, rows)) {
         Print("ERROR: WriteCSDL1 - Failed to write to C: ", json_file_path_C);
         // Don't return false - A is already written successfully
     }
@@ -491,26 +491,26 @@ bool WriteCSDL2ArrayToFile() {
     json_content += "\n]";
 
     // =========================================================================
-    // GHI ĐỒNG BỘ 3 FILE: A, B, C (CÙNG LÚC)
+    // GHI ĐỒNG BỘ 3 FILE: A (DIRECT), B & C (ATOMIC)
     // =========================================================================
 
-    // FILE A: DataAutoOner/SYMBOL_LIVE.json
+    // FILE A: DataAutoOner/SYMBOL_LIVE.json - DIRECT WRITE (UNCHANGED)
     string fileA = DataFolder + symbol + "_LIVE.json";
     if(!WriteFileWithRetry(fileA, json_content)) {
         Print("ERROR: WriteCSDL2 - Failed to write file A: ", fileA);
         return false;
     }
 
-    // FILE B: DataAutoOner2/SYMBOL_LIVE.json - GHI ĐỒNG BỘ
+    // FILE B: DataAutoOner2/SYMBOL_LIVE.json - ATOMIC WRITE (FOR EA)
     string fileB = "DataAutoOner2\\" + symbol + "_LIVE.json";
-    if(!WriteFileWithRetry(fileB, json_content)) {
+    if(!AtomicWriteFileWithRetry(fileB, json_content)) {
         Print("ERROR: WriteCSDL2 - Failed to write file B: ", fileB);
         // Don't return false - A is already written successfully
     }
 
-    // FILE C: DataAutoOner3/SYMBOL_LIVE.json - GHI ĐỒNG BỘ
+    // FILE C: DataAutoOner3/SYMBOL_LIVE.json - ATOMIC WRITE (FOR PYTHON)
     string fileC = "DataAutoOner3\\" + symbol + "_LIVE.json";
-    if(!WriteFileWithRetry(fileC, json_content)) {
+    if(!AtomicWriteFileWithRetry(fileC, json_content)) {
         Print("ERROR: WriteCSDL2 - Failed to write file C: ", fileC);
         // Don't return false - A is already written successfully
     }
@@ -732,18 +732,12 @@ bool ProcessSignalForTF(int tf_idx, int signal, long signal_time) {
 
     // Print 2 dòng vào Expert Tab
     string signal_text = (signal > 0) ? "BUY" : "SELL";
-    string price_str = DoubleToString(current_price, 5);
-    string pricediff_str = (pricediff_usd >= 0) ? "+" + DoubleToString(pricediff_usd, 2) : DoubleToString(pricediff_usd, 2);
-    string news_str_log = (news_result >= 0) ? "+" + IntegerToString(news_result) : IntegerToString(news_result);
-
-    // DÒNG 2: CSDL1 - A (IN SAU CSDL2)
-    Print("->A>" + tf_names[tf_idx] + "< " + signal_text + " @ (" + IntegerToString(signal_time) + ") " + TimeToString(signal_time, TIME_DATE|TIME_MINUTES) +
-          " | Price: " + price_str +
-          " | PriceDiff: " + pricediff_str + " USD" +
-          " | TimeDiff: " + IntegerToString(timediff_min) + "m" +
-          " | NEWS: " + news_str_log);
-
-    // DÒNG 1: CSDL2 Copy s? in TR??C trong CopyCSDL2ToBackupFolders()
+    // SUCCESS LOG SUPPRESSED (no spam) - Uncomment below for debugging
+    // string price_str = DoubleToString(current_price, 5);
+    // string pricediff_str = (pricediff_usd >= 0) ? "+" + DoubleToString(pricediff_usd, 2) : DoubleToString(pricediff_usd, 2);
+    // string news_str_log = (news_result >= 0) ? "+" + IntegerToString(news_result) : IntegerToString(news_result);
+    // Print("->A>" + tf_names[tf_idx] + "< " + signal_text + " @ (" + IntegerToString(signal_time) + ") " + TimeToString(signal_time, TIME_DATE|TIME_MINUTES) +
+    //       " | Price: " + price_str + " | PriceDiff: " + pricediff_str + " USD | TimeDiff: " + IntegerToString(timediff_min) + "m | NEWS: " + news_str_log);
 
     // Dashboard will be updated by OnTimer() every second
 
@@ -878,7 +872,7 @@ void PrintDashboard() {
 
     ObjectCreate(0, news_obj, OBJ_LABEL, 0, 0, 0);
     ObjectSetInteger(0, news_obj, OBJPROP_CORNER, CORNER_LEFT_UPPER);
-    ObjectSetInteger(0, news_obj, OBJPROP_XDISTANCE, 460);  // X position moved farther to avoid overlapping TIMEDIFF
+    ObjectSetInteger(0, news_obj, OBJPROP_XDISTANCE, 470);  // Moved further right to avoid overlapping TimeDiff
     ObjectSetInteger(0, news_obj, OBJPROP_YDISTANCE, y_start + (3 * y_spacing));
     ObjectSetInteger(0, news_obj, OBJPROP_COLOR, clrGold);  // Gold color
     ObjectSetInteger(0, news_obj, OBJPROP_FONTSIZE, 8);
@@ -1338,6 +1332,85 @@ bool WriteFileWithRetry(string filename, string content) {
     // ROUND 2 FAILED ? Simple warning (NO STOP BOT)
     Print("? File write failed after 2 rounds (", Retry*2, " attempts): ", filename, " - Bot continues");
     return false;
+}
+
+//==============================================================================
+// ATOMIC WRITE FUNCTIONS - SAFE FOR CONCURRENT ACCESS | HAM GHI ATOMIC - AN TOAN CHO TRUY CAP DONG THOI
+//==============================================================================
+
+// Write file atomically using TMP + Rename pattern (no logs unless error) | Ghi file atomic bang pattern TMP + Rename (khong log tru khi loi)
+bool AtomicWriteFile(string filename, string content) {
+    string tmp_filename = filename + ".tmp";
+
+    // PHASE 1: Write to TMP file
+    int handle = FileOpen(tmp_filename, FILE_WRITE|FILE_TXT);
+    if(handle == INVALID_HANDLE) {
+        Print("ERROR: AtomicWrite - Cannot create tmp: ", tmp_filename);
+        return false;
+    }
+
+    FileWrite(handle, content);
+    FileClose(handle);
+
+    // PHASE 2: Verify TMP exists
+    if(!FileIsExist(tmp_filename)) {
+        Print("ERROR: AtomicWrite - TMP not found after write: ", tmp_filename);
+        return false;
+    }
+
+    // PHASE 3: Atomic rename (delete old + rename TMP)
+    if(FileIsExist(filename)) {
+        FileDelete(filename);
+    }
+
+    if(!FileMove(tmp_filename, 0, filename, 0)) {
+        Print("ERROR: AtomicWrite - Rename failed: ", tmp_filename, " → ", filename);
+        FileDelete(tmp_filename);  // Cleanup orphan
+        return false;
+    }
+
+    return true;
+}
+
+// Atomic write with 2-round retry (no logs unless error) | Ghi atomic voi thu lai 2 vong (khong log tru khi loi)
+bool AtomicWriteFileWithRetry(string filename, string content) {
+    // ROUND 1: First 3 attempts
+    for(int retry = 0; retry < Retry; retry++) {
+        if(AtomicWriteFile(filename, content)) {
+            return true;
+        }
+        Sleep(250);
+    }
+
+    // ROUND 1 FAILED ? Try to unlock file
+    int handle_unlock = FileOpen(filename, FILE_READ|FILE_SHARE_READ|FILE_SHARE_WRITE);
+    if(handle_unlock != INVALID_HANDLE) {
+        FileClose(handle_unlock);
+    }
+    Sleep(250);
+
+    // ROUND 2: Second 3 attempts
+    for(int retry = 0; retry < Retry; retry++) {
+        if(AtomicWriteFile(filename, content)) {
+            return true;
+        }
+        Sleep(250);
+    }
+
+    Print("ERROR: AtomicWriteFileWithRetry - Failed after ", Retry*2, " attempts: ", filename);
+    return false;
+}
+
+// Write rows to JSON with atomic write (for Folder C only) | Ghi rows vao JSON voi atomic write (chi cho Folder C)
+bool WriteRowsToJsonAtomic(string file_path, string& rows[]) {
+    string json_content = BuildEnhancedJsonContent(rows);
+
+    // Use atomic write mechanism
+    if(!AtomicWriteFileWithRetry(file_path, json_content)) {
+        return false;
+    }
+
+    return true;
 }
 
 // Discover symbol from current chart or input parameter | Phat hien symbol tu bieu do hien tai hoac tham so dau vao
@@ -2636,9 +2709,9 @@ void ProcessAllSignals() {
         int current_signal = (int)GlobalVariableGet(signal_var);
         long current_signal_time = (long)GlobalVariableGet(time_var);
 
-        // KIEM TRA: signal MOI != 0 && signal MOI != signal CU && time MOI > time CU
+        // KIEM TRA: signal MOI != 0 && signal MOI != signal CU && time MOI > time CU -> TẮT: current_signal != g_symbol_data.signals[i]
         if(current_signal != 0 &&
-           current_signal != g_symbol_data.signals[i] &&
+//           current_signal != g_symbol_data.signals[i] &&
            current_signal_time > g_symbol_data.processed_timestamps[i]) {
             ProcessSignalForTF(i, current_signal, current_signal_time);
         }
@@ -2744,20 +2817,20 @@ void SmartTFReset() {
         temp_chart = ChartNext(temp_chart);
     }
 
-    // Step 2: Reset 6 TF con lai TRUOC (W1 -> original TF, delay 1s)
+    // Step 2: Reset 6 TF con lai TRUOC (W1 -> original TF, delay 2s)
     for(int i = 0; i < total_charts; i++) {
         int other_period = ChartPeriod(chart_ids[i]);
         ChartSetSymbolPeriod(chart_ids[i], current_symbol, PERIOD_W1);
-        Sleep(1000);  // Delay 1s
+        Sleep(2000);  // Delay 2s (slower for MT4 stability)
         ChartSetSymbolPeriod(chart_ids[i], current_symbol, other_period);
-        Sleep(1000);  // Delay 1s
+        Sleep(2000);  // Delay 2s (slower for MT4 stability)
     }
 
     // Step 3: Reset chart HIEN TAI CUOI CUNG (de nhan dien lai 6 TF con lai)
     ChartSetSymbolPeriod(current_chart_id, current_symbol, PERIOD_W1);
-    Sleep(1000);  // Delay 1s
+    Sleep(2000);  // Delay 2s (slower for MT4 stability)
     ChartSetSymbolPeriod(current_chart_id, current_symbol, current_period);
-    Sleep(1000);  // Delay 1s
+    Sleep(2000);  // Delay 2s (slower for MT4 stability)
 
     Print("SmartTFReset: ", current_symbol, " | ", (total_charts + 1), " charts reset");
 }
