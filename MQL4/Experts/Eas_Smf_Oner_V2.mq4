@@ -1777,10 +1777,7 @@ void OnTimer() {
                     if(S3_NEWS) ProcessS3Strategy(tf);
                 }
 
-                // STEP 3.5: Process Bonus NEWS (scan all 7 TF when ANY TF has new signal) | Xu ly Bonus tin tuc (quet 7 TF khi BAT KY TF nao co tin hieu moi)
-                // LOGIC: ProcessBonusNews() internally scans ALL 7 TF, opens orders if NEWS >= threshold
-                // IMPORTANT: Must be placed BEFORE old=new assignment, otherwise condition never true again
-                // NO M1 CHECK NEEDED: Logic inside already scans all TF, triggered by any TF signal change
+                // STEP 3.5: Process Bonus NEWS (scans ALL 7 TF, opens if NEWS >= threshold, must be before old=new) | Xu ly Bonus tin tuc (quet 7 TF, mo neu NEWS du, phai truoc gan old=new)
                 if(EnableBonusNews) {
                     ProcessBonusNews();
                 }
