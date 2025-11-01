@@ -93,7 +93,7 @@ input double Layer2_Divisor = 5.0;  // Layer2 divisor (margin/-5 = threshold)
 input bool   UseTakeProfit = false;  // Enable take profit (FALSE=OFF, TRUE=ON)
 input double TakeProfit_Multiplier = 3;  // TP multiplier (0.5=5%, 1.0=10%, 5.0=50%)
 
-input string _________Sep_D___ = "___D. AUXILIARY SETTINGS _________";  //
+input string _________Sep_E___ = "___E. AUXILIARY SETTINGS _________";  //
 
 //--- D.1 Performance (1)
 input bool UseEvenOddMode = false;  // Even/odd split mode (load balancing)
@@ -250,11 +250,11 @@ bool CloseOrderSafely(int ticket, string reason) {
         // Error 4108: Invalid ticket ? Position already closed or doesn't exist
         // Loi 4108: Ticket sai ? Vi the da dong hoac khong ton tai
         if(error == 4108) {
-            Print("[CLOSE_FAIL] ", reason, " #", ticket, " Err:4108 (Invalid ticket) - Skip, EA continues");
+            Print("[CLOSE_FAIL] ", reason, " #", IntegerToString(ticket), " Err:4108 (Invalid ticket) - Skip, EA continues");
             return false; // Caller must reset flag
         }
 
-        Print("[CLOSE_FAIL] ", reason, " #", ticket, " Err:", error, " (Select failed) - Skip, EA continues");
+        Print("[CLOSE_FAIL] ", reason, " #", IntegerToString(ticket), " Err:", IntegerToString(error), " (Select failed) - Skip, EA continues");
         return false;
     }
 
@@ -275,11 +275,11 @@ bool CloseOrderSafely(int ticket, string reason) {
     // Case 1: Context busy OR Requote ? Retry 1 time
     // TH 1: MT5 ban HOAC Gia thay doi ? Thu lai 1 lan
     if(error == 10018 || error == 10021) {  // MT5: ERR_TRADE_TIMEOUT, ERR_TRADE_MARKET_CLOSED
-        Print("[CLOSE_FAIL] ", reason, " #", ticket, " Err:", error, " (Retry 1x)");
+        Print("[CLOSE_FAIL] ", reason, " #", IntegerToString(ticket), " Err:", IntegerToString(error), " (Retry 1x)");
         Sleep(100);
 
         if(!PositionSelectByTicket(ticket)) {
-            Print("[CLOSE_FAIL] ", reason, " #", ticket, " Retry select failed - Skip, EA continues");
+            Print("[CLOSE_FAIL] ", reason, " #", IntegerToString(ticket), " Retry select failed - Skip, EA continues");
             return false;
         }
 
@@ -291,13 +291,13 @@ bool CloseOrderSafely(int ticket, string reason) {
         }
 
         error = GetLastError();
-        Print("[CLOSE_FAIL] ", reason, " #", ticket, " Retry Err:", error, " - Skip, EA continues");
+        Print("[CLOSE_FAIL] ", reason, " #", IntegerToString(ticket), " Retry Err:", IntegerToString(error), " - Skip, EA continues");
         return false;
     }
 
     // Case 2: Other errors ? Log and continue
     // TH 2: Loi khac ? Ghi nhan va tiep tuc
-    Print("[CLOSE_FAIL] ", reason, " #", ticket, " Err:", error, " - Skip, EA continues");
+    Print("[CLOSE_FAIL] ", reason, " #", IntegerToString(ticket), " Err:", IntegerToString(error), " - Skip, EA continues");
     return false;
 }
 
@@ -337,7 +337,7 @@ int OrderSendSafe(int tf, string symbol, int cmd, double lot_smart,
     // Case 1: Not enough money OR Invalid volume ? Retry with 0.01 lot
     // TH 1: Het von HOAC Lot sai ? Thu lai voi 0.01 lot
     if(error == 10019 || error == 10014) {  // MT5: ERR_TRADE_NOT_ENOUGH_MONEY, ERR_TRADE_VOLUME_LIMIT
-        Print("[ORDER_FAIL] ", comment, " Err:", error, " (Retry 0.01 lot)");
+        Print("[ORDER_FAIL] ", comment, " Err:", IntegerToString(error), " (Retry 0.01 lot)");
 
         if(cmd == OP_BUY) {
             result = trade.Buy(0.01, symbol, price, 0, 0, comment + "_Min");
@@ -351,14 +351,14 @@ int OrderSendSafe(int tf, string symbol, int cmd, double lot_smart,
         }
 
         error = GetLastError();
-        Print("[ORDER_FAIL] ", comment, "_Min Err:", error, " - Skip, EA continues");
+        Print("[ORDER_FAIL] ", comment, "_Min Err:", IntegerToString(error), " - Skip, EA continues");
         return -1;
     }
 
     // Case 2: Context busy OR Requote ? Retry 1 time
     // TH 2: MT5 ban HOAC Gia thay doi ? Thu lai 1 lan
     if(error == 10018 || error == 10004) {  // MT5: ERR_TRADE_TIMEOUT, ERR_TRADE_REQUOTE
-        Print("[ORDER_FAIL] ", comment, " Err:", error, " (Retry 1x)");
+        Print("[ORDER_FAIL] ", comment, " Err:", IntegerToString(error), " (Retry 1x)");
         Sleep(100);
 
         if(cmd == OP_BUY) price = SymbolInfoDouble(symbol, SYMBOL_ASK);
@@ -376,13 +376,13 @@ int OrderSendSafe(int tf, string symbol, int cmd, double lot_smart,
         }
 
         error = GetLastError();
-        Print("[ORDER_FAIL] ", comment, " Retry Err:", error, " - Skip, EA continues");
+        Print("[ORDER_FAIL] ", comment, " Retry Err:", IntegerToString(error), " - Skip, EA continues");
         return -1;
     }
 
     // Case 3: Other errors ? Log and continue
     // TH 3: Loi khac ? Ghi nhan va tiep tuc
-    Print("[ORDER_FAIL] ", comment, " Err:", error, " - Skip, EA continues");
+    Print("[ORDER_FAIL] ", comment, " Err:", IntegerToString(error), " - Skip, EA continues");
     return -1;
 }
 
@@ -690,9 +690,9 @@ void InitializeLotSizes() {
     }
 
     // Silent - only debug log
-    DebugPrint("Lot M1: S1=" + DoubleToStr(g_ea.lot_sizes[0][0], 2) +
-               " S2=" + DoubleToStr(g_ea.lot_sizes[0][1], 2) +
-               " S3=" + DoubleToStr(g_ea.lot_sizes[0][2], 2));
+    DebugPrint("Lot M1: S1=" + DoubleToString(g_ea.lot_sizes[0][0], 2) +
+               " S2=" + DoubleToString(g_ea.lot_sizes[0][1], 2) +
+               " S3=" + DoubleToString(g_ea.lot_sizes[0][2], 2));
 }
 
 //=============================================================================
@@ -716,9 +716,9 @@ void InitializeLayer1Thresholds() {
     }
 
     // Silent - only debug log
-    DebugPrint("Layer1 M1: S1=$" + DoubleToStr(g_ea.layer1_thresholds[0][0], 2) +
-               " S2=$" + DoubleToStr(g_ea.layer1_thresholds[0][1], 2) +
-               " S3=$" + DoubleToStr(g_ea.layer1_thresholds[0][2], 2));
+    DebugPrint("Layer1 M1: S1=$" + DoubleToString(g_ea.layer1_thresholds[0][0], 2) +
+               " S2=$" + DoubleToString(g_ea.layer1_thresholds[0][1], 2) +
+               " S3=$" + DoubleToString(g_ea.layer1_thresholds[0][2], 2));
 }
 
 //=============================================================================
@@ -912,10 +912,10 @@ void CloseAllStrategiesByMagicForTF(int tf) {
 
         if(strategy_index >= 0) {
             string order_type_str = (position_type == POSITION_TYPE_BUY) ? "BUY" : "SELL";
-            Print(">> [CLOSE] SIGNAL_CHG TF=", G_TF_NAMES[tf], " S=", (strategy_index+1),
-                  " | #", ticket, " ", order_type_str, " ", DoubleToStr(order_lot, 2),
-                  " | Profit=$", DoubleToStr(order_profit, 2),
-                  " | Old:", signal_old, " New:", signal_new,
+            Print(">> [CLOSE] SIGNAL_CHG TF=", G_TF_NAMES[tf], " S=", IntegerToString(strategy_index+1),
+                  " | #", IntegerToString(ticket), " ", order_type_str, " ", DoubleToString(order_lot, 2),
+                  " | Profit=$", DoubleToString(order_profit, 2),
+                  " | Old:", IntegerToString(signal_old), " New:", IntegerToString(signal_new),
                   " | Timestamp:", IntegerToString(timestamp_new), " <<");
 
             CloseOrderSafely((int)ticket, "SIGNAL_CHANGE");
@@ -965,9 +965,9 @@ void CloseAllBonusOrders() {
         // Consolidated log
         if(total_count > 0) {
             Print(">> [CLOSE] BONUS_M1 TF=", G_TF_NAMES[tf],
-                  " | ", total_count, " orders Total:", DoubleToStr(total_lot, 2),
-                  " | Profit=$", DoubleToStr(total_profit, 2),
-                  " | Closed:", closed_count, "/", total_count, " <<");
+                  " | ", IntegerToString(total_count), " orders Total:", DoubleToString(total_lot, 2),
+                  " | Profit=$", DoubleToString(total_profit, 2),
+                  " | Closed:", IntegerToString(closed_count), "/", IntegerToString(total_count), " <<");
         }
 
         g_ea.position_flags[tf][2] = 0;  // Reset BONUS flag
@@ -1001,7 +1001,7 @@ void OpenS1Order(int tf, int signal, string mode) {
     // MT5: Price update handled automatically
 
     int cmd = (signal == 1) ? OP_BUY : OP_SELL;
-    double price = (signal == 1) ? Ask : Bid;
+    double price = (signal == 1) ? SymbolInfoDouble(Symbol(), SYMBOL_ASK) : SymbolInfoDouble(Symbol(), SYMBOL_BID);
     color clr = (signal == 1) ? clrBlue : clrRed;
     string type_str = (signal == 1) ? "BUY" : "SELL";
 
@@ -1014,7 +1014,7 @@ void OpenS1Order(int tf, int signal, string mode) {
 
         string log_msg = ">>> [OPEN] S1_" + mode + " TF=" + G_TF_NAMES[tf] +
                          " | #" + IntegerToString(ticket) + " " + type_str + " " +
-                         DoubleToStr(g_ea.lot_sizes[tf][0], 2) + " @" + DoubleToStr(price, Digits) +
+                         DoubleToString(g_ea.lot_sizes[tf][0], 2) + " @" + DoubleToString(price, _Digits) +
                          " | Sig=" + IntegerToString(signal);
 
         if(mode == "NEWS") {
@@ -1111,34 +1111,34 @@ void ProcessS2Strategy(int tf) {
 
     if(current_signal == 1) {
         int ticket = OrderSendSafe(tf, Symbol(), OP_BUY, g_ea.lot_sizes[tf][1],
-                                   Ask, 3,
+                                   SymbolInfoDouble(Symbol(), SYMBOL_ASK), 3,
                                    "S2_" + G_TF_NAMES[tf], g_ea.magic_numbers[tf][1], clrBlue);
         if(ticket > 0) {
             g_ea.position_flags[tf][1] = 1;
             string trend_str = trend_to_follow == 1 ? "UP" : "DOWN";
             string mode_str = (S2_TrendMode == 0) ? "AUTO" : (S2_TrendMode == 1) ? "FBUY" : "FSELL";
-            Print(">>> [OPEN] S2_TREND TF=", G_TF_NAMES[tf], " | #", ticket, " BUY ",
-                  DoubleToStr(g_ea.lot_sizes[tf][1], 2), " @", DoubleToStr(Ask, Digits),
+            Print(">>> [OPEN] S2_TREND TF=", G_TF_NAMES[tf], " | #", IntegerToString(ticket), " BUY ",
+                  DoubleToString(g_ea.lot_sizes[tf][1], 2), " @", DoubleToString(SymbolInfoDouble(Symbol(), SYMBOL_ASK), _Digits),
                   " | Sig=+1 Trend:", trend_str, " Mode:", mode_str, " | Timestamp:", IntegerToString(timestamp), " <<<");
         } else {
             g_ea.position_flags[tf][1] = 0;
-            Print("[S2_", G_TF_NAMES[tf], "] Failed: ", GetLastError());
+            Print("[S2_", G_TF_NAMES[tf], "] Failed: ", IntegerToString(GetLastError()));
         }
     }
     else if(current_signal == -1) {
         int ticket = OrderSendSafe(tf, Symbol(), OP_SELL, g_ea.lot_sizes[tf][1],
-                                   Bid, 3,
+                                   SymbolInfoDouble(Symbol(), SYMBOL_BID), 3,
                                    "S2_" + G_TF_NAMES[tf], g_ea.magic_numbers[tf][1], clrRed);
         if(ticket > 0) {
             g_ea.position_flags[tf][1] = 1;
             string trend_str = trend_to_follow == -1 ? "DOWN" : "UP";
             string mode_str = (S2_TrendMode == 0) ? "AUTO" : (S2_TrendMode == 1) ? "FBUY" : "FSELL";
-            Print(">>> [OPEN] S2_TREND TF=", G_TF_NAMES[tf], " | #", ticket, " SELL ",
-                  DoubleToStr(g_ea.lot_sizes[tf][1], 2), " @", DoubleToStr(Bid, Digits),
+            Print(">>> [OPEN] S2_TREND TF=", G_TF_NAMES[tf], " | #", IntegerToString(ticket), " SELL ",
+                  DoubleToString(g_ea.lot_sizes[tf][1], 2), " @", DoubleToString(SymbolInfoDouble(Symbol(), SYMBOL_BID), _Digits),
                   " | Sig=-1 Trend:", trend_str, " Mode:", mode_str, " | Timestamp:", IntegerToString(timestamp), " <<<");
         } else {
             g_ea.position_flags[tf][1] = 0;
-            Print("[S2_", G_TF_NAMES[tf], "] Failed: ", GetLastError());
+            Print("[S2_", G_TF_NAMES[tf], "] Failed: ", IntegerToString(GetLastError()));
         }
     }
 }
@@ -1172,32 +1172,32 @@ void ProcessS3Strategy(int tf) {
 
     if(current_signal == 1) {
         int ticket = OrderSendSafe(tf, Symbol(), OP_BUY, g_ea.lot_sizes[tf][2],
-                                   Ask, 3,
+                                   SymbolInfoDouble(Symbol(), SYMBOL_ASK), 3,
                                    "S3_" + G_TF_NAMES[tf], g_ea.magic_numbers[tf][2], clrBlue);
         if(ticket > 0) {
             g_ea.position_flags[tf][2] = 1;
             string arrow = (tf_news > 0) ? "↑" : "↓";
-            Print(">>> [OPEN] S3_NEWS TF=", G_TF_NAMES[tf], " | #", ticket, " BUY ",
-                  DoubleToStr(g_ea.lot_sizes[tf][2], 2), " @", DoubleToStr(Ask, Digits),
-                  " | Sig=+1 News=", tf_news > 0 ? "+" : "", tf_news, arrow, " | Timestamp:", IntegerToString(timestamp), " <<<");
+            Print(">>> [OPEN] S3_NEWS TF=", G_TF_NAMES[tf], " | #", IntegerToString(ticket), " BUY ",
+                  DoubleToString(g_ea.lot_sizes[tf][2], 2), " @", DoubleToString(SymbolInfoDouble(Symbol(), SYMBOL_ASK), _Digits),
+                  " | Sig=+1 News=", tf_news > 0 ? "+" : "", IntegerToString(tf_news), arrow, " | Timestamp:", IntegerToString(timestamp), " <<<");
         } else {
             g_ea.position_flags[tf][2] = 0;
-            Print("[S3_", G_TF_NAMES[tf], "] Failed: ", GetLastError());
+            Print("[S3_", G_TF_NAMES[tf], "] Failed: ", IntegerToString(GetLastError()));
         }
     }
     else if(current_signal == -1) {
         int ticket = OrderSendSafe(tf, Symbol(), OP_SELL, g_ea.lot_sizes[tf][2],
-                                   Bid, 3,
+                                   SymbolInfoDouble(Symbol(), SYMBOL_BID), 3,
                                    "S3_" + G_TF_NAMES[tf], g_ea.magic_numbers[tf][2], clrRed);
         if(ticket > 0) {
             g_ea.position_flags[tf][2] = 1;
             string arrow = (tf_news > 0) ? "↑" : "↓";
-            Print(">>> [OPEN] S3_NEWS TF=", G_TF_NAMES[tf], " | #", ticket, " SELL ",
-                  DoubleToStr(g_ea.lot_sizes[tf][2], 2), " @", DoubleToStr(Bid, Digits),
-                  " | Sig=-1 News=", tf_news > 0 ? "+" : "", tf_news, arrow, " | Timestamp:", IntegerToString(timestamp), " <<<");
+            Print(">>> [OPEN] S3_NEWS TF=", G_TF_NAMES[tf], " | #", IntegerToString(ticket), " SELL ",
+                  DoubleToString(g_ea.lot_sizes[tf][2], 2), " @", DoubleToString(SymbolInfoDouble(Symbol(), SYMBOL_BID), _Digits),
+                  " | Sig=-1 News=", tf_news > 0 ? "+" : "", IntegerToString(tf_news), arrow, " | Timestamp:", IntegerToString(timestamp), " <<<");
         } else {
             g_ea.position_flags[tf][2] = 0;
-            Print("[S3_", G_TF_NAMES[tf], "] Failed: ", GetLastError());
+            Print("[S3_", G_TF_NAMES[tf], "] Failed: ", IntegerToString(GetLastError()));
         }
     }
 }
@@ -1236,23 +1236,23 @@ void ProcessBonusNews() {
         for(int count = 0; count < BonusOrderCount; count++) {
             if(news_direction == 1) {
                 int ticket = OrderSendSafe(tf, Symbol(), OP_BUY, bonus_lot,
-                                           Ask, 3,
+                                           SymbolInfoDouble(Symbol(), SYMBOL_ASK), 3,
                                            "BONUS_" + G_TF_NAMES[tf], g_ea.magic_numbers[tf][2], clrGold);
                 if(ticket > 0) {
                     opened_count++;
                     if(ticket_list != "") ticket_list = ticket_list + ",";
                     ticket_list = ticket_list + IntegerToString(ticket);
-                    if(entry_price == 0) entry_price = Ask;
+                    if(entry_price == 0) entry_price = SymbolInfoDouble(Symbol(), SYMBOL_ASK);
                 }
             } else {
                 int ticket = OrderSendSafe(tf, Symbol(), OP_SELL, bonus_lot,
-                                           Bid, 3,
+                                           SymbolInfoDouble(Symbol(), SYMBOL_BID), 3,
                                            "BONUS_" + G_TF_NAMES[tf], g_ea.magic_numbers[tf][2], clrOrange);
                 if(ticket > 0) {
                     opened_count++;
                     if(ticket_list != "") ticket_list = ticket_list + ",";
                     ticket_list = ticket_list + IntegerToString(ticket);
-                    if(entry_price == 0) entry_price = Bid;
+                    if(entry_price == 0) entry_price = SymbolInfoDouble(Symbol(), SYMBOL_BID);
                 }
             }
         }
@@ -1261,11 +1261,11 @@ void ProcessBonusNews() {
         if(opened_count > 0) {
             string arrow = (tf_news > 0) ? "↑" : "↓";
             double total_lot = opened_count * bonus_lot;
-            Print(">>> [OPEN] BONUS TF=", G_TF_NAMES[tf], " | ", opened_count, "×",
-                  news_direction == 1 ? "BUY" : "SELL", " @", DoubleToStr(bonus_lot, 2),
-                  " Total:", DoubleToStr(total_lot, 2), " @", DoubleToStr(entry_price, Digits),
-                  " | News=", tf_news > 0 ? "+" : "", tf_news, arrow,
-                  " | Multiplier:", DoubleToStr(BonusLotMultiplier, 1), "x",
+            Print(">>> [OPEN] BONUS TF=", G_TF_NAMES[tf], " | ", IntegerToString(opened_count), "×",
+                  news_direction == 1 ? "BUY" : "SELL", " @", DoubleToString(bonus_lot, 2),
+                  " Total:", DoubleToString(total_lot, 2), " @", DoubleToString(entry_price, _Digits),
+                  " | News=", tf_news > 0 ? "+" : "", IntegerToString(tf_news), arrow,
+                  " | Multiplier:", DoubleToString(BonusLotMultiplier, 1), "x",
                   " Tickets:", ticket_list, " <<<");
         }
     }
@@ -1327,12 +1327,12 @@ void CheckStoplossAndTakeProfit() {
                             string margin_info = "";
                             if(mode_name == "LAYER2_SL") {
                                 double margin_usd = position_volume * SymbolInfoDouble(Symbol(), SYMBOL_MARGIN_INITIAL);
-                                margin_info = " Margin=$" + DoubleToStr(margin_usd, 2);
+                                margin_info = " Margin=$" + DoubleToString(margin_usd, 2);
                             }
-                            Print(">> [CLOSE] ", short_mode, " TF=", G_TF_NAMES[tf], " S=", (s+1),
-                                  " | #", ticket, " ", order_type_str, " ", DoubleToStr(position_volume, 2),
-                                  " | Loss=$", DoubleToStr(profit, 2),
-                                  " | Threshold=$", DoubleToStr(sl_threshold, 2), margin_info, " <<");
+                            Print(">> [CLOSE] ", short_mode, " TF=", G_TF_NAMES[tf], " S=", IntegerToString(s+1),
+                                  " | #", IntegerToString(ticket), " ", order_type_str, " ", DoubleToString(position_volume, 2),
+                                  " | Loss=$", DoubleToString(profit, 2),
+                                  " | Threshold=$", DoubleToString(sl_threshold, 2), margin_info, " <<");
 
                             if(CloseOrderSafely((int)ticket, mode_name)) {
                                 g_ea.position_flags[tf][s] = 0;
@@ -1355,11 +1355,11 @@ void CheckStoplossAndTakeProfit() {
                         // Check and close if profit exceeds threshold
                         if(profit >= tp_threshold) {
                             string order_type_str = (position_type == POSITION_TYPE_BUY) ? "BUY" : "SELL";
-                            Print(">> [CLOSE] TP TF=", G_TF_NAMES[tf], " S=", (s+1),
-                                  " | #", ticket, " ", order_type_str, " ", DoubleToStr(position_volume, 2),
-                                  " | Profit=$", DoubleToStr(profit, 2),
-                                  " | Threshold=$", DoubleToStr(tp_threshold, 2),
-                                  " Mult=", DoubleToStr(TakeProfit_Multiplier, 2), " <<");
+                            Print(">> [CLOSE] TP TF=", G_TF_NAMES[tf], " S=", IntegerToString(s+1),
+                                  " | #", IntegerToString(ticket), " ", order_type_str, " ", DoubleToString(position_volume, 2),
+                                  " | Profit=$", DoubleToString(profit, 2),
+                                  " | Threshold=$", DoubleToString(tp_threshold, 2),
+                                  " Mult=", DoubleToString(TakeProfit_Multiplier, 2), " <<");
 
                             if(CloseOrderSafely((int)ticket, "TAKE_PROFIT")) {
                                 g_ea.position_flags[tf][s] = 0;
@@ -1389,7 +1389,7 @@ void CheckAllEmergencyConditions() {
         double drawdown_percent = ((balance - equity) / balance) * 100;
 
         if(drawdown_percent > 25.0) {
-            Print("[WARNING] Drawdown: ", DoubleToStr(drawdown_percent, 2), "%");
+            Print("[WARNING] Drawdown: ", DoubleToString(drawdown_percent, 2), "%");
         }
     }
 }
@@ -1510,8 +1510,8 @@ void CheckSPYBotHealth() {
     // If diff > 8 hours (28800 seconds) ? SPY Bot frozen!
     if(diff_seconds > 28800) {
         Print("[HEALTH_CHECK] ? SPY Bot FROZEN!");
-        Print("[HEALTH_CHECK] Server time: ", TimeToStr(current_time, TIME_DATE|TIME_SECONDS));
-        Print("[HEALTH_CHECK] Last CSDL update: ", TimeToStr(m1_timestamp, TIME_DATE|TIME_SECONDS));
+        Print("[HEALTH_CHECK] Server time: ", TimeToString(current_time, TIME_DATE|TIME_SECONDS));
+        Print("[HEALTH_CHECK] Last CSDL update: ", TimeToString(m1_timestamp, TIME_DATE|TIME_SECONDS));
         Print("[HEALTH_CHECK] M1 chart triggering Smart TF Reset...");
 
         Alert("?? SPY Bot frozen! Auto-reset all ", g_ea.symbol_name, " charts!");
@@ -1602,7 +1602,7 @@ int OnInit() {
     if(S3_NEWS) { strat_status += "S3,"; strat_count++; }
     if(StringLen(strat_status) > 0) strat_status = StringSubstr(strat_status, 0, StringLen(strat_status) - 1);
 
-    string sl_mode = (StoplossMode == LAYER1_MAXLOSS) ? "L1" : ("L2/" + DoubleToStr(Layer2_Divisor, 0));
+    string sl_mode = (StoplossMode == LAYER1_MAXLOSS) ? "L1" : ("L2/" + DoubleToString(Layer2_Divisor, 0));
     string master_mode = (Period()==PERIOD_M1) ? "M1" : "M5-D1";
 
     // CSDL source name
@@ -1617,7 +1617,7 @@ int OnInit() {
 
     g_ea.init_summary = "[INIT] " + g_ea.symbol_name + " | SL:" + sl_mode +
                         " News:STRONGEST(" + news_str + ") Trend:" + trend_str +
-                        " | Lot:" + DoubleToStr(g_ea.lot_sizes[0][0], 2) + "-" + DoubleToStr(g_ea.lot_sizes[6][2], 2) +
+                        " | Lot:" + DoubleToString(g_ea.lot_sizes[0][0], 2) + "-" + DoubleToString(g_ea.lot_sizes[6][2], 2) +
                         " | TF:" + IntegerToString(tf_count) + " S:" + IntegerToString(strat_count) +
                         " | Folder:" + folder_name + " Master:" + master_mode +
                         " Magic:" + IntegerToString(g_ea.magic_numbers[0][0]) + "-" + IntegerToString(g_ea.magic_numbers[6][2]);
@@ -1687,7 +1687,7 @@ void ScanAllOrdersForDashboard(int &total_orders, double &total_profit, double &
                 s1_count++;
                 if(s1_count <= 7) {  // Max 7 (all TF)
                     if(s1_count > 1) s1_summary += ", ";
-                    s1_summary += "S1_" + G_TF_NAMES[tf] + "[$" + DoubleToStr(margin_usd, 0) + "]";
+                    s1_summary += "S1_" + G_TF_NAMES[tf] + "[$" + DoubleToString(margin_usd, 0) + "]";
                 }
                 break;
             }
@@ -1701,7 +1701,7 @@ void ScanAllOrdersForDashboard(int &total_orders, double &total_profit, double &
                 if(s2s3_count <= 7) {  // Show first 7
                     string strategy = (magic == g_ea.magic_numbers[tf][1]) ? "S2" : "S3";
                     if(s2s3_count > 1) s2s3_summary += ", ";
-                    s2s3_summary += strategy + "_" + G_TF_NAMES[tf] + "[$" + DoubleToStr(margin_usd, 0) + "]";
+                    s2s3_summary += strategy + "_" + G_TF_NAMES[tf] + "[$" + DoubleToString(margin_usd, 0) + "]";
                 }
                 break;
             }
@@ -1828,7 +1828,7 @@ string FormatBonusStatus() {
     if(bonus_list == "") bonus_list = "None";
 
     // Format timestamp (last BONUS open time)
-    string last_time = TimeToStr(TimeCurrent(), TIME_SECONDS);
+    string last_time = TimeToString(TimeCurrent(), TIME_SECONDS);
 
     // Build final status line
     string result = "BONUS: " + bonus_list + " | " + status + " | Last:" + last_time;
@@ -1893,7 +1893,7 @@ void UpdateDashboard() {
 
     // ===== LINE 0: HEADER (YELLOW)
     string header = "[" + g_ea.symbol_name + "] " + folder + " | 7TFx3S | D1:" + trend +
-                    " | $" + DoubleToStr(equity, 0) + " DD:" + DoubleToStr(dd, 1) + "% | " +
+                    " | $" + DoubleToString(equity, 0) + " DD:" + DoubleToString(dd, 1) + "% | " +
                     IntegerToString(total_orders) + "/21";
     CreateOrUpdateLabel("dash_0", header, 10, y_pos, clrYellow, 9);
     y_pos += line_height;
@@ -1922,15 +1922,15 @@ void UpdateDashboard() {
         else sig = "-";                             // NONE
 
         // S1/S2/S3 positions
-        string s1 = (g_ea.position_flags[tf][0] == 1) ? "*" + DoubleToStr(g_ea.lot_sizes[tf][0], 2) : "o";
-        string s2 = (g_ea.position_flags[tf][1] == 1) ? "*" + DoubleToStr(g_ea.lot_sizes[tf][1], 2) : "o";
-        string s3 = (g_ea.position_flags[tf][2] == 1) ? "*" + DoubleToStr(g_ea.lot_sizes[tf][2], 2) : "o";
+        string s1 = (g_ea.position_flags[tf][0] == 1) ? "*" + DoubleToString(g_ea.lot_sizes[tf][0], 2) : "o";
+        string s2 = (g_ea.position_flags[tf][1] == 1) ? "*" + DoubleToString(g_ea.lot_sizes[tf][1], 2) : "o";
+        string s3 = (g_ea.position_flags[tf][2] == 1) ? "*" + DoubleToString(g_ea.lot_sizes[tf][2], 2) : "o";
 
         // P&L for this TF (all strategies)
         double tf_pnl = CalculateTFPnL(tf);
         string pnl_str = "";
-        if(tf_pnl > 0) pnl_str = "+" + DoubleToStr(tf_pnl, 2);
-        else if(tf_pnl < 0) pnl_str = DoubleToStr(tf_pnl, 2);
+        if(tf_pnl > 0) pnl_str = "+" + DoubleToString(tf_pnl, 2);
+        else if(tf_pnl < 0) pnl_str = DoubleToString(tf_pnl, 2);
         else pnl_str = "+0.00";
 
         // News with sign
@@ -1958,12 +1958,12 @@ void UpdateDashboard() {
 
     // ===== LINE 13: NET SUMMARY (Yellow)
     double net = total_profit + total_loss;
-    string net_summary = "NET:$" + DoubleToStr(net, 2);
+    string net_summary = "NET:$" + DoubleToString(net, 2);
 
     // Add strategy breakdown if there are orders
-    if(s1_count > 0) net_summary += " | S1:" + IntegerToString(s1_count) + "x$" + DoubleToStr(s1_pnl, 0);
-    if(s2_count > 0) net_summary += " | S2:" + IntegerToString(s2_count) + "x$" + DoubleToStr(s2_pnl, 0);
-    if(s3_count > 0) net_summary += " | S3:" + IntegerToString(s3_count) + "x$" + DoubleToStr(s3_pnl, 1);
+    if(s1_count > 0) net_summary += " | S1:" + IntegerToString(s1_count) + "x$" + DoubleToString(s1_pnl, 0);
+    if(s2_count > 0) net_summary += " | S2:" + IntegerToString(s2_count) + "x$" + DoubleToString(s2_pnl, 0);
+    if(s3_count > 0) net_summary += " | S3:" + IntegerToString(s3_count) + "x$" + DoubleToString(s3_pnl, 1);
 
     net_summary += " | " + IntegerToString(total_orders) + "/21";
 
@@ -2000,7 +2000,9 @@ void CreateOrUpdateLabel(string name, string text, int x, int y, color clr, int 
 // GROUP 2 (ODD): Auxiliary - Stoploss + Dashboard + Health checks
 void OnTimer() {
     datetime current_time = TimeCurrent();
-    int current_second = TimeSeconds(current_time);
+    MqlDateTime dt;
+    TimeToStringuct(current_time, dt);
+    int current_second = dt.sec;
 
     // Prevent duplicate execution in same second
     if(current_time == g_ea.timer_last_run_time) return;
