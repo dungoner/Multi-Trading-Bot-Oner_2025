@@ -906,6 +906,51 @@ void CloseAllStrategiesByMagicForTF(int tf) {
     }
 }
 
+// Close ALL BONUS orders across ALL 7 TF when M1 signal changes | Dong TAT CA lenh BONUS qua 7 khung khi tin hieu M1 thay doi
+// TRIGGER: M1 signal change (HasValidS2BaseCondition(0)) | KICH HOAT: Tin hieu M1 thay doi
+// ACTION: Close magic[tf][2] for ALL 7 TF | HANH DONG: Dong magic[tf][2] cho TAT CA 7 khung
+void CloseAllBonusOrders() {
+    // Scan all 7 TF magic numbers | Quet 7 khung magic
+    for(int tf = 0; tf < 7; tf++) {
+        if(!IsTFEnabled(tf)) continue;
+
+        int target_magic = g_ea.magic_numbers[tf][2];  // S3_BONUS magic
+        int closed_count = 0;
+        int total_count = 0;
+        double total_profit = 0;
+        double total_lot = 0;
+
+        // Scan all orders on MT4 | Quet tat ca lenh tren MT4
+        for(int i = OrdersTotal() - 1; i >= 0; i--) {
+            if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) continue;
+            if(OrderSymbol() != Symbol()) continue;
+
+            // If magic matches, close it | Neu magic trung, dong no
+            if(OrderMagicNumber() == target_magic) {
+                total_count++;
+                double order_profit = OrderProfit() + OrderSwap() + OrderCommission();
+                double order_lot = OrderLots();
+
+                if(CloseOrderSafely(OrderTicket(), "BONUS_M1_CLOSE")) {
+                    closed_count++;
+                    total_profit += order_profit;
+                    total_lot += order_lot;
+                }
+            }
+        }
+
+        // Consolidated log | Log tong hop
+        if(total_count > 0) {
+            Print(">> [CLOSE] BONUS_M1 TF=", G_TF_NAMES[tf],
+                  " | ", total_count, " orders Total:", DoubleToStr(total_lot, 2),
+                  " | Profit=$", DoubleToStr(total_profit, 2),
+                  " | Closed:", closed_count, "/", total_count, " <<");
+        }
+
+        g_ea.position_flags[tf][2] = 0;  // Reset BONUS flag
+    }
+}
+
 //=============================================================================
 //  PART 13: BASE CONDITION CHECK (1 function) | KIEM TRA DIEU KIEN GOC
 //=============================================================================
@@ -2018,6 +2063,13 @@ void OnTimer() {
 
         // STEP 2: Map data for all 7 TF | Anh xa du lieu cho 7 khung
         MapCSDLToEAVariables();
+
+        // STEP 2.5: Close ALL BONUS orders when M1 signal changes | Dong TAT CA lenh BONUS khi M1 thay doi
+        // LOGIC: M1 is TRIGGER (condition), but CLOSE action affects ALL 7 TF bonus orders
+        // LOGIC: M1 la DIEU KIEN (kich hoat), nhung hanh dong DONG anh huong TAT CA 7 khung lenh bonus
+        if(EnableBonusNews && HasValidS2BaseCondition(0)) {  // 0 = M1 index
+            CloseAllBonusOrders();  // Close magic[tf][2] for ALL 7 TF
+        }
 
         // STEP 3: Strategy processing loop for 7 TF | Vong lap xu ly chien luoc cho 7 khung
         // IMPORTANT: CLOSE function runs on ALL 7 TF (no TF filter) | QUAN TRONG: Ham dong chay TAT CA 7 TF (khong loc TF)
