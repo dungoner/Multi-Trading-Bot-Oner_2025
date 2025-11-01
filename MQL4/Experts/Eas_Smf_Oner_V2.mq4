@@ -7,7 +7,7 @@
 #property strict
 
 //=============================================================================
-//  PART 1: USER INPUTS (35 inputs) | CAU HINH NGUOI DUNG
+//  PART 1: USER INPUTS (30 inputs + 4 separators) | CAU HINH NGUOI DUNG
 //=============================================================================
 
 input string _________Menu_A___ = "___A. CORE SETTINGS _________";  //
@@ -87,6 +87,8 @@ input bool EnableHealthCheck = true;    // Health check (8h/16h SPY bot status)
 input bool ShowDashboard = true;  // Show dashboard (on-chart info)
 input bool DebugMode = false;      // Debug mode (verbose logging)
 
+//=============================================================================
+//  PART 2: DATA STRUCTURES (1 struct) | CAU TRUC DU LIEU
 //=============================================================================
 
 struct CSDLLoveRow {
