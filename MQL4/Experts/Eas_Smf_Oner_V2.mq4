@@ -10,7 +10,7 @@
 //  PART 1: USER INPUTS (35 inputs) | CAU HINH NGUOI DUNG
 //=============================================================================
 
-input string Sep_A = "____ A. CORE SETTINGS ____";  //
+input string _________Menu_A___ = "___A. CORE SETTINGS _________";  //
 
 //--- A.1 Timeframe toggles (7) | Bat/tat khung thoi gian
 input bool TF_M1 = true;   // M1 (Signal Sym_M1 Time)
@@ -38,7 +38,7 @@ enum CSDL_SOURCE_ENUM {
 };
 input CSDL_SOURCE_ENUM CSDL_Source = FOLDER_2;  // CSDL folder (signal source)
 
-input string Sep_B = "____ B. STRATEGY CONFIGURATIONS ____";  //
+input string _________Sep_B___ = "___B. STRATEGY CONFIG _________";  //
 
 //--- B.1 S1 NEWS Filter (3) | Loc tin tuc cho S1
 input bool S1_UseNewsFilter = true;            // S1: Use NEWS filter (TRUE=strict, FALSE=basic)
@@ -54,12 +54,12 @@ enum S2_TREND_MODE {
 input S2_TREND_MODE S2_TrendMode = S2_FOLLOW_D1;  // S2: Trend (D1 auto/manual)
 
 //--- B.3 S3 NEWS Configuration (4) | Cau hinh tin tuc
-input int MinNewsLevelS3 = 20;         // S3: Min NEWS level (20-100)
+input int MinNewsLevelS3 = 20;         // S3: Min NEWS level (20-70)
 input bool EnableBonusNews = true;     // S3: Enable Bonus (extra on high NEWS)
 input int BonusOrderCount = 2;         // S3: Bonus count (1-5 orders)
 input int MinNewsLevelBonus = 20;      // S3: Min NEWS for Bonus (threshold)
 
-input string Sep_C = "____ C. RISK PROTECTION ____";  //
+input string _________Sep_C___ = "___C. RISK PROTECTION _________";  //
 
 //--- C.1 Stoploss mode (3) | Che do cat lo
 enum STOPLOSS_MODE {
@@ -72,9 +72,9 @@ input double Layer2_Divisor = 5.0;  // Layer2 divisor (margin/-5 = threshold)
 
 //--- C.2 Take profit (2) | Chot loi
 input bool   UseTakeProfit = false;  // Enable take profit (FALSE=OFF, TRUE=ON)
-input double TakeProfit_Multiplier = 5;  // TP multiplier (0.5=5%, 1.0=10%, 5.0=50%)
+input double TakeProfit_Multiplier = 3;  // TP multiplier (0.5=5%, 1.0=10%, 5.0=50%)
 
-input string Sep_D = "____ D. AUXILIARY SETTINGS ____";  //
+input string _________Sep_D___ = "___D. AUXILIARY SETTINGS _________";  //
 
 //--- D.1 Performance (1) | Hieu suat
 input bool UseEvenOddMode = false;  // Even/odd split mode (load balancing)
@@ -86,91 +86,6 @@ input bool EnableHealthCheck = true;    // Health check (8h/16h SPY bot status)
 //--- D.3 Display (2) | Hien thi
 input bool ShowDashboard = true;  // Show dashboard (on-chart info)
 input bool DebugMode = false;      // Debug mode (verbose logging)
-
-//=============================================================================
-//  PART 2: AUTO-LOAD CONFIG FROM .SET FILE (1 function) | TU DONG TAI CAU HINH
-//=============================================================================
-
-// Auto-load configuration from hardcoded .SET file | Tu dong tai cau hinh tu file .SET co dinh
-// File: MQL4/Presets/config_ea/config_ea_oner.set
-// Called ONCE in OnInit() - overrides INPUT defaults | Goi MOT LAN trong OnInit() - ghi de gia tri INPUT
-void LoadConfigFromSetFile() {
-    string filename = "..\\Presets\\config_ea\\config_ea_oner.set";
-    int handle = FileOpen(filename, FILE_READ|FILE_TXT);
-
-    if(handle == INVALID_HANDLE) {
-        Print("[CONFIG] .SET file not found: ", filename, " - Using INPUT defaults");
-        return;
-    }
-
-    Print("[CONFIG] Auto-loading from: ", filename);
-
-    // Parse file line by line | Phan tich tung dong
-    while(!FileIsEnding(handle)) {
-        string line = FileReadString(handle);
-
-        // Skip separator lines | Bo qua dong phan cach
-        if(StringFind(line, "Sep_") >= 0) continue;
-
-        // Find = position | Tim vi tri dau =
-        int eq_pos = StringFind(line, "=");
-        if(eq_pos < 0) continue;
-
-        // Extract key and value | Trich xuat key va value
-        string key = StringSubstr(line, 0, eq_pos);
-        string value = StringSubstr(line, eq_pos + 1);
-
-        // Parse based on parameter name | Phan tich theo ten tham so
-
-        // A. CORE SETTINGS
-        if(key == "TF_M1") TF_M1 = (value == "true");
-        else if(key == "TF_M5") TF_M5 = (value == "true");
-        else if(key == "TF_M15") TF_M15 = (value == "true");
-        else if(key == "TF_M30") TF_M30 = (value == "true");
-        else if(key == "TF_H1") TF_H1 = (value == "true");
-        else if(key == "TF_H4") TF_H4 = (value == "true");
-        else if(key == "TF_D1") TF_D1 = (value == "true");
-
-        else if(key == "S1_HOME") S1_HOME = (value == "true");
-        else if(key == "S2_TREND") S2_TREND = (value == "true");
-        else if(key == "S3_NEWS") S3_NEWS = (value == "true");
-
-        else if(key == "FixedLotSize") FixedLotSize = StringToDouble(value);
-        else if(key == "MaxLoss_Fallback") MaxLoss_Fallback = StringToDouble(value);
-        else if(key == "CSDL_Source") CSDL_Source = (CSDL_SOURCE_ENUM)StringToInteger(value);
-
-        // B. STRATEGY CONFIGURATIONS
-        else if(key == "S1_UseNewsFilter") S1_UseNewsFilter = (value == "true");
-        else if(key == "MinNewsLevelS1") MinNewsLevelS1 = (int)StringToInteger(value);
-        else if(key == "S1_RequireNewsDirection") S1_RequireNewsDirection = (value == "true");
-
-        else if(key == "S2_TrendMode") S2_TrendMode = (S2_TREND_MODE)StringToInteger(value);
-
-        else if(key == "MinNewsLevelS3") MinNewsLevelS3 = (int)StringToInteger(value);
-        else if(key == "EnableBonusNews") EnableBonusNews = (value == "true");
-        else if(key == "BonusOrderCount") BonusOrderCount = (int)StringToInteger(value);
-        else if(key == "MinNewsLevelBonus") MinNewsLevelBonus = (int)StringToInteger(value);
-
-        // C. RISK PROTECTION
-        else if(key == "StoplossMode") StoplossMode = (STOPLOSS_MODE)StringToInteger(value);
-        else if(key == "Layer2_Divisor") Layer2_Divisor = StringToDouble(value);
-
-        else if(key == "UseTakeProfit") UseTakeProfit = (value == "true");
-        else if(key == "TakeProfit_Multiplier") TakeProfit_Multiplier = StringToDouble(value);
-
-        else if(key == "EnableWeekendReset") EnableWeekendReset = (value == "true");
-        else if(key == "EnableHealthCheck") EnableHealthCheck = (value == "true");
-
-        // D. AUXILIARY SETTINGS
-        else if(key == "UseEvenOddMode") UseEvenOddMode = (value == "true");
-        else if(key == "ShowDashboard") ShowDashboard = (value == "true");
-        else if(key == "DebugMode") DebugMode = (value == "true");
-    }
-
-    FileClose(handle);
-
-    Print("[CONFIG] Loaded successfully - TF_M1=", TF_M1, " FixedLot=", FixedLotSize, " StopMode=", StoplossMode);
-}
 
 //=============================================================================
 
@@ -1423,9 +1338,9 @@ void SmartTFReset() {
     Print("=======================================================");
 }
 
-// Weekend reset (Saturday 00:01) - Trigger SmartTFReset | Reset cuoi tuan - Goi SmartTFReset
+// Weekend reset (Saturday 00:03) - Trigger SmartTFReset | Reset cuoi tuan - Goi SmartTFReset
 // ONLY M1 chart has permission to reset (master chart) | CHI chart M1 co quyen reset (chart master)
-// Time: 00:01 to AVOID conflict with SPY Bot reset at 00:00 | Gio: 00:01 de TRANH xung dot voi SPY Bot reset luc 00:00
+// Time: 00:03 to AVOID conflict with SPY Bot reset at 00:00 | Gio: 00:03 de TRANH xung dot voi SPY Bot reset luc 00:00
 void CheckWeekendReset() {
     // Check if feature is enabled by user | Kiem tra tinh nang co duoc bat boi user
     if(!EnableWeekendReset) return;
@@ -1440,14 +1355,14 @@ void CheckWeekendReset() {
 
     // Only on Saturday (6) at 0h:01 (minute 01 exactly) | Chi vao Thu 7 luc 0h:01 (phut 01 chinh xac)
     // IMPORTANT: NOT 0h:00 to avoid conflict with SPY Bot! | QUAN TRONG: KHONG 0h:00 de tranh xung dot voi SPY Bot!
-    if(day_of_week != 6 || hour != 0 || minute != 1) return;
+    if(day_of_week != 6 || hour != 0 || minute != 3) return;
 
     // Prevent duplicate reset (once per day) | Tranh reset trung lap (1 lan moi ngay)
     int current_day = TimeDay(current_time);
     if(current_day == g_ea.weekend_last_day) return;  // Already reset today | Da reset hom nay roi
 
-    Print("[WEEKEND_RESET] Saturday 00:01 - M1 chart triggering weekly reset...");
-    Print("[WEEKEND_RESET] (Delayed 1 minute to avoid SPY Bot conflict at 00:00)");
+    Print("[WEEKEND_RESET] Saturday 00:03 - M1 chart triggering weekly reset...");
+    Print("[WEEKEND_RESET] (Delayed 3 minute to avoid SPY Bot conflict at 00:00)");
 
     SmartTFReset();  // Call smart reset for all charts | Goi reset thong minh cho tat ca charts
 
@@ -1509,9 +1424,6 @@ void CheckSPYBotHealth() {
 // EA initialization - setup all components | Khoi tao EA - cai dat tat ca thanh phan
 // OPTIMIZED V3.4: Struct-based data isolation for multi-symbol support | TOI UU: Cach ly du lieu theo struct cho da ky hieu
 int OnInit() {
-    // PART 0: Auto-load config from .SET file (ONCE) | Tu dong tai cau hinh tu file .SET (MOT LAN)
-    LoadConfigFromSetFile();
-
     // PART 1: Symbol recognition | Nhan dien ky hieu
     if(!InitializeSymbolRecognition()) return(INIT_FAILED);
     InitializeSymbolPrefix();
