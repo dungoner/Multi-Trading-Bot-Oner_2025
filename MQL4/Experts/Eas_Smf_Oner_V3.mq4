@@ -926,10 +926,8 @@ bool HasValidS2BaseCondition(int tf) {
 void ProcessS1BasicStrategy(int tf) {
     int current_signal = g_ea.csdl_rows[tf].signal;
 
-    // Check timestamp: Only process if data is newer | Kiem tra thoi gian: Chi xu ly neu du lieu moi hon
-    datetime timestamp_old = g_ea.timestamp_old[tf];
-    datetime timestamp_new = (datetime)g_ea.csdl_rows[tf].timestamp;
-    if(timestamp_old >= timestamp_new) return;
+    // Check: valid signal AND newer timestamp | Kiem tra: tin hieu hop le VA thoi gian moi hon
+    if(current_signal == 0 || g_ea.timestamp_old[tf] >= (datetime)g_ea.csdl_rows[tf].timestamp) return;
 
     RefreshRates();
 
@@ -972,10 +970,10 @@ void ProcessS1NewsFilterStrategy(int tf) {
     int tf_news = g_ea.csdl_rows[tf].news;
     int news_abs = MathAbs(tf_news);
 
-    // Condition 1: Check NEWS level >= MinNewsLevelS1 | Dieu kien 1: Kiem tra muc NEWS
-    if(news_abs < MinNewsLevelS1) {
+    // Condition 1: Check NEWS level AND timestamp | Dieu kien 1: Kiem tra muc NEWS VA thoi gian
+    if(news_abs < MinNewsLevelS1 || g_ea.timestamp_old[tf] >= (datetime)g_ea.csdl_rows[tf].timestamp) {
         DebugPrint("S1_NEWS: " + G_TF_NAMES[tf] + " NEWS=" + IntegerToString(news_abs) +
-                   " < Min=" + IntegerToString(MinNewsLevelS1) + ", SKIP");
+                   " < Min=" + IntegerToString(MinNewsLevelS1) + " OR stale timestamp, SKIP");
         return;
     }
 
@@ -989,11 +987,6 @@ void ProcessS1NewsFilterStrategy(int tf) {
             return;
         }
     }
-
-    // Check timestamp: Only process if data is newer | Kiem tra thoi gian: Chi xu ly neu du lieu moi hon
-    datetime timestamp_old = g_ea.timestamp_old[tf];
-    datetime timestamp_new = (datetime)g_ea.csdl_rows[tf].timestamp;
-    if(timestamp_old >= timestamp_new) return;
 
     // PASS all conditions → Open order | PASS tat ca dieu kien → Mo lenh
     RefreshRates();
@@ -1062,17 +1055,12 @@ void ProcessS2Strategy(int tf) {
         trend_to_follow = -1;  // Force SELL only | Chi danh SELL
     }
 
-    // Check signal matches trend | Kiem tra tin hieu khop voi xu huong
-    if(current_signal != trend_to_follow) {
+    // Check signal matches trend AND newer timestamp | Kiem tra tin hieu khop xu huong VA thoi gian moi hon
+    if(current_signal != trend_to_follow || g_ea.timestamp_old[tf] >= (datetime)g_ea.csdl_rows[tf].timestamp) {
         DebugPrint("S2_TREND: Signal=" + IntegerToString(current_signal) +
-                   " != Trend=" + IntegerToString(trend_to_follow) + ", skip");
+                   " != Trend=" + IntegerToString(trend_to_follow) + " OR stale timestamp, skip");
         return;
     }
-
-    // Check timestamp: Only process if data is newer | Kiem tra thoi gian: Chi xu ly neu du lieu moi hon
-    datetime timestamp_old = g_ea.timestamp_old[tf];
-    datetime timestamp_new = (datetime)g_ea.csdl_rows[tf].timestamp;
-    if(timestamp_old >= timestamp_new) return;
 
     RefreshRates();
 
@@ -1125,19 +1113,14 @@ void ProcessS3Strategy(int tf) {
         return;
     }
 
-    // Check NEWS direction matches signal | Kiem tra huong NEWS khop signal
+    // Check NEWS direction matches signal AND newer timestamp | Kiem tra huong NEWS khop signal VA thoi gian moi hon
     int news_direction = (tf_news > 0) ? 1 : -1;
     int current_signal = g_ea.csdl_rows[tf].signal;
 
-    if(current_signal != news_direction) {
-        DebugPrint("S3_NEWS: Signal=" + IntegerToString(current_signal) + " != NewsDir=" + IntegerToString(news_direction) + ", skip");
+    if(current_signal != news_direction || g_ea.timestamp_old[tf] >= (datetime)g_ea.csdl_rows[tf].timestamp) {
+        DebugPrint("S3_NEWS: Signal=" + IntegerToString(current_signal) + " != NewsDir=" + IntegerToString(news_direction) + " OR stale timestamp, skip");
         return;
     }
-
-    // Check timestamp: Only process if data is newer | Kiem tra thoi gian: Chi xu ly neu du lieu moi hon
-    datetime timestamp_old = g_ea.timestamp_old[tf];
-    datetime timestamp_new = (datetime)g_ea.csdl_rows[tf].timestamp;
-    if(timestamp_old >= timestamp_new) return;
 
     RefreshRates();
 
