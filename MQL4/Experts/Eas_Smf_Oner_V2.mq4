@@ -1929,12 +1929,16 @@ void UpdateDashboard() {
         y_pos += line_height;
     }
 
-    // ===== LINE 9: BONUS STATUS (White) | TRANG THAI BONUS (Trang)
-    string bonus_status = FormatBonusStatus();
-    CreateOrUpdateLabel("dash_9", bonus_status, 10, y_pos, clrWhite, 9);
+    // ===== LINE 9: SEPARATOR (White) | DUONG GACH (Trang)
+    CreateOrUpdateLabel("dash_9", "--------------------------------------------------------------", 10, y_pos, clrWhite, 9);
     y_pos += line_height;
 
-    // ===== LINE 10: NET SUMMARY (Yellow) | TOM TAT NET (Vang)
+    // ===== LINE 10: BONUS STATUS (White) | TRANG THAI BONUS (Trang)
+    string bonus_status = FormatBonusStatus();
+    CreateOrUpdateLabel("dash_10", bonus_status, 10, y_pos, clrWhite, 9);
+    y_pos += line_height;
+
+    // ===== LINE 11: NET SUMMARY (Yellow) | TOM TAT NET (Vang)
     double net = total_profit + total_loss;
     string net_summary = "NET:$" + DoubleToStr(net, 2);
 
@@ -1945,17 +1949,17 @@ void UpdateDashboard() {
 
     net_summary += " | " + IntegerToString(total_orders) + "/21";
 
-    CreateOrUpdateLabel("dash_10", net_summary, 10, y_pos, clrYellow, 9);
+    CreateOrUpdateLabel("dash_11", net_summary, 10, y_pos, clrYellow, 9);
     y_pos += line_height;
 
-    // ===== LINE 11: BROKER INFO (Yellow) | THONG TIN SAN (Vang)
+    // ===== LINE 12: BROKER INFO (Yellow) | THONG TIN SAN (Vang)
     string broker = AccountCompany();
     int leverage = AccountLeverage();
     string broker_info = broker + " | Lev:1:" + IntegerToString(leverage) + " | 2s";
-    CreateOrUpdateLabel("dash_11", broker_info, 10, y_pos, clrYellow, 8);
+    CreateOrUpdateLabel("dash_12", broker_info, 10, y_pos, clrYellow, 8);
 
-    // Clean up old unused labels (lines 12-15 from old layout) | Don dep cac nhan cu khong dung (dong 12-15 tu giao dien cu)
-    for(int i = 12; i <= 15; i++) {
+    // Clean up old unused labels (lines 13-15 from old layout) | Don dep cac nhan cu khong dung (dong 13-15 tu giao dien cu)
+    for(int i = 13; i <= 15; i++) {
         ObjectDelete("dash_" + IntegerToString(i));
     }
 }
