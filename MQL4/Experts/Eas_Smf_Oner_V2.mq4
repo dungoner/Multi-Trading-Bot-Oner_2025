@@ -1888,13 +1888,21 @@ void UpdateDashboard() {
     CreateOrUpdateLabel("dash_0", header, 10, y_pos, clrYellow, 9);
     y_pos += line_height;
 
-    // ===== LINE 1: COLUMN HEADERS (White) | TEN COT (Trang)
-    string col_header = PadRight("TF", 5) + PadRight("Sig", 5) + PadRight("S1", 7) +
-                        PadRight("S2", 7) + PadRight("S3", 7) + PadRight("P&L", 9) + "News";
-    CreateOrUpdateLabel("dash_1", col_header, 10, y_pos, clrWhite, 9);
+    // ===== LINE 1: SEPARATOR (White) | DUONG GACH (Trang)
+    CreateOrUpdateLabel("dash_1", "--------------------------------------------------------------", 10, y_pos, clrWhite, 9);
     y_pos += line_height;
 
-    // ===== LINES 2-8: 7 TF ROWS - ALTERNATING COLORS + P&L | 7 HANG TF - 2 MAU XEN KE + LAI LO
+    // ===== LINE 2: COLUMN HEADERS (White) | TEN COT (Trang)
+    string col_header = PadRight("TF", 5) + PadRight("Sig", 5) + PadRight("S1", 7) +
+                        PadRight("S2", 7) + PadRight("S3", 7) + PadRight("P&L", 9) + "News";
+    CreateOrUpdateLabel("dash_2", col_header, 10, y_pos, clrWhite, 9);
+    y_pos += line_height;
+
+    // ===== LINE 3: SEPARATOR (White) | DUONG GACH (Trang)
+    CreateOrUpdateLabel("dash_3", "--------------------------------------------------------------", 10, y_pos, clrWhite, 9);
+    y_pos += line_height;
+
+    // ===== LINES 4-10: 7 TF ROWS - ALTERNATING COLORS + P&L | 7 HANG TF - 2 MAU XEN KE + LAI LO
     for(int tf = 0; tf < 7; tf++) {
         // Signal with ASCII arrows (^ up, v down, - none) | Tin hieu voi mui ten ASCII
         int current_signal = g_ea.csdl_rows[tf].signal;
@@ -1925,20 +1933,20 @@ void UpdateDashboard() {
 
         // Alternating colors: Blue (even rows), White (odd rows) | Mau xen ke: Xanh (dong chan), Trang (dong le)
         color row_color = (tf % 2 == 0) ? clrDodgerBlue : clrWhite;
-        CreateOrUpdateLabel("dash_" + IntegerToString(2 + tf), row, 10, y_pos, row_color, 9);
+        CreateOrUpdateLabel("dash_" + IntegerToString(4 + tf), row, 10, y_pos, row_color, 9);
         y_pos += line_height;
     }
 
-    // ===== LINE 9: SEPARATOR (White) | DUONG GACH (Trang)
-    CreateOrUpdateLabel("dash_9", "--------------------------------------------------------------", 10, y_pos, clrWhite, 9);
+    // ===== LINE 11: SEPARATOR (White) | DUONG GACH (Trang)
+    CreateOrUpdateLabel("dash_11", "--------------------------------------------------------------", 10, y_pos, clrWhite, 9);
     y_pos += line_height;
 
-    // ===== LINE 10: BONUS STATUS (White) | TRANG THAI BONUS (Trang)
+    // ===== LINE 12: BONUS STATUS (White) | TRANG THAI BONUS (Trang)
     string bonus_status = FormatBonusStatus();
-    CreateOrUpdateLabel("dash_10", bonus_status, 10, y_pos, clrWhite, 9);
+    CreateOrUpdateLabel("dash_12", bonus_status, 10, y_pos, clrWhite, 9);
     y_pos += line_height;
 
-    // ===== LINE 11: NET SUMMARY (Yellow) | TOM TAT NET (Vang)
+    // ===== LINE 13: NET SUMMARY (Yellow) | TOM TAT NET (Vang)
     double net = total_profit + total_loss;
     string net_summary = "NET:$" + DoubleToStr(net, 2);
 
@@ -1949,19 +1957,17 @@ void UpdateDashboard() {
 
     net_summary += " | " + IntegerToString(total_orders) + "/21";
 
-    CreateOrUpdateLabel("dash_11", net_summary, 10, y_pos, clrYellow, 9);
+    CreateOrUpdateLabel("dash_13", net_summary, 10, y_pos, clrYellow, 9);
     y_pos += line_height;
 
-    // ===== LINE 12: BROKER INFO (Yellow) | THONG TIN SAN (Vang)
+    // ===== LINE 14: BROKER INFO (Yellow) | THONG TIN SAN (Vang)
     string broker = AccountCompany();
     int leverage = AccountLeverage();
     string broker_info = broker + " | Lev:1:" + IntegerToString(leverage) + " | 2s";
-    CreateOrUpdateLabel("dash_12", broker_info, 10, y_pos, clrYellow, 8);
+    CreateOrUpdateLabel("dash_14", broker_info, 10, y_pos, clrYellow, 8);
 
-    // Clean up old unused labels (lines 13-15 from old layout) | Don dep cac nhan cu khong dung (dong 13-15 tu giao dien cu)
-    for(int i = 13; i <= 15; i++) {
-        ObjectDelete("dash_" + IntegerToString(i));
-    }
+    // Clean up old unused label (line 15 from old layout) | Don dep nhan cu khong dung (dong 15 tu giao dien cu)
+    ObjectDelete("dash_15");
 }
 
 // Create or update OBJ_LABEL | Tao hoac cap nhat OBJ_LABEL
