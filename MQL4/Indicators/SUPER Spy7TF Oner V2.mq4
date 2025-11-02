@@ -2761,7 +2761,7 @@ void OnTimer() {
     int current_second = TimeSeconds(TimeCurrent());
 
     // ========================================
-    // CHUC NANG CHINH: XU LY TIN HIEU 7 TF
+    // CHUC NANG CHINH 1: XU LY TIN HIEU 7 TF
     // ========================================
     if(ProcessSignalOnOddSecond) {
         // MODE: Xu ly GIAY LE (1, 3, 5, 7, 9...)
@@ -2774,14 +2774,16 @@ void OnTimer() {
     }
 
     // ========================================
-    // CHUC NANG PHU: LUON CHAY GIAY CHAN
-    // (KHONG LIEN QUAN MODE CHINH)
+    // GIAY CHAN: CHUC NANG CHINH 2 + PHU
     // ========================================
     if(current_second % 2 == 0) {  // Giay chan (0, 2, 4, 6, 8...)
-        UpdateLiveNEWS();            // Update NEWS LIVE (cot 9) - doc lap signal WT
-        RunStartupReset();
-        RunMidnightAndHealthCheck();
-        RunDashboardUpdate();
+        // --- CHUC NANG CHINH 2: UPDATE NEWS + GHI CSDL ---
+        UpdateLiveNEWS();            // Update NEWS (cot 9) + Ghi CSDL1 (A,C) + CSDL2 (A,B,C)
+
+        // --- CHUC NANG PHU ---
+        RunStartupReset();           // Startup reset (1 lan sau khi MT4 khoi dong)
+        RunMidnightAndHealthCheck(); // Midnight reset + Health check (8h, 16h)
+        RunDashboardUpdate();        // Cap nhat dashboard hien thi
     }
 }
 
