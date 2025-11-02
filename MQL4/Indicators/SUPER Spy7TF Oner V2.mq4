@@ -1678,8 +1678,9 @@ bool IsWithinOneCandle(int timeframe_index, datetime signal_time) {
 }
 
 // Detect NEWS CASCADE across 7 levels of timeframe alignment | Phat hien NEWS CASCADE qua 7 cap do sap xep khung thoi gian
-// Returns: ±1-7 (Category 2: User Reference) or ±10-70 (Category 1: EA Trading)
-int DetectCASCADE_New() {
+// NATURAL LOGIC: Checks ALL 7 levels independently and writes score to each row
+// Each row (0-6) corresponds to TF level (M1-D1), value = 0 or ±1-7 or ±10-70
+void DetectCASCADE_New() {
     // Get 7 TF signals (M1=0, M5=1, ..., D1=6) from g_symbol_data
     int m1_signal = g_symbol_data.signals[0];
     int m5_signal = g_symbol_data.signals[1];
@@ -1713,258 +1714,231 @@ int DetectCASCADE_New() {
     double live_usd_diff = GetUSDValue(g_target_symbol, MathAbs(live_diff_raw));  // USD conversion
     int live_time_diff = (int)(TimeCurrent() - m1_time);     // Time since M1 signal (for breakthrough detection)
 
-    int result = 0;  // Final result
+    // Clear ALL NEWS results first (NATURAL LOGIC: start fresh)
+    for(int i = 0; i < 7; i++) {
+        g_symbol_data.news_results[i] = 0;
+    }
 
     // ============================================================
-    // PHASE 1: CATEGORY 1 (EA TRADING) - CHECK ALL 7 LEVELS FIRST
-    // Priority: Check strict conditions for EA trading signals
+    // PHASE 1: CATEGORY 1 (EA TRADING) - CHECK ALL 7 LEVELS INDEPENDENTLY
+    // Each level writes to its corresponding row: L1→row0, L2→row1, ..., L7→row6
     // ============================================================
     if(EnableCategoryEA) {
-        // L1: M1 only - Single timeframe breakthrough
+        // L1: M1 only → row 0
         // live_diff > 2.5 USD + within 1 candle → Score 10
-        if(m1_signal != 0 && result == 0) {
+        if(m1_signal != 0) {
             double l1_threshold = NewsBaseLiveDiff;  // 2.5 USD
             if(live_usd_diff > l1_threshold && IsWithinOneCandle(0, m1_time)) {
-                result = m1_signal * 10;
+                g_symbol_data.news_results[0] = m1_signal * 10;
             }
         }
 
-        // L2: M5→M1 - Two timeframe cascade
+        // L2: M5→M1 → row 1
         // M5→M1 aligned + live_diff > 3.0 USD + M5.cross=M1.time + within 1 candle → Score 20
-        if(m5_signal != 0 && m1_signal != 0 && m1_signal == m5_signal && result == 0) {
+        if(m5_signal != 0 && m1_signal != 0 && m1_signal == m5_signal) {
             if(m5_cross == m1_time) {  // M5.cross = M1.timestamp
                 double l2_threshold = NewsBaseLiveDiff + (NewsLiveDiffStep * 1);  // 3.0 USD
                 if(live_usd_diff > l2_threshold && IsWithinOneCandle(1, m5_time)) {
-                    result = m5_signal * 20;
+                    g_symbol_data.news_results[1] = m5_signal * 20;
                 }
             }
         }
 
-        // L3: M15→M5→M1 - Three timeframe full cascade
+        // L3: M15→M5→M1 → row 2
         // Full cascade + live_diff > 3.5 USD + all crosses valid + within 1 candle → Score 30
         if(m15_signal != 0 && m5_signal != 0 && m1_signal != 0 &&
-           m1_signal == m5_signal && m5_signal == m15_signal && result == 0) {
+           m1_signal == m5_signal && m5_signal == m15_signal) {
             if(m15_cross == m5_time && m5_cross == m1_time) {  // Full cascade validation
                 double l3_threshold = NewsBaseLiveDiff + (NewsLiveDiffStep * 2);  // 3.5 USD
                 if(live_usd_diff > l3_threshold && IsWithinOneCandle(2, m15_time)) {
-                    result = m15_signal * 30;
+                    g_symbol_data.news_results[2] = m15_signal * 30;
                 }
             }
         }
 
-        // L4: M30→M15→M5→M1 - Four timeframe full cascade
+        // L4: M30→M15→M5→M1 → row 3
         // Full cascade + live_diff > 4.0 USD + all crosses valid + within 1 candle → Score 40
         if(m30_signal != 0 && m15_signal != 0 && m5_signal != 0 && m1_signal != 0 &&
-           m1_signal == m5_signal && m5_signal == m15_signal && m15_signal == m30_signal && result == 0) {
+           m1_signal == m5_signal && m5_signal == m15_signal && m15_signal == m30_signal) {
             if(m30_cross == m15_time && m15_cross == m5_time && m5_cross == m1_time) {
                 double l4_threshold = NewsBaseLiveDiff + (NewsLiveDiffStep * 3);  // 4.0 USD
                 if(live_usd_diff > l4_threshold && IsWithinOneCandle(3, m30_time)) {
-                    result = m30_signal * 40;
+                    g_symbol_data.news_results[3] = m30_signal * 40;
                 }
             }
         }
 
-        // L5: H1→M30→M15→M5→M1 - Five timeframe full cascade
+        // L5: H1→M30→M15→M5→M1 → row 4
         // Full cascade + live_diff > 4.5 USD + all crosses valid + within 1 candle → Score 50
         if(h1_signal != 0 && m30_signal != 0 && m15_signal != 0 && m5_signal != 0 && m1_signal != 0 &&
-           m1_signal == m5_signal && m5_signal == m15_signal && m15_signal == m30_signal && m30_signal == h1_signal && result == 0) {
+           m1_signal == m5_signal && m5_signal == m15_signal && m15_signal == m30_signal && m30_signal == h1_signal) {
             if(h1_cross == m30_time && m30_cross == m15_time && m15_cross == m5_time && m5_cross == m1_time) {
                 double l5_threshold = NewsBaseLiveDiff + (NewsLiveDiffStep * 4);  // 4.5 USD
                 if(live_usd_diff > l5_threshold && IsWithinOneCandle(4, h1_time)) {
-                    result = h1_signal * 50;
+                    g_symbol_data.news_results[4] = h1_signal * 50;
                 }
             }
         }
 
-        // L6: H4→H1→M30→M15→M5→M1 - Six timeframe full cascade
+        // L6: H4→H1→M30→M15→M5→M1 → row 5
         // Full cascade + live_diff > 5.0 USD + all crosses valid + within 1 candle → Score 60
         if(h4_signal != 0 && h1_signal != 0 && m30_signal != 0 && m15_signal != 0 && m5_signal != 0 && m1_signal != 0 &&
            m1_signal == m5_signal && m5_signal == m15_signal && m15_signal == m30_signal &&
-           m30_signal == h1_signal && h1_signal == h4_signal && result == 0) {
+           m30_signal == h1_signal && h1_signal == h4_signal) {
             if(h4_cross == h1_time && h1_cross == m30_time && m30_cross == m15_time &&
                m15_cross == m5_time && m5_cross == m1_time) {
                 double l6_threshold = NewsBaseLiveDiff + (NewsLiveDiffStep * 5);  // 5.0 USD
                 if(live_usd_diff > l6_threshold && IsWithinOneCandle(5, h4_time)) {
-                    result = h4_signal * 60;
+                    g_symbol_data.news_results[5] = h4_signal * 60;
                 }
             }
         }
 
-        // L7: D1→H4→H1→M30→M15→M5→M1 - Seven timeframe full cascade (ULTIMATE)
+        // L7: D1→H4→H1→M30→M15→M5→M1 → row 6
         // Full cascade + live_diff > 5.5 USD + all crosses valid + within 1 candle → Score 70
         if(d1_signal != 0 && h4_signal != 0 && h1_signal != 0 && m30_signal != 0 &&
            m15_signal != 0 && m5_signal != 0 && m1_signal != 0 &&
            m1_signal == m5_signal && m5_signal == m15_signal && m15_signal == m30_signal &&
-           m30_signal == h1_signal && h1_signal == h4_signal && h4_signal == d1_signal && result == 0) {
+           m30_signal == h1_signal && h1_signal == h4_signal && h4_signal == d1_signal) {
             if(d1_cross == h4_time && h4_cross == h1_time && h1_cross == m30_time &&
                m30_cross == m15_time && m15_cross == m5_time && m5_cross == m1_time) {
                 double l7_threshold = NewsBaseLiveDiff + (NewsLiveDiffStep * 6);  // 5.5 USD
                 if(live_usd_diff > l7_threshold && IsWithinOneCandle(6, d1_time)) {
-                    result = d1_signal * 70;
+                    g_symbol_data.news_results[6] = d1_signal * 70;
                 }
             }
         }
     }  // End Category 1
 
     // ============================================================
-    // PHASE 2: CATEGORY 2 (USER REFERENCE) - ONLY IF CATEGORY 1 = 0
-    // Relaxed conditions for user reference signals
+    // PHASE 2: CATEGORY 2 (USER REFERENCE) - ONLY IF CATEGORY 1 DIDN'T WRITE
+    // Each level checks if its row is still 0, then writes if conditions met
     // ============================================================
-    if(result == 0 && EnableCategoryUser) {
-        // L1: M1 only
+    if(EnableCategoryUser) {
+        // L1: M1 only → row 0
         // live_diff > 0.1 + time < 2 min (1×2) → Score 1
-        if(m1_signal != 0) {
+        if(m1_signal != 0 && g_symbol_data.news_results[0] == 0) {
             double l1_usd_threshold = NewsCascadeMultiplier * 1;  // 0.1 USD
             int l1_time_limit = 1 * NewsBaseTimeMinutes * 60;  // 1 × 2 × 60 = 120s = 2min
             if(live_usd_diff > l1_usd_threshold && live_time_diff < l1_time_limit) {
-                result = m1_signal * 1;
+                g_symbol_data.news_results[0] = m1_signal * 1;
             }
         }
 
-        // L2: M5→M1
+        // L2: M5→M1 → row 1
         // live_diff > 0.2 + time < 4 min (2×2) → Score 2
-        if(m5_signal != 0 && m1_signal != 0 && m1_signal == m5_signal && result == 0) {
+        if(m5_signal != 0 && m1_signal != 0 && m1_signal == m5_signal && g_symbol_data.news_results[1] == 0) {
             if(m5_cross == m1_time) {
                 double l2_usd_threshold = NewsCascadeMultiplier * 2;  // 0.2 USD
                 int l2_time_limit = 2 * NewsBaseTimeMinutes * 60;  // 2 × 2 × 60 = 240s = 4min
                 if(live_usd_diff > l2_usd_threshold && live_time_diff < l2_time_limit) {
-                    result = m5_signal * 2;
+                    g_symbol_data.news_results[1] = m5_signal * 2;
                 }
             }
         }
 
-        // L3: M15→M5→M1
+        // L3: M15→M5→M1 → row 2
         // live_diff > 0.3 + time < 6 min (3×2) → Score 3
         if(m15_signal != 0 && m5_signal != 0 && m1_signal != 0 &&
-           m1_signal == m5_signal && m5_signal == m15_signal && result == 0) {
+           m1_signal == m5_signal && m5_signal == m15_signal && g_symbol_data.news_results[2] == 0) {
             if(m15_cross == m5_time && m5_cross == m1_time) {
                 double l3_usd_threshold = NewsCascadeMultiplier * 3;  // 0.3 USD
                 int l3_time_limit = 3 * NewsBaseTimeMinutes * 60;  // 3 × 2 × 60 = 360s = 6min
                 if(live_usd_diff > l3_usd_threshold && live_time_diff < l3_time_limit) {
-                    result = m15_signal * 3;
+                    g_symbol_data.news_results[2] = m15_signal * 3;
                 }
             }
         }
 
-        // L4: M30→M15→M5→M1
+        // L4: M30→M15→M5→M1 → row 3
         // live_diff > 0.4 + time < 8 min (4×2) → Score 4
         if(m30_signal != 0 && m15_signal != 0 && m5_signal != 0 && m1_signal != 0 &&
-           m1_signal == m5_signal && m5_signal == m15_signal && m15_signal == m30_signal && result == 0) {
+           m1_signal == m5_signal && m5_signal == m15_signal && m15_signal == m30_signal && g_symbol_data.news_results[3] == 0) {
             if(m30_cross == m15_time && m15_cross == m5_time && m5_cross == m1_time) {
                 double l4_usd_threshold = NewsCascadeMultiplier * 4;  // 0.4 USD
                 int l4_time_limit = 4 * NewsBaseTimeMinutes * 60;  // 4 × 2 × 60 = 480s = 8min
                 if(live_usd_diff > l4_usd_threshold && live_time_diff < l4_time_limit) {
-                    result = m30_signal * 4;
+                    g_symbol_data.news_results[3] = m30_signal * 4;
                 }
             }
         }
 
-        // L5: H1→M30→M15→M5→M1
+        // L5: H1→M30→M15→M5→M1 → row 4
         // live_diff > 0.5 + time < 10 min (5×2) → Score 5
         if(h1_signal != 0 && m30_signal != 0 && m15_signal != 0 && m5_signal != 0 && m1_signal != 0 &&
-           m1_signal == m5_signal && m5_signal == m15_signal && m15_signal == m30_signal && m30_signal == h1_signal && result == 0) {
+           m1_signal == m5_signal && m5_signal == m15_signal && m15_signal == m30_signal && m30_signal == h1_signal && g_symbol_data.news_results[4] == 0) {
             if(h1_cross == m30_time && m30_cross == m15_time && m15_cross == m5_time && m5_cross == m1_time) {
                 double l5_usd_threshold = NewsCascadeMultiplier * 5;  // 0.5 USD
                 int l5_time_limit = 5 * NewsBaseTimeMinutes * 60;  // 5 × 2 × 60 = 600s = 10min
                 if(live_usd_diff > l5_usd_threshold && live_time_diff < l5_time_limit) {
-                    result = h1_signal * 5;
+                    g_symbol_data.news_results[4] = h1_signal * 5;
                 }
             }
         }
 
-        // L6: H4→H1→M30→M15→M5→M1
+        // L6: H4→H1→M30→M15→M5→M1 → row 5
         // live_diff > 0.6 + time < 12 min (6×2) → Score 6
         if(h4_signal != 0 && h1_signal != 0 && m30_signal != 0 && m15_signal != 0 && m5_signal != 0 && m1_signal != 0 &&
            m1_signal == m5_signal && m5_signal == m15_signal && m15_signal == m30_signal &&
-           m30_signal == h1_signal && h1_signal == h4_signal && result == 0) {
+           m30_signal == h1_signal && h1_signal == h4_signal && g_symbol_data.news_results[5] == 0) {
             if(h4_cross == h1_time && h1_cross == m30_time && m30_cross == m15_time &&
                m15_cross == m5_time && m5_cross == m1_time) {
                 double l6_usd_threshold = NewsCascadeMultiplier * 6;  // 0.6 USD
                 int l6_time_limit = 6 * NewsBaseTimeMinutes * 60;  // 6 × 2 × 60 = 720s = 12min
                 if(live_usd_diff > l6_usd_threshold && live_time_diff < l6_time_limit) {
-                    result = h4_signal * 6;
+                    g_symbol_data.news_results[5] = h4_signal * 6;
                 }
             }
         }
 
-        // L7: D1→H4→H1→M30→M15→M5→M1
+        // L7: D1→H4→H1→M30→M15→M5→M1 → row 6
         // live_diff > 0.7 + time < 14 min (7×2) → Score 7
         if(d1_signal != 0 && h4_signal != 0 && h1_signal != 0 && m30_signal != 0 &&
            m15_signal != 0 && m5_signal != 0 && m1_signal != 0 &&
            m1_signal == m5_signal && m5_signal == m15_signal && m15_signal == m30_signal &&
-           m30_signal == h1_signal && h1_signal == h4_signal && h4_signal == d1_signal && result == 0) {
+           m30_signal == h1_signal && h1_signal == h4_signal && h4_signal == d1_signal && g_symbol_data.news_results[6] == 0) {
             if(d1_cross == h4_time && h4_cross == h1_time && h1_cross == m30_time &&
                m30_cross == m15_time && m15_cross == m5_time && m5_cross == m1_time) {
                 double l7_usd_threshold = NewsCascadeMultiplier * 7;  // 0.7 USD
                 int l7_time_limit = 7 * NewsBaseTimeMinutes * 60;  // 7 × 2 × 60 = 840s = 14min
                 if(live_usd_diff > l7_usd_threshold && live_time_diff < l7_time_limit) {
-                    result = d1_signal * 7;
+                    g_symbol_data.news_results[6] = d1_signal * 7;
                 }
             }
         }
     }  // End Category 2
-
-    return result;
 }
 
 // Main NEWS analysis function - LIVE mode (simplified, no state) | Ham phan tich NEWS - che do LIVE don gian
+// DEPRECATED: DetectCASCADE_New() now writes directly to g_symbol_data.news_results[7]
+// This function kept for compatibility but no longer returns meaningful value
 int AnalyzeNEWS() {
-    // Simply detect and return CASCADE result directly
-    int cascade_result = DetectCASCADE_New();
-    return cascade_result;  // Return ±1-7 (User) or ±10-70 (EA)
+    // Call CASCADE detection (writes directly to array)
+    DetectCASCADE_New();
+    return 0;  // No longer returns single value (array-based now)
 }
 
 // Update LIVE NEWS for all 7 timeframes independently | Cap nhat NEWS LIVE cho 7 khung thoi gian doc lap
 void UpdateLiveNEWS() {
-    // Get CASCADE result
-    int cascade_result = DetectCASCADE_New();
+    // Detect CASCADE and update g_symbol_data.news_results[7] array directly
+    // DetectCASCADE_New() now handles clearing array + writing all 7 levels independently
+    DetectCASCADE_New();
 
-    // Clear all NEWS results first
+    // Log major news events (Category 1 L3+ only to avoid spam)
     for(int i = 0; i < 7; i++) {
-        g_symbol_data.news_results[i] = 0;
-    }
+        int score = g_symbol_data.news_results[i];
+        int abs_score = MathAbs(score);
 
-    // Only process if cascade detected (cascade_result != 0)
-    if(cascade_result != 0) {
-        // Extract level from result
-    // Category 1 (EA): ±10, ±20, ±30, ±40, ±50, ±60, ±70 → levels 1-7
-    // Category 2 (User): ±1, ±2, ±3, ±4, ±5, ±6, ±7 → levels 1-7
-    int abs_result = MathAbs(cascade_result);
-    int level = 0;
-
-    if(abs_result >= 10) {
-        // Category 1: EA (10-70)
-        level = abs_result / 10;  // 10→1, 20→2, ..., 70→7
-    } else {
-        // Category 2: User (1-7)
-        level = abs_result;  // 1→1, 2→2, ..., 7→7
-    }
-
-    // Map level to row index
-    // L1 → row 0 (M1)
-    // L2 → row 1 (M5)
-    // L3 → row 2 (M15)
-    // L4 → row 3 (M30)
-    // L5 → row 4 (H1)
-    // L6 → row 5 (H4)
-    // L7 → row 6 (D1)
-
-    if(level >= 1 && level <= 7) {
-        int row_index = level - 1;  // Level 1→row 0, Level 2→row 1, ..., Level 7→row 6
-        g_symbol_data.news_results[row_index] = cascade_result;
-    }
-
-    // Log only Category 1 L3+ to avoid spam (major news events only)
-    if(abs_result >= 30) {
-        string time_str = TimeToString(TimeCurrent(), TIME_DATE|TIME_SECONDS);
-        Print(time_str, " | NEWS ", g_target_symbol, " L", level, ": ", (cascade_result > 0 ? "BUY" : "SELL"), " | Score:", cascade_result);
+        if(abs_score >= 30) {  // Category 1 L3+ (30, 40, 50, 60, 70)
+            int level = abs_score / 10;  // 30→3, 40→4, ..., 70→7
+            string time_str = TimeToString(TimeCurrent(), TIME_DATE|TIME_SECONDS);
+            Print(time_str, " | NEWS ", g_target_symbol, " L", level, ": ", (score > 0 ? "BUY" : "SELL"), " | Score:", score);
         }
     }
 
-    // ALWAYS write to files (even when cascade = 0) to update NEWS values immediately
-    // FIX: Previously only wrote CSDL1, now writes BOTH CSDL1 and CSDL2
+    // ALWAYS write to BOTH files to keep CSDL1 and CSDL2 synchronized
     WriteCSDL1ArrayToFile();   // CSDL1: SYMBOL.json (10 columns + history)
-    WriteCSDL2ArrayToFile();   // CSDL2: SYMBOL_LIVE.json (6 columns, no history, 3 folders) - FIXED!
+    WriteCSDL2ArrayToFile();   // CSDL2: SYMBOL_LIVE.json (6 columns, no history, 3 folders)
 }
 
 //==============================================================================
