@@ -2818,6 +2818,15 @@ string PeriodToString(int period) {
 
 // Smart timeframe reset for all charts of current symbol | Reset thong minh khung thoi gian cho tat ca bieu do symbol hien tai
 void SmartTFReset() {
+    // ============================================================================
+    // AUTO-FLAG: Đánh dấu NGAY LẬP TỨC để tránh gọi lại trong lúc đang reset
+    // AUTO-FLAG: Mark IMMEDIATELY to prevent re-entry while resetting
+    // ============================================================================
+    string gv_done = g_target_symbol + "_StartupResetDone";
+    if(GlobalVariableCheck(gv_done)) {
+        GlobalVariableSet(gv_done, 1);  // Mark done = 1 TRƯỚC KHI reset!
+    }
+
     // Get current chart info | Lay thong tin chart hien tai
     string current_symbol = Symbol();
     int current_period = Period();
@@ -2851,18 +2860,6 @@ void SmartTFReset() {
     Sleep(2000);  // Delay 2s (slower for MT4 stability)
     ChartSetSymbolPeriod(current_chart_id, current_symbol, current_period);
     Sleep(2000);  // Delay 2s (slower for MT4 stability)
-
-    // ============================================================================
-    // AUTO-FLAG: Tự động đánh dấu StartupReset đã chạy
-    // AUTO-FLAG: Automatically mark StartupReset as done
-    // ============================================================================
-    // LOGIC THÔNG MINH: Bất kỳ reset nào gọi hàm này → done = 1
-    // → MidnightReset/HealthCheck gọi → done = 1 tự động
-    // → StartupReset check done = 0 → Chỉ chạy nếu chưa có reset nào!
-    string gv_done = g_target_symbol + "_StartupResetDone";
-    if(GlobalVariableCheck(gv_done)) {
-        GlobalVariableSet(gv_done, 1);  // Mark done = 1
-    }
 
     Print("SmartTFReset: ", current_symbol, " | ", (total_charts + 1), " charts reset");
 }
