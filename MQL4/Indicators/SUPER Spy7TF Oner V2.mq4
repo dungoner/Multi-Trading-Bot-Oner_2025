@@ -2650,28 +2650,24 @@ int OnInit() {
 // ============================================================
 
 // Startup Reset: 1 minute after MT4 starts (1 TIME ONLY per MT4 session)
-// Uses static flag to prevent re-execution, resets only on MT4 restart
+// GlobalVariable lost when MT4 closes, survives indicator reload
 void RunStartupReset() {
-    if(!EnableStartupReset) return;  // Skip if disabled
+    if(!EnableStartupReset) return;
 
-    static bool reset_done = false;  // Reset to false only when MT4 restarts
-    static datetime init_time = 0;
+    string gv_done = g_target_symbol + "_StartupResetDone";
+    string gv_time = g_target_symbol + "_StartupInitTime";
 
-    // Already executed in this MT4 session -> do nothing
-    if(reset_done) return;
-
-    // First call: Record start time
-    if(init_time == 0) {
-        init_time = TimeCurrent();
-        return;
+    // Create init time if not exists
+    if(!GlobalVariableCheck(gv_time)) {
+        GlobalVariableSet(gv_time, TimeCurrent());
     }
 
-    // After 60 seconds -> Run reset once
-    int elapsed = (int)(TimeCurrent() - init_time);
-    if(elapsed >= 60) {
+    // If not done (!=1) AND elapsed >= 60s -> Reset and mark done
+    if((!GlobalVariableCheck(gv_done) || GlobalVariableGet(gv_done) != 1) &&
+       (TimeCurrent() - GlobalVariableGet(gv_time) >= 60)) {
         Print("StartupReset: ", g_target_symbol, " | 1 min after MT4 start");
         SmartTFReset();
-        reset_done = true;  // Mark as done, never runs again until MT4 restarts
+        GlobalVariableSet(gv_done, 1);
     }
 }
 
