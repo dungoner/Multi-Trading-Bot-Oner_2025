@@ -808,7 +808,7 @@ void PrintDashboard() {
     }
 
     // =========================================================================
-    // DÒNG 4: D1 + NEWS + LIVE (giá + USD diff + time diff)
+    // DÒNG 4: D1 + LIVE (giá + USD diff + time diff)
     // =========================================================================
     // D1 signal
     string d1_sig = "NONE";
@@ -818,48 +818,61 @@ void PrintDashboard() {
     string d1_pricediff = DoubleToString(g_symbol_data.pricediffs[6], 2);
     if(g_symbol_data.pricediffs[6] >= 0) d1_pricediff = "+" + d1_pricediff;
 
-    // NEWS score
-    string news_str = IntegerToString(g_symbol_data.news_results[0]);
-    if(g_symbol_data.news_results[0] >= 0) news_str = "+" + news_str;
-
-    // Build line 4 - NEWS moved to end for simple gold highlighting
+    // Build line 4 (no NEWS)
     string line4 = "[D1|" + d1_sig + "|" + d1_pricediff + "|" + IntegerToString(g_symbol_data.timediffs[6]) + "m] | LIVE: " + live_price_str + " (" + live_usd_str + ", " + IntegerToString(live_time_diff) + "m)";
-    string line4_news = " | NEWS:" + news_str;
 
     // =========================================================================
-    // TẠO 4 OBJECTS RIÊNG BIỆT (KHÔNG CONFLICT VỚI COMMENT() CỦA WT)
+    // DÒNG 5: NEWS CASCADE (7 TF)
+    // =========================================================================
+    string line5 = "NEWS: ";
+    string tf_labels[7] = {"M1", "M5", "M15", "M30", "H1", "H4", "D1"};
+    for(int news_idx = 0; news_idx < 7; news_idx++) {
+        if(news_idx > 0) line5 += " | ";
+        string news_val = IntegerToString(g_symbol_data.news_results[news_idx]);
+        if(g_symbol_data.news_results[news_idx] > 0) news_val = "+" + news_val;
+        line5 += tf_labels[news_idx] + ":" + news_val;
+    }
+
+    // =========================================================================
+    // TẠO 5 OBJECTS RIÊNG BIỆT (KHÔNG CONFLICT VỚI COMMENT() CỦA WT)
     // =========================================================================
     int y_start = 120;  // Vị trí bắt đầu (120 pixels từ trên, dưới WT)
     int y_spacing = 15; // Khoảng cách giữa các dòng
 
-    string obj_names[4];
+    string obj_names[5];
     obj_names[0] = "SPY_Dashboard_Line1";
     obj_names[1] = "SPY_Dashboard_Line2";
     obj_names[2] = "SPY_Dashboard_Line3";
     obj_names[3] = "SPY_Dashboard_Line4";
+    obj_names[4] = "SPY_Dashboard_Line5";
 
-    string lines[4];
+    string lines[5];
     lines[0] = line1;
     lines[1] = line2;
     lines[2] = line3;
     lines[3] = line4;
+    lines[4] = line5;
 
-    // Tạo 4 objects
-    for(int i = 0; i < 4; i++) {
+    color line_colors[5];
+    line_colors[0] = clrWhite;       // Line 1: White
+    line_colors[1] = clrDodgerBlue;  // Line 2: Blue
+    line_colors[2] = clrWhite;       // Line 3: White
+    line_colors[3] = clrDodgerBlue;  // Line 4: Blue
+    line_colors[4] = clrGold;        // Line 5: Gold (NEWS)
+
+    // Tạo 5 objects
+    for(int i = 0; i < 5; i++) {
         // Xóa object cũ nếu có
         if(ObjectFind(0, obj_names[i]) >= 0) {
             ObjectDelete(0, obj_names[i]);
         }
-
-        // Mau xen ke: Trang -> Xanh -> Trang -> Xanh | Alternating colors: White -> Blue -> White -> Blue
-        color line_color = (i % 2 == 0) ? clrWhite : clrDodgerBlue;
 
         // Tạo object mới
         ObjectCreate(0, obj_names[i], OBJ_LABEL, 0, 0, 0);
         ObjectSetInteger(0, obj_names[i], OBJPROP_CORNER, CORNER_LEFT_UPPER);
         ObjectSetInteger(0, obj_names[i], OBJPROP_XDISTANCE, 10);
         ObjectSetInteger(0, obj_names[i], OBJPROP_YDISTANCE, y_start + (i * y_spacing));
-        ObjectSetInteger(0, obj_names[i], OBJPROP_COLOR, line_color);
+        ObjectSetInteger(0, obj_names[i], OBJPROP_COLOR, line_colors[i]);
         ObjectSetInteger(0, obj_names[i], OBJPROP_FONTSIZE, 8);
         ObjectSetString(0, obj_names[i], OBJPROP_FONT, "Courier New");
         ObjectSetString(0, obj_names[i], OBJPROP_TEXT, lines[i]);
@@ -867,20 +880,9 @@ void PrintDashboard() {
         ObjectSetInteger(0, obj_names[i], OBJPROP_HIDDEN, true);
     }
 
-    // Tạo NEWS object riêng với màu vàng gold (ở cuối dòng 4)
-    string news_obj = "SPY_Dashboard_NEWS";
-    if(ObjectFind(0, news_obj) >= 0) ObjectDelete(0, news_obj);
-
-    ObjectCreate(0, news_obj, OBJ_LABEL, 0, 0, 0);
-    ObjectSetInteger(0, news_obj, OBJPROP_CORNER, CORNER_LEFT_UPPER);
-    ObjectSetInteger(0, news_obj, OBJPROP_XDISTANCE, 470);  // Moved further right to avoid overlapping TimeDiff
-    ObjectSetInteger(0, news_obj, OBJPROP_YDISTANCE, y_start + (3 * y_spacing));
-    ObjectSetInteger(0, news_obj, OBJPROP_COLOR, clrGold);  // Gold color
-    ObjectSetInteger(0, news_obj, OBJPROP_FONTSIZE, 8);
-    ObjectSetString(0, news_obj, OBJPROP_FONT, "Courier New");
-    ObjectSetString(0, news_obj, OBJPROP_TEXT, line4_news);
-    ObjectSetInteger(0, news_obj, OBJPROP_SELECTABLE, false);
-    ObjectSetInteger(0, news_obj, OBJPROP_HIDDEN, true);
+    // Xóa NEWS object cũ nếu còn tồn tại (từ version trước)
+    string old_news_obj = "SPY_Dashboard_NEWS";
+    if(ObjectFind(0, old_news_obj) >= 0) ObjectDelete(0, old_news_obj);
 }
 
 //==============================================================================
