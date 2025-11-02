@@ -2685,7 +2685,9 @@ void RunStartupReset() {
     if(done == 0 && elapsed >= 60) {
         Print("✓ StartupReset: ", g_target_symbol, " | Flag=", done, " elapsed=", elapsed, "s");
         SmartTFReset();
-        // SmartTFReset() sẽ tự tăng done lên +1 (0→1, không bao giờ = 0 lại)
+
+        // GÁN CỜ = 1 trực tiếp (không cho SmartTFReset gán)
+        GlobalVariableSet(gv_done, 1);
     }
 }
 
@@ -2820,17 +2822,6 @@ string PeriodToString(int period) {
 
 // Smart timeframe reset for all charts of current symbol | Reset thong minh khung thoi gian cho tat ca bieu do symbol hien tai
 void SmartTFReset() {
-    // ============================================================================
-    // AUTO-FLAG: Tăng cờ NGAY LẬP TỨC để tránh gọi lại trong lúc đang reset
-    // AUTO-FLAG: Increment flag IMMEDIATELY to prevent re-entry while resetting
-    // ============================================================================
-    // LOGIC: Cờ = cờ + 1 (MidnightReset gán = 0, sau reset = 1, không reset lại)
-    string gv_done = g_target_symbol + "_StartupResetDone";
-    if(GlobalVariableCheck(gv_done)) {
-        double current_flag = GlobalVariableGet(gv_done);
-        GlobalVariableSet(gv_done, current_flag + 1);  // Cờ = cờ + 1
-    }
-
     // Get current chart info | Lay thong tin chart hien tai
     string current_symbol = Symbol();
     int current_period = Period();
