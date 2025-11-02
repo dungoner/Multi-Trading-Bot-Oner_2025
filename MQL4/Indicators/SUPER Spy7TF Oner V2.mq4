@@ -1714,14 +1714,10 @@ void DetectCASCADE_New() {
     double live_usd_diff = GetUSDValue(g_target_symbol, MathAbs(live_diff_raw));  // USD conversion
     int live_time_diff = (int)(TimeCurrent() - m1_time);     // Time since M1 signal (for breakthrough detection)
 
-    // Clear ALL NEWS results first (NATURAL LOGIC: start fresh)
-    for(int i = 0; i < 7; i++) {
-        g_symbol_data.news_results[i] = 0;
-    }
-
     // ============================================================
     // PHASE 1: CATEGORY 1 (EA TRADING) - CHECK ALL 7 LEVELS INDEPENDENTLY
-    // Each level writes to its corresponding row: L1→row0, L2→row1, ..., L7→row6
+    // NATURAL LOGIC: Each algorithm SELF-ASSIGNS its result (0 or score)
+    // NO external Clear ALL - algorithms decide their own output
     // ============================================================
     if(EnableCategoryEA) {
         // L1: M1 only → row 0
@@ -1729,8 +1725,12 @@ void DetectCASCADE_New() {
         if(m1_signal != 0) {
             double l1_threshold = NewsBaseLiveDiff;  // 2.5 USD
             if(live_usd_diff > l1_threshold && IsWithinOneCandle(0, m1_time)) {
-                g_symbol_data.news_results[0] = m1_signal * 10;
+                g_symbol_data.news_results[0] = m1_signal * 10;  // Algorithm OUTPUT: score
+            } else {
+                g_symbol_data.news_results[0] = 0;  // Algorithm OUTPUT: not met conditions
             }
+        } else {
+            g_symbol_data.news_results[0] = 0;  // Algorithm OUTPUT: no signal
         }
 
         // L2: M5→M1 → row 1
@@ -1739,9 +1739,15 @@ void DetectCASCADE_New() {
             if(m5_cross == m1_time) {  // M5.cross = M1.timestamp
                 double l2_threshold = NewsBaseLiveDiff + (NewsLiveDiffStep * 1);  // 3.0 USD
                 if(live_usd_diff > l2_threshold && IsWithinOneCandle(1, m5_time)) {
-                    g_symbol_data.news_results[1] = m5_signal * 20;
+                    g_symbol_data.news_results[1] = m5_signal * 20;  // Algorithm OUTPUT: score
+                } else {
+                    g_symbol_data.news_results[1] = 0;  // Algorithm OUTPUT: threshold/candle not met
                 }
+            } else {
+                g_symbol_data.news_results[1] = 0;  // Algorithm OUTPUT: cross validation failed
             }
+        } else {
+            g_symbol_data.news_results[1] = 0;  // Algorithm OUTPUT: signals not aligned
         }
 
         // L3: M15→M5→M1 → row 2
@@ -1751,9 +1757,15 @@ void DetectCASCADE_New() {
             if(m15_cross == m5_time && m5_cross == m1_time) {  // Full cascade validation
                 double l3_threshold = NewsBaseLiveDiff + (NewsLiveDiffStep * 2);  // 3.5 USD
                 if(live_usd_diff > l3_threshold && IsWithinOneCandle(2, m15_time)) {
-                    g_symbol_data.news_results[2] = m15_signal * 30;
+                    g_symbol_data.news_results[2] = m15_signal * 30;  // Algorithm OUTPUT: score
+                } else {
+                    g_symbol_data.news_results[2] = 0;  // Algorithm OUTPUT: threshold/candle not met
                 }
+            } else {
+                g_symbol_data.news_results[2] = 0;  // Algorithm OUTPUT: cross validation failed
             }
+        } else {
+            g_symbol_data.news_results[2] = 0;  // Algorithm OUTPUT: signals not aligned
         }
 
         // L4: M30→M15→M5→M1 → row 3
@@ -1763,9 +1775,15 @@ void DetectCASCADE_New() {
             if(m30_cross == m15_time && m15_cross == m5_time && m5_cross == m1_time) {
                 double l4_threshold = NewsBaseLiveDiff + (NewsLiveDiffStep * 3);  // 4.0 USD
                 if(live_usd_diff > l4_threshold && IsWithinOneCandle(3, m30_time)) {
-                    g_symbol_data.news_results[3] = m30_signal * 40;
+                    g_symbol_data.news_results[3] = m30_signal * 40;  // Algorithm OUTPUT: score
+                } else {
+                    g_symbol_data.news_results[3] = 0;  // Algorithm OUTPUT: threshold/candle not met
                 }
+            } else {
+                g_symbol_data.news_results[3] = 0;  // Algorithm OUTPUT: cross validation failed
             }
+        } else {
+            g_symbol_data.news_results[3] = 0;  // Algorithm OUTPUT: signals not aligned
         }
 
         // L5: H1→M30→M15→M5→M1 → row 4
@@ -1775,9 +1793,15 @@ void DetectCASCADE_New() {
             if(h1_cross == m30_time && m30_cross == m15_time && m15_cross == m5_time && m5_cross == m1_time) {
                 double l5_threshold = NewsBaseLiveDiff + (NewsLiveDiffStep * 4);  // 4.5 USD
                 if(live_usd_diff > l5_threshold && IsWithinOneCandle(4, h1_time)) {
-                    g_symbol_data.news_results[4] = h1_signal * 50;
+                    g_symbol_data.news_results[4] = h1_signal * 50;  // Algorithm OUTPUT: score
+                } else {
+                    g_symbol_data.news_results[4] = 0;  // Algorithm OUTPUT: threshold/candle not met
                 }
+            } else {
+                g_symbol_data.news_results[4] = 0;  // Algorithm OUTPUT: cross validation failed
             }
+        } else {
+            g_symbol_data.news_results[4] = 0;  // Algorithm OUTPUT: signals not aligned
         }
 
         // L6: H4→H1→M30→M15→M5→M1 → row 5
@@ -1789,9 +1813,15 @@ void DetectCASCADE_New() {
                m15_cross == m5_time && m5_cross == m1_time) {
                 double l6_threshold = NewsBaseLiveDiff + (NewsLiveDiffStep * 5);  // 5.0 USD
                 if(live_usd_diff > l6_threshold && IsWithinOneCandle(5, h4_time)) {
-                    g_symbol_data.news_results[5] = h4_signal * 60;
+                    g_symbol_data.news_results[5] = h4_signal * 60;  // Algorithm OUTPUT: score
+                } else {
+                    g_symbol_data.news_results[5] = 0;  // Algorithm OUTPUT: threshold/candle not met
                 }
+            } else {
+                g_symbol_data.news_results[5] = 0;  // Algorithm OUTPUT: cross validation failed
             }
+        } else {
+            g_symbol_data.news_results[5] = 0;  // Algorithm OUTPUT: signals not aligned
         }
 
         // L7: D1→H4→H1→M30→M15→M5→M1 → row 6
@@ -1804,105 +1834,130 @@ void DetectCASCADE_New() {
                m30_cross == m15_time && m15_cross == m5_time && m5_cross == m1_time) {
                 double l7_threshold = NewsBaseLiveDiff + (NewsLiveDiffStep * 6);  // 5.5 USD
                 if(live_usd_diff > l7_threshold && IsWithinOneCandle(6, d1_time)) {
-                    g_symbol_data.news_results[6] = d1_signal * 70;
+                    g_symbol_data.news_results[6] = d1_signal * 70;  // Algorithm OUTPUT: score
+                } else {
+                    g_symbol_data.news_results[6] = 0;  // Algorithm OUTPUT: threshold/candle not met
                 }
+            } else {
+                g_symbol_data.news_results[6] = 0;  // Algorithm OUTPUT: cross validation failed
             }
+        } else {
+            g_symbol_data.news_results[6] = 0;  // Algorithm OUTPUT: signals not aligned
         }
     }  // End Category 1
 
     // ============================================================
-    // PHASE 2: CATEGORY 2 (USER REFERENCE) - ONLY IF CATEGORY 1 DIDN'T WRITE
-    // Each level checks if its row is still 0, then writes if conditions met
+    // PHASE 2: CATEGORY 2 (USER REFERENCE) - ONLY IF CATEGORY 1 WROTE 0
+    // NATURAL LOGIC: Each algorithm checks if Category 1 wrote 0, then decides score or keep 0
+    // If Category 1 wrote score → keep Category 1 score (don't touch)
+    // If Category 1 wrote 0 → Category 2 decides: score or keep 0
     // ============================================================
     if(EnableCategoryUser) {
         // L1: M1 only → row 0
         // live_diff > 0.1 + time < 2 min (1×2) → Score 1
-        if(m1_signal != 0 && g_symbol_data.news_results[0] == 0) {
-            double l1_usd_threshold = NewsCascadeMultiplier * 1;  // 0.1 USD
-            int l1_time_limit = 1 * NewsBaseTimeMinutes * 60;  // 1 × 2 × 60 = 120s = 2min
-            if(live_usd_diff > l1_usd_threshold && live_time_diff < l1_time_limit) {
-                g_symbol_data.news_results[0] = m1_signal * 1;
+        if(g_symbol_data.news_results[0] == 0) {  // Only if Category 1 wrote 0
+            if(m1_signal != 0) {
+                double l1_usd_threshold = NewsCascadeMultiplier * 1;  // 0.1 USD
+                int l1_time_limit = 1 * NewsBaseTimeMinutes * 60;  // 1 × 2 × 60 = 120s = 2min
+                if(live_usd_diff > l1_usd_threshold && live_time_diff < l1_time_limit) {
+                    g_symbol_data.news_results[0] = m1_signal * 1;  // Algorithm OUTPUT: score
+                }
+                // else: keep 0 from Category 1 (not met conditions)
             }
+            // else: keep 0 from Category 1 (no signal)
         }
+        // else: keep Category 1 score (Category 1 wrote non-zero)
 
         // L2: M5→M1 → row 1
         // live_diff > 0.2 + time < 4 min (2×2) → Score 2
-        if(m5_signal != 0 && m1_signal != 0 && m1_signal == m5_signal && g_symbol_data.news_results[1] == 0) {
-            if(m5_cross == m1_time) {
-                double l2_usd_threshold = NewsCascadeMultiplier * 2;  // 0.2 USD
-                int l2_time_limit = 2 * NewsBaseTimeMinutes * 60;  // 2 × 2 × 60 = 240s = 4min
-                if(live_usd_diff > l2_usd_threshold && live_time_diff < l2_time_limit) {
-                    g_symbol_data.news_results[1] = m5_signal * 2;
+        if(g_symbol_data.news_results[1] == 0) {  // Only if Category 1 wrote 0
+            if(m5_signal != 0 && m1_signal != 0 && m1_signal == m5_signal) {
+                if(m5_cross == m1_time) {
+                    double l2_usd_threshold = NewsCascadeMultiplier * 2;  // 0.2 USD
+                    int l2_time_limit = 2 * NewsBaseTimeMinutes * 60;  // 2 × 2 × 60 = 240s = 4min
+                    if(live_usd_diff > l2_usd_threshold && live_time_diff < l2_time_limit) {
+                        g_symbol_data.news_results[1] = m5_signal * 2;  // Algorithm OUTPUT: score
+                    }
                 }
             }
         }
 
         // L3: M15→M5→M1 → row 2
         // live_diff > 0.3 + time < 6 min (3×2) → Score 3
-        if(m15_signal != 0 && m5_signal != 0 && m1_signal != 0 &&
-           m1_signal == m5_signal && m5_signal == m15_signal && g_symbol_data.news_results[2] == 0) {
-            if(m15_cross == m5_time && m5_cross == m1_time) {
-                double l3_usd_threshold = NewsCascadeMultiplier * 3;  // 0.3 USD
-                int l3_time_limit = 3 * NewsBaseTimeMinutes * 60;  // 3 × 2 × 60 = 360s = 6min
-                if(live_usd_diff > l3_usd_threshold && live_time_diff < l3_time_limit) {
-                    g_symbol_data.news_results[2] = m15_signal * 3;
+        if(g_symbol_data.news_results[2] == 0) {  // Only if Category 1 wrote 0
+            if(m15_signal != 0 && m5_signal != 0 && m1_signal != 0 &&
+               m1_signal == m5_signal && m5_signal == m15_signal) {
+                if(m15_cross == m5_time && m5_cross == m1_time) {
+                    double l3_usd_threshold = NewsCascadeMultiplier * 3;  // 0.3 USD
+                    int l3_time_limit = 3 * NewsBaseTimeMinutes * 60;  // 3 × 2 × 60 = 360s = 6min
+                    if(live_usd_diff > l3_usd_threshold && live_time_diff < l3_time_limit) {
+                        g_symbol_data.news_results[2] = m15_signal * 3;  // Algorithm OUTPUT: score
+                    }
                 }
             }
         }
 
         // L4: M30→M15→M5→M1 → row 3
         // live_diff > 0.4 + time < 8 min (4×2) → Score 4
-        if(m30_signal != 0 && m15_signal != 0 && m5_signal != 0 && m1_signal != 0 &&
-           m1_signal == m5_signal && m5_signal == m15_signal && m15_signal == m30_signal && g_symbol_data.news_results[3] == 0) {
-            if(m30_cross == m15_time && m15_cross == m5_time && m5_cross == m1_time) {
-                double l4_usd_threshold = NewsCascadeMultiplier * 4;  // 0.4 USD
-                int l4_time_limit = 4 * NewsBaseTimeMinutes * 60;  // 4 × 2 × 60 = 480s = 8min
-                if(live_usd_diff > l4_usd_threshold && live_time_diff < l4_time_limit) {
-                    g_symbol_data.news_results[3] = m30_signal * 4;
+        if(g_symbol_data.news_results[3] == 0) {  // Only if Category 1 wrote 0
+            if(m30_signal != 0 && m15_signal != 0 && m5_signal != 0 && m1_signal != 0 &&
+               m1_signal == m5_signal && m5_signal == m15_signal && m15_signal == m30_signal) {
+                if(m30_cross == m15_time && m15_cross == m5_time && m5_cross == m1_time) {
+                    double l4_usd_threshold = NewsCascadeMultiplier * 4;  // 0.4 USD
+                    int l4_time_limit = 4 * NewsBaseTimeMinutes * 60;  // 4 × 2 × 60 = 480s = 8min
+                    if(live_usd_diff > l4_usd_threshold && live_time_diff < l4_time_limit) {
+                        g_symbol_data.news_results[3] = m30_signal * 4;  // Algorithm OUTPUT: score
+                    }
                 }
             }
         }
 
         // L5: H1→M30→M15→M5→M1 → row 4
         // live_diff > 0.5 + time < 10 min (5×2) → Score 5
-        if(h1_signal != 0 && m30_signal != 0 && m15_signal != 0 && m5_signal != 0 && m1_signal != 0 &&
-           m1_signal == m5_signal && m5_signal == m15_signal && m15_signal == m30_signal && m30_signal == h1_signal && g_symbol_data.news_results[4] == 0) {
-            if(h1_cross == m30_time && m30_cross == m15_time && m15_cross == m5_time && m5_cross == m1_time) {
-                double l5_usd_threshold = NewsCascadeMultiplier * 5;  // 0.5 USD
-                int l5_time_limit = 5 * NewsBaseTimeMinutes * 60;  // 5 × 2 × 60 = 600s = 10min
-                if(live_usd_diff > l5_usd_threshold && live_time_diff < l5_time_limit) {
-                    g_symbol_data.news_results[4] = h1_signal * 5;
+        if(g_symbol_data.news_results[4] == 0) {  // Only if Category 1 wrote 0
+            if(h1_signal != 0 && m30_signal != 0 && m15_signal != 0 && m5_signal != 0 && m1_signal != 0 &&
+               m1_signal == m5_signal && m5_signal == m15_signal && m15_signal == m30_signal && m30_signal == h1_signal) {
+                if(h1_cross == m30_time && m30_cross == m15_time && m15_cross == m5_time && m5_cross == m1_time) {
+                    double l5_usd_threshold = NewsCascadeMultiplier * 5;  // 0.5 USD
+                    int l5_time_limit = 5 * NewsBaseTimeMinutes * 60;  // 5 × 2 × 60 = 600s = 10min
+                    if(live_usd_diff > l5_usd_threshold && live_time_diff < l5_time_limit) {
+                        g_symbol_data.news_results[4] = h1_signal * 5;  // Algorithm OUTPUT: score
+                    }
                 }
             }
         }
 
         // L6: H4→H1→M30→M15→M5→M1 → row 5
         // live_diff > 0.6 + time < 12 min (6×2) → Score 6
-        if(h4_signal != 0 && h1_signal != 0 && m30_signal != 0 && m15_signal != 0 && m5_signal != 0 && m1_signal != 0 &&
-           m1_signal == m5_signal && m5_signal == m15_signal && m15_signal == m30_signal &&
-           m30_signal == h1_signal && h1_signal == h4_signal && g_symbol_data.news_results[5] == 0) {
-            if(h4_cross == h1_time && h1_cross == m30_time && m30_cross == m15_time &&
-               m15_cross == m5_time && m5_cross == m1_time) {
-                double l6_usd_threshold = NewsCascadeMultiplier * 6;  // 0.6 USD
-                int l6_time_limit = 6 * NewsBaseTimeMinutes * 60;  // 6 × 2 × 60 = 720s = 12min
-                if(live_usd_diff > l6_usd_threshold && live_time_diff < l6_time_limit) {
-                    g_symbol_data.news_results[5] = h4_signal * 6;
+        if(g_symbol_data.news_results[5] == 0) {  // Only if Category 1 wrote 0
+            if(h4_signal != 0 && h1_signal != 0 && m30_signal != 0 && m15_signal != 0 && m5_signal != 0 && m1_signal != 0 &&
+               m1_signal == m5_signal && m5_signal == m15_signal && m15_signal == m30_signal &&
+               m30_signal == h1_signal && h1_signal == h4_signal) {
+                if(h4_cross == h1_time && h1_cross == m30_time && m30_cross == m15_time &&
+                   m15_cross == m5_time && m5_cross == m1_time) {
+                    double l6_usd_threshold = NewsCascadeMultiplier * 6;  // 0.6 USD
+                    int l6_time_limit = 6 * NewsBaseTimeMinutes * 60;  // 6 × 2 × 60 = 720s = 12min
+                    if(live_usd_diff > l6_usd_threshold && live_time_diff < l6_time_limit) {
+                        g_symbol_data.news_results[5] = h4_signal * 6;  // Algorithm OUTPUT: score
+                    }
                 }
             }
         }
 
         // L7: D1→H4→H1→M30→M15→M5→M1 → row 6
         // live_diff > 0.7 + time < 14 min (7×2) → Score 7
-        if(d1_signal != 0 && h4_signal != 0 && h1_signal != 0 && m30_signal != 0 &&
-           m15_signal != 0 && m5_signal != 0 && m1_signal != 0 &&
-           m1_signal == m5_signal && m5_signal == m15_signal && m15_signal == m30_signal &&
-           m30_signal == h1_signal && h1_signal == h4_signal && h4_signal == d1_signal && g_symbol_data.news_results[6] == 0) {
-            if(d1_cross == h4_time && h4_cross == h1_time && h1_cross == m30_time &&
-               m30_cross == m15_time && m15_cross == m5_time && m5_cross == m1_time) {
-                double l7_usd_threshold = NewsCascadeMultiplier * 7;  // 0.7 USD
-                int l7_time_limit = 7 * NewsBaseTimeMinutes * 60;  // 7 × 2 × 60 = 840s = 14min
-                if(live_usd_diff > l7_usd_threshold && live_time_diff < l7_time_limit) {
-                    g_symbol_data.news_results[6] = d1_signal * 7;
+        if(g_symbol_data.news_results[6] == 0) {  // Only if Category 1 wrote 0
+            if(d1_signal != 0 && h4_signal != 0 && h1_signal != 0 && m30_signal != 0 &&
+               m15_signal != 0 && m5_signal != 0 && m1_signal != 0 &&
+               m1_signal == m5_signal && m5_signal == m15_signal && m15_signal == m30_signal &&
+               m30_signal == h1_signal && h1_signal == h4_signal && h4_signal == d1_signal) {
+                if(d1_cross == h4_time && h4_cross == h1_time && h1_cross == m30_time &&
+                   m30_cross == m15_time && m15_cross == m5_time && m5_cross == m1_time) {
+                    double l7_usd_threshold = NewsCascadeMultiplier * 7;  // 0.7 USD
+                    int l7_time_limit = 7 * NewsBaseTimeMinutes * 60;  // 7 × 2 × 60 = 840s = 14min
+                    if(live_usd_diff > l7_usd_threshold && live_time_diff < l7_time_limit) {
+                        g_symbol_data.news_results[6] = d1_signal * 7;  // Algorithm OUTPUT: score
+                    }
                 }
             }
         }
