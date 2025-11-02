@@ -2761,26 +2761,26 @@ void OnTimer() {
     int current_second = TimeSeconds(TimeCurrent());
 
     // ========================================
-    // CHUC NANG CHINH 1: XU LY TIN HIEU 7 TF
+    // CHUC NANG CHINH: XU LY TIN HIEU + NEWS
+    // GHI CSDL O GIAY LE (TRANH XUNG DOT VOI EA DOC GIAY CHAN)
     // ========================================
     if(ProcessSignalOnOddSecond) {
-        // MODE: Xu ly GIAY LE (1, 3, 5, 7, 9...)
+        // MODE TRUE: Xu ly GIAY LE (1, 3, 5, 7, 9...)
         if(current_second % 2 == 1) {
             ProcessAllSignals();  // Ghi CSDL1 (A,C) + CSDL2 (A,B,C)
+            UpdateLiveNEWS();     // Update NEWS (cot 9) + Ghi CSDL1 (A,C) + CSDL2 (A,B,C)
         }
     } else {
-        // MODE: Xu ly MOI GIAY (0, 1, 2, 3, 4...)
+        // MODE FALSE: Xu ly MOI GIAY (0, 1, 2, 3, 4...)
         ProcessAllSignals();  // Ghi CSDL1 (A,C) + CSDL2 (A,B,C)
+        UpdateLiveNEWS();     // Update NEWS (cot 9) + Ghi CSDL1 (A,C) + CSDL2 (A,B,C)
     }
 
     // ========================================
-    // GIAY CHAN: CHUC NANG CHINH 2 + PHU
+    // CHUC NANG PHU: LUON CHAY GIAY CHAN
+    // EA DOC CSDL O GIAY CHAN - KHONG BI XUNG DOT GHI FILE
     // ========================================
     if(current_second % 2 == 0) {  // Giay chan (0, 2, 4, 6, 8...)
-        // --- CHUC NANG CHINH 2: UPDATE NEWS + GHI CSDL ---
-        UpdateLiveNEWS();            // Update NEWS (cot 9) + Ghi CSDL1 (A,C) + CSDL2 (A,B,C)
-
-        // --- CHUC NANG PHU ---
         RunStartupReset();           // Startup reset (1 lan sau khi MT4 khoi dong)
         RunMidnightAndHealthCheck(); // Midnight reset + Health check (8h, 16h)
         RunDashboardUpdate();        // Cap nhat dashboard hien thi
