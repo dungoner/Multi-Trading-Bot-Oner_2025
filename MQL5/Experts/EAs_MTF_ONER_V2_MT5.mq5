@@ -522,46 +522,110 @@ bool ParseLoveRow(string row_data, int row_index) {
 
 // Parse CSDL LOVE JSON array (7 rows)
 bool ParseCSDLLoveJSON(string json_content) {
+    // Clean up JSON formatting
     StringReplace(json_content, "[", "");
     StringReplace(json_content, "]", "");
     StringReplace(json_content, "\n", "");
     StringReplace(json_content, "\r", "");
 
+    // Split by '}' delimiter to get individual JSON objects
     string rows[];
     int row_count = StringSplit(json_content, '}', rows);
 
-    DebugPrint("LOVE JSON: Found " + IntegerToString(row_count) + " rows");
+    Print("[DEBUG] LOVE JSON: Found ", row_count, " rows after split");
 
     int parsed_count = 0;
     for(int i = 0; i < 7 && i < row_count; i++) {
         string row_data = rows[i];
+
+        // Debug: show raw row before cleaning
+        if(StringLen(row_data) > 10 && StringLen(row_data) < 200) {
+            Print("[DEBUG] Row[", i, "] raw: ", row_data);
+        }
+
         StringReplace(row_data, ",{", "");
         StringReplace(row_data, "{", "");
 
-        if(StringLen(row_data) < 10) continue;
+        if(StringLen(row_data) < 10) {
+            Print("[DEBUG] Row[", i, "] skipped (too short: ", StringLen(row_data), " chars)");
+            continue;
+        }
+
+        Print("[DEBUG] Row[", i, "] cleaned: ", StringSubstr(row_data, 0, 100), "...");
 
         if(ParseLoveRow(row_data, i)) {
             parsed_count++;
+            Print("[DEBUG] Row[", i, "] parsed OK. Signal=", g_ea.csdl_rows[i].signal);
+        } else {
+            Print("[DEBUG] Row[", i, "] ParseLoveRow FAILED!");
         }
     }
 
+    Print("[DEBUG] Total parsed: ", parsed_count, " / ", row_count, " rows");
     return (parsed_count >= 1);
 }
 
 // Helper: Try to read and parse file
+// MT5 FIX: Robust file reading with explicit buffer handling
 bool TryReadFile(string filename) {
+    // Try ANSI encoding first (for Python/UTF-8 files)
     int handle = FileOpen(filename, FILE_READ | FILE_TXT | FILE_ANSI | FILE_SHARE_READ | FILE_SHARE_WRITE);
-    if(handle == INVALID_HANDLE) return false;
-
-    string json_content = "";
-    while(!FileIsEnding(handle)) {
-        json_content += FileReadString(handle);
+    if(handle == INVALID_HANDLE) {
+        Print("[ERROR] FileOpen failed: ", filename, " Error: ", GetLastError());
+        return false;
     }
+
+    // Get file size for validation
+    ulong file_size = FileSize(handle);
+    Print("[DEBUG] Opening file: ", filename, " Size: ", file_size, " bytes");
+
+    if(file_size == 0) {
+        Print("[ERROR] File is empty!");
+        FileClose(handle);
+        return false;
+    }
+
+    if(file_size > 100000) {
+        Print("[ERROR] File too large: ", file_size, " bytes (max 100KB)");
+        FileClose(handle);
+        return false;
+    }
+
+    // MT5 CRITICAL FIX: Read file using character buffer instead of FileReadString()
+    // This avoids line ending detection issues between \n and \r\n
+    uchar buffer[];
+    uint bytes_read = FileReadArray(handle, buffer, 0, (uint)file_size);
     FileClose(handle);
 
-    if(StringLen(json_content) < 20) return false;
-    if(!ParseCSDLLoveJSON(json_content)) return false;
+    Print("[DEBUG] Read ", bytes_read, " bytes from file");
 
+    if(bytes_read == 0) {
+        Print("[ERROR] FileReadArray returned 0 bytes!");
+        return false;
+    }
+
+    // Convert byte array to string (ANSI decoding)
+    string json_content = CharArrayToString(buffer, 0, (int)bytes_read, CP_ACP);
+
+    Print("[DEBUG] Converted to string. Length: ", StringLen(json_content));
+    if(StringLen(json_content) > 0 && StringLen(json_content) < 300) {
+        Print("[DEBUG] Content: ", json_content);
+    } else if(StringLen(json_content) >= 300) {
+        Print("[DEBUG] Preview: ", StringSubstr(json_content, 0, 150), "...");
+    }
+
+    if(StringLen(json_content) < 20) {
+        Print("[ERROR] Content too short after conversion: ", StringLen(json_content), " chars");
+        return false;
+    }
+
+    // Parse JSON
+    if(!ParseCSDLLoveJSON(json_content)) {
+        Print("[ERROR] ParseCSDLLoveJSON failed!");
+        return false;
+    }
+
+    Print("[DEBUG] File parsed successfully!");
     return true;  // SUCCESS
 }
 
