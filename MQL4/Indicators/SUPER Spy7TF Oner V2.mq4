@@ -2650,28 +2650,28 @@ int OnInit() {
 // ============================================================
 
 // Startup Reset: 1 minute after MT4 starts (1 TIME ONLY per MT4 session)
-// Uses GlobalVariable - auto-deleted after reset, recreated on next MT4 restart
+// Uses static flag to prevent re-execution, resets only on MT4 restart
 void RunStartupReset() {
     if(!EnableStartupReset) return;  // Skip if disabled
 
-    string gv_init_time = g_target_symbol + "_StartupInitTime";
+    static bool reset_done = false;  // Reset to false only when MT4 restarts
+    static datetime init_time = 0;
 
-    // If variable doesn't exist = First time after MT4 start
-    if(!GlobalVariableCheck(gv_init_time)) {
-        GlobalVariableSet(gv_init_time, TimeCurrent());  // Create with current time
-        return;  // Wait for next cycle
+    // Already executed in this MT4 session -> do nothing
+    if(reset_done) return;
+
+    // First call: Record start time
+    if(init_time == 0) {
+        init_time = TimeCurrent();
+        return;
     }
 
-    // Calculate elapsed time since MT4 start
-    datetime init_time = (datetime)GlobalVariableGet(gv_init_time);
+    // After 60 seconds -> Run reset once
     int elapsed = (int)(TimeCurrent() - init_time);
-
-    // After 60 seconds -> Run reset and DELETE variable immediately
     if(elapsed >= 60) {
         Print("StartupReset: ", g_target_symbol, " | 1 min after MT4 start");
         SmartTFReset();
-        GlobalVariableDel(gv_init_time);  // Delete immediately after reset
-        // Variable deleted -> function does nothing until next MT4 restart
+        reset_done = true;  // Mark as done, never runs again until MT4 restarts
     }
 }
 
@@ -2915,15 +2915,6 @@ void OnDeinit(const int reason) {
     ObjectDelete(0, "SPY_Dashboard_Line4");
     ObjectDelete(0, "SPY_Dashboard_Line5");
     ObjectDelete(0, "SPY_Dashboard_NEWS");
-
-    // Cleanup GlobalVariables when indicator is removed (not just reloaded)
-    if(reason == REASON_REMOVE) {
-        string gv_init_time = g_target_symbol + "_StartupInitTime";
-        if(GlobalVariableCheck(gv_init_time)) {
-            GlobalVariableDel(gv_init_time);
-        }
-        Print("✓ Cleaned up GlobalVariables for ", g_target_symbol);
-    }
 
     Print("✓ SUPER_Spy7TF_Oner V2 Deinitialized");
 }
