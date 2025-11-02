@@ -550,7 +550,7 @@ bool ParseCSDLLoveJSON(string json_content) {
 
 // Helper: Try to read and parse file
 bool TryReadFile(string filename) {
-    int handle = FileOpen(filename, FILE_READ | FILE_TXT | FILE_SHARE_READ | FILE_SHARE_WRITE);
+    int handle = FileOpen(filename, FILE_READ | FILE_TXT | FILE_ANSI | FILE_SHARE_READ | FILE_SHARE_WRITE);
     if(handle == INVALID_HANDLE) return false;
 
     string json_content = "";
