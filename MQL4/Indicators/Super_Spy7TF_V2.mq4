@@ -2898,7 +2898,7 @@ void MidnightReset() {
 
     // Sử dụng GlobalVariable thay vì static để tránh bị reset khi OnInit()
     string gv_last_reset_time = g_target_symbol + "_LastMidnightResetTime";
-    string gv_startup_flag = g_target_symbol + "_StartupResetDone";
+    string gv_done = g_target_symbol + "_StartupResetDone";  // CỜ DUY NHẤT
 
     // Khởi tạo nếu chưa có
     if(!GlobalVariableCheck(gv_last_reset_time)) {
@@ -2910,7 +2910,7 @@ void MidnightReset() {
     int current_hour = TimeHour(current_time);
     int current_minute = TimeMinute(current_time);
 
-    // ĐIỀU KIỆN: Ngày mới + Giờ 0h + Chưa reset (ít nhất 1h từ lần trước)
+    // ĐIỀU KIỆN: Ngày mới + Giờ 0h:0p + Chưa reset (ít nhất 1h từ lần trước)
     // Tránh reset lặp lại khi SmartTFReset() trigger OnInit()
     if(TimeDay(last_reset) != TimeDay(current_time) &&
        current_hour == 0 &&
@@ -2923,8 +2923,8 @@ void MidnightReset() {
         // Cập nhật thời gian reset
         GlobalVariableSet(gv_last_reset_time, current_time);
 
-        // GÁN CỜ = 0 cho StartupReset (trường hợp VPS restart)
-        GlobalVariableSet(gv_startup_flag, 0);
+        // GÁN CỜ = 0 (cho phép StartupReset nếu VPS restart)
+        GlobalVariableSet(gv_done, 0);
     }
 }
 
