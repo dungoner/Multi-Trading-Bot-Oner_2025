@@ -2639,13 +2639,12 @@ int OnInit() {
     // → StartupReset check done=0 → Chỉ chạy nếu chưa có reset nào!
     if(EnableStartupReset) {
         string gv_time = g_target_symbol + "_StartupInitTime";
-        string gv_done = g_target_symbol + "_StartupResetDone";
 
-        // CHỈ tạo NẾU CHƯA CÓ (MT4 vừa start)
+        // CHỈ tạo gv_time (để track elapsed), KHÔNG tạo gv_done
+        // gv_done chỉ được tạo bởi MidnightReset (gán = 0)
         if(!GlobalVariableCheck(gv_time)) {
             GlobalVariableSet(gv_time, TimeCurrent());
-            GlobalVariableSet(gv_done, 0);  // 0 = chưa reset
-            Print("✓ StartupReset: Initialized (time=", TimeToString(TimeCurrent()), " done=0)");
+            Print("✓ StartupReset: Init time saved (", TimeToString(TimeCurrent()), ")");
         }
     }
 
@@ -2657,33 +2656,36 @@ int OnInit() {
 // SECONDARY FUNCTIONS | CAC HAM PHU
 // ============================================================
 
-// Startup Reset: Smart 2-variable solution (done flag auto-set by SmartTFReset)
-// Reset tự động: Giải pháp 2 biến thông minh (done tự động gán bởi SmartTFReset)
-// LOGIC THÔNG MINH:
-// - SmartTFReset() tự động gán done=1 (bên trong hàm reset chính)
-// - MidnightReset/HealthCheck gọi SmartTFReset() → done=1 tự động
-// - StartupReset check done=0 → Chỉ chạy nếu chưa có reset nào chạy trước!
+// Startup Reset: Flag-based solution (flag created by MidnightReset)
+// Reset tự động: Giải pháp dựa trên cờ (cờ được tạo bởi MidnightReset)
+// LOGIC MỚI:
+// - OnInit(): Chỉ tạo gv_time (track elapsed), KHÔNG tạo gv_done
+// - MidnightReset lúc 0h: Gán gv_done = 0 (cho phép StartupReset nếu VPS restart)
+// - StartupReset: Check gv_done TỒN TẠI && < 2 && elapsed >= 60s → reset
+// - SmartTFReset(): Gán gv_done = gv_done + 1 (0→1, không reset lại)
 void RunStartupReset() {
     if(!EnableStartupReset) return;
 
     string gv_time = g_target_symbol + "_StartupInitTime";
     string gv_done = g_target_symbol + "_StartupResetDone";
 
-    // Check variables exist | Kiểm tra biến tồn tại
-    if(!GlobalVariableCheck(gv_time)) return;
+    // QUAN TRỌNG: gv_done PHẢI TỒN TẠI (do MidnightReset tạo)
+    // Nếu chưa qua 0h lần nào → gv_done chưa tồn tại → SKIP (chờ 0h ngày mai)
     if(!GlobalVariableCheck(gv_done)) return;
+    if(!GlobalVariableCheck(gv_time)) return;
 
     // Get values | Lấy giá trị
     datetime init_time = (datetime)GlobalVariableGet(gv_time);
     double done = GlobalVariableGet(gv_done);
     int elapsed = TimeCurrent() - init_time;
 
-    // ĐIỀU KIỆN: CHƯA reset (done=0) + ĐỦ 60s
+    // ĐIỀU KIỆN: Cờ == 0 (MidnightReset vừa gán) + Đủ 60s
+    // - Cờ = 0: MidnightReset vừa gán lúc 0h, CHO PHÉP StartupReset (VPS restart)
+    // - Cờ != 0: Đã reset rồi, KHÔNG reset lại
     if(done == 0 && elapsed >= 60) {
-        Print("✓ StartupReset: ", g_target_symbol, " | ", elapsed, "s after MT4 start");
+        Print("✓ StartupReset: ", g_target_symbol, " | Flag=", done, " elapsed=", elapsed, "s");
         SmartTFReset();
-        // KHÔNG cần gán done=1 ở đây! SmartTFReset() tự gán bên trong!
-        // SmartTFReset() will auto-set done=1 inside the function!
+        // SmartTFReset() sẽ tự tăng done lên +1 (0→1, không bao giờ = 0 lại)
     }
 }
 
@@ -2819,12 +2821,14 @@ string PeriodToString(int period) {
 // Smart timeframe reset for all charts of current symbol | Reset thong minh khung thoi gian cho tat ca bieu do symbol hien tai
 void SmartTFReset() {
     // ============================================================================
-    // AUTO-FLAG: Đánh dấu NGAY LẬP TỨC để tránh gọi lại trong lúc đang reset
-    // AUTO-FLAG: Mark IMMEDIATELY to prevent re-entry while resetting
+    // AUTO-FLAG: Tăng cờ NGAY LẬP TỨC để tránh gọi lại trong lúc đang reset
+    // AUTO-FLAG: Increment flag IMMEDIATELY to prevent re-entry while resetting
     // ============================================================================
+    // LOGIC: Cờ = cờ + 1 (MidnightReset gán = 0, sau reset = 1, không reset lại)
     string gv_done = g_target_symbol + "_StartupResetDone";
     if(GlobalVariableCheck(gv_done)) {
-        GlobalVariableSet(gv_done, 1);  // Mark done = 1 TRƯỚC KHI reset!
+        double current_flag = GlobalVariableGet(gv_done);
+        GlobalVariableSet(gv_done, current_flag + 1);  // Cờ = cờ + 1
     }
 
     // Get current chart info | Lay thong tin chart hien tai
@@ -2899,14 +2903,35 @@ void HealthCheck() {
 void MidnightReset() {
     if(!EnableMidnightReset) return;
 
-    static int last_day = 99;  // Init != -1 to prevent first-time trigger
-    int current_day = TimeDay(TimeCurrent());
+    // Sử dụng GlobalVariable thay vì static để tránh bị reset khi OnInit()
+    string gv_last_reset_time = g_target_symbol + "_LastMidnightResetTime";
+    string gv_startup_flag = g_target_symbol + "_StartupResetDone";
 
-    // Check if new day (0h crossed) | Kiem tra neu sang ngay moi (qua 0h)
-    if(current_day != last_day && TimeHour(TimeCurrent()) == 0) {
-        Print("MidnightReset: ", g_target_symbol, " | New day started");
+    // Khởi tạo nếu chưa có
+    if(!GlobalVariableCheck(gv_last_reset_time)) {
+        GlobalVariableSet(gv_last_reset_time, 0);
+    }
+
+    datetime last_reset = (datetime)GlobalVariableGet(gv_last_reset_time);
+    datetime current_time = TimeCurrent();
+    int current_hour = TimeHour(current_time);
+    int current_minute = TimeMinute(current_time);
+
+    // ĐIỀU KIỆN: Ngày mới + Giờ 0h + Chưa reset (ít nhất 1h từ lần trước)
+    // Tránh reset lặp lại khi SmartTFReset() trigger OnInit()
+    if(TimeDay(last_reset) != TimeDay(current_time) &&
+       current_hour == 0 &&
+       current_minute == 0 &&
+       (current_time - last_reset) >= 3600) {
+
+        Print("MidnightReset: ", g_target_symbol, " | New day at 0h:0m");
         SmartTFReset();
-        last_day = current_day;
+
+        // Cập nhật thời gian reset
+        GlobalVariableSet(gv_last_reset_time, current_time);
+
+        // GÁN CỜ = 0 cho StartupReset (trường hợp VPS restart)
+        GlobalVariableSet(gv_startup_flag, 0);
     }
 }
 
