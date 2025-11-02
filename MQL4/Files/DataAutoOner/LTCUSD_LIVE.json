@@ -1,9 +1,9 @@
 [
-  {"max_loss":-1248.38,"timestamp":1762071300,"signal":-1,"pricediff":-11.50,"timediff":1,"news":1},
-  {"max_loss":-1248.39,"timestamp":1762066800,"signal":1,"pricediff":-8.70,"timediff":20,"news":0},
+  {"max_loss":-1248.31,"timestamp":1762080600,"signal":-1,"pricediff":-10.60,"timediff":4,"news":0},
+  {"max_loss":-1248.32,"timestamp":1762080000,"signal":-1,"pricediff":0.00,"timediff":0,"news":0},
   {"max_loss":-1248.46,"timestamp":1762041600,"signal":-1,"pricediff":0.00,"timediff":0,"news":0},
   {"max_loss":-1251.14,"timestamp":1761856200,"signal":1,"pricediff":-15.10,"timediff":60,"news":0},
-  {"max_loss":-1248.46,"timestamp":1762052400,"signal":-1,"pricediff":-18.80,"timediff":120,"news":0},
+  {"max_loss":-1248.36,"timestamp":1762066800,"signal":1,"pricediff":-16.40,"timediff":240,"news":0},
   {"max_loss":-1250.61,"timestamp":1761926400,"signal":-1,"pricediff":0.00,"timediff":0,"news":0},
   {"max_loss":-1250.60,"timestamp":1761926400,"signal":-1,"pricediff":0.00,"timediff":0,"news":0}
 ]
