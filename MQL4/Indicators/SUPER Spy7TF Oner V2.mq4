@@ -2638,6 +2638,11 @@ int OnInit() {
 
     // Dashboard will be shown by OnTimer() every second (không c?n g?i ? OnInit)
 
+    // Set startup reset flag (if enabled)
+    if(EnableStartupReset) {
+        GlobalVariableSet(g_target_symbol + "_StartupInitTime", TimeCurrent());
+    }
+
     // Mark system as initialized
     g_system_initialized = true;
 
@@ -2650,24 +2655,21 @@ int OnInit() {
 // ============================================================
 
 // Startup Reset: 1 minute after MT4 starts (1 TIME ONLY per MT4 session)
-// GlobalVariable lost when MT4 closes, survives indicator reload
+// Init time set in OnInit(), check here every 2 seconds
 void RunStartupReset() {
     if(!EnableStartupReset) return;
 
-    string gv_done = g_target_symbol + "_StartupResetDone";
     string gv_time = g_target_symbol + "_StartupInitTime";
+    string gv_done = g_target_symbol + "_StartupResetDone";
 
-    // Create init time if not exists
-    if(!GlobalVariableCheck(gv_time)) {
-        GlobalVariableSet(gv_time, TimeCurrent());
-    }
-
-    // If not done (!=1) AND elapsed >= 60s -> Reset and mark done
-    if((!GlobalVariableCheck(gv_done) || GlobalVariableGet(gv_done) != 1) &&
-       (TimeCurrent() - GlobalVariableGet(gv_time) >= 60)) {
+    // If init time exists AND not done yet AND elapsed >= 60s -> Reset
+    if(GlobalVariableCheck(gv_time) &&
+       GlobalVariableGet(gv_done) != 1 &&
+       TimeCurrent() - GlobalVariableGet(gv_time) >= 60) {
         Print("StartupReset: ", g_target_symbol, " | 1 min after MT4 start");
         SmartTFReset();
         GlobalVariableSet(gv_done, 1);
+        GlobalVariableDel(gv_time);  // Cleanup
     }
 }
 
