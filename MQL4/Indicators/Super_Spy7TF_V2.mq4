@@ -24,10 +24,10 @@ input int    Retry = 3;                                      // Retry Attempts p
 input string TargetSymbol = "";                              // Target Symbol - Empty = current chart | Symbol muc tieu - Rong = chart hien tai
 input bool   EnableHealthCheck = true;                       // Health check at 8h & 16h | Kiem tra suc khoe luc 8h va 16h
 input bool   EnableMidnightReset = true;                     // Midnight reset at 0h daily | Reset luc 0h hang ngay
+input bool   EnableStartupReset = true;                      // Startup reset 60s after MT4 starts | Reset 60s sau khi MT4 khoi dong
 input bool   ProcessSignalOnOddSecond = false;               // Process Signal on ODD second only | Xu ly tin hieu giay le (tranh conflict)
 input bool   EnableMonthlyStats = true;                      // Monthly stats on 1st day of month | Thong ke thang vao ngay 1
 input string DataFolder = "DataAutoOner\\";                  // Data Storage Folder | Thu muc luu tru du lieu
-// NOTE: StartupReset removed - now runs automatically on MT4 startup (60s delay) | Chu thich: Da xoa StartupReset - bay gio tu dong chay khi MT4 khoi dong (tre 60s)
 
 //--- NEWS CASCADE Configuration | Cau hinh NEWS CASCADE
 input double NewsBaseLiveDiff = 2.5;                         // L1 Base Live Diff threshold (USD) | Nguong Live Diff co ban L1
@@ -2631,19 +2631,18 @@ int OnInit() {
     g_system_initialized = true;
 
     // ============================================================
-    // STARTUP RESET: Initialize GlobalVariable for auto-reset
-    // Reset tự động: Khởi tạo biến GlobalVariable
+    // STARTUP RESET: Save MT4 start time (simple logic)
+    // Reset tự động: Lưu thời gian MT4 khởi động (logic đơn giản)
     // ============================================================
-    // LOGIC: Tạo biến = 1 khi MT4 khởi động, sau 60s sẽ reset và xóa biến
-    // LOGIC: Create variable = 1 on MT4 startup, after 60s will reset and delete variable
-    string gv_flag = g_target_symbol + "_StartupResetFlag";
-    string gv_time = g_target_symbol + "_StartupResetTime";
-
-    // Only create if not exists (MT4 just started) | Chỉ tạo nếu chưa có (MT4 mới khởi động)
-    if(!GlobalVariableCheck(gv_flag)) {
-        GlobalVariableSet(gv_flag, 1);  // Set flag = 1 | Gán cờ = 1
-        GlobalVariableSet(gv_time, TimeCurrent());  // Save init timestamp | Lưu thời gian khởi tạo
-        Print("✓ StartupReset: GlobalVariable initialized | Biến nhớ đã khởi tạo");
+    // LOGIC: Lưu thời gian MT4 start → Sau 60s reset 1 lần → Không xóa biến
+    // LOGIC: Save MT4 start time → After 60s reset once → Don't delete variable
+    // F5 reload/MidnightReset → Reset thêm lần nữa → OK (chấp nhận)
+    if(EnableStartupReset) {
+        string gv_time = g_target_symbol + "_StartupInitTime";
+        if(!GlobalVariableCheck(gv_time)) {
+            GlobalVariableSet(gv_time, TimeCurrent());
+            Print("✓ StartupReset: Initialized (will reset after 60s)");
+        }
     }
 
     return INIT_SUCCEEDED;
@@ -2654,35 +2653,34 @@ int OnInit() {
 // SECONDARY FUNCTIONS | CAC HAM PHU
 // ============================================================
 
-// Startup Reset: AUTO-RUN 60 seconds after MT4 starts (1 TIME ONLY)
-// Reset tự động: TỰ ĐỘNG CHẠY 60 giây sau khi MT4 khởi động (CHỈ 1 LẦN)
-// LOGIC: Check flag=1 && wait 60s → Reset → Set flag=0 and DELETE variables
-// LOGIC: Kiểm tra cờ=1 && chờ 60s → Reset → Gán cờ=0 và XÓA biến
+// Startup Reset: Simple 60s check after MT4 starts
+// Reset tự động: Check đơn giản sau 60s MT4 khởi động
+// LOGIC: Static bool → Reset 1 lần → F5 reload → Static mất → Reset lại → OK
+// LOGIC: Static bool → Reset once → F5 reload → Static lost → Reset again → OK
 void RunStartupReset() {
-    // GlobalVariable names - match with OnInit() | Tên biến - khớp với OnInit()
-    string gv_flag = g_target_symbol + "_StartupResetFlag";
-    string gv_time = g_target_symbol + "_StartupResetTime";
+    if(!EnableStartupReset) return;
 
-    // Check if variables exist | Kiểm tra biến có tồn tại không
-    if(!GlobalVariableCheck(gv_flag)) return;  // No variable = already executed or not initialized
+    // Get MT4 start time from GlobalVariable | Lấy thời gian MT4 start từ GlobalVariable
+    string gv_time = g_target_symbol + "_StartupInitTime";
+    if(!GlobalVariableCheck(gv_time)) return;  // Variable not initialized
 
-    // Get current values | Lấy giá trị hiện tại
-    double flag_value = GlobalVariableGet(gv_flag);
+    // Static variable - lost on indicator reload → reset again → OK
+    // Biến static - mất khi reload indicator → reset lại → OK
+    static bool reset_done = false;
+
+    // Simple check: elapsed >= 60s | Kiểm tra đơn giản: đã qua 60s
     datetime init_time = (datetime)GlobalVariableGet(gv_time);
+    int elapsed = TimeCurrent() - init_time;
 
-    // Execute only if flag=1 AND 60 seconds passed | Chỉ thực thi nếu cờ=1 VÀ đã qua 60 giây
-    if(flag_value == 1 && (TimeCurrent() - init_time >= 60)) {
-        Print("✓ StartupReset: ", g_target_symbol, " | 60s after MT4 start | Resetting 7 TF files...");
+    // Reset once per indicator session | Reset 1 lần mỗi indicator session
+    if(!reset_done && elapsed >= 60) {
+        Print("✓ StartupReset: ", g_target_symbol, " | ", elapsed, "s after init");
         SmartTFReset();
-
-        // IMPORTANT: Set flag=0 and DELETE variables immediately | QUAN TRỌNG: Gán cờ=0 và XÓA biến ngay lập tức
-        GlobalVariableSet(gv_flag, 0);  // Set to 0 | Gán = 0
-        GlobalVariableDel(gv_flag);     // Delete flag | Xóa cờ
-        GlobalVariableDel(gv_time);     // Delete timestamp | Xóa timestamp
-
-        Print("✓ StartupReset: Completed and cleaned up | Hoàn thành và dọn dẹp");
-        // Variables deleted → Next call will return immediately | Biến đã xóa → Lần gọi sau sẽ return ngay
-        // When MT4 restarts → OnInit() creates variables again | Khi MT4 restart → OnInit() tạo biến lại
+        reset_done = true;
+        // KHÔNG XÓA GlobalVariable!
+        // DON'T DELETE GlobalVariable!
+        // → F5 reload: static mất → reset lại → OK
+        // → MidnightReset: reset thêm → OK (chấp nhận)
     }
 }
 
@@ -2926,22 +2924,14 @@ void OnDeinit(const int reason) {
     ObjectDelete(0, "SPY_Dashboard_Line4");
     ObjectDelete(0, "SPY_Dashboard_NEWS");
 
-    // Cleanup GlobalVariables when indicator is removed (not just reloaded)
+    // Cleanup GlobalVariable when indicator is removed (not just reloaded)
     // Dọn dẹp biến toàn cục khi indicator bị xóa (không chỉ reload)
-    // NOTE: Variables are already deleted after reset, but cleanup here for safety
-    // CHÚ THÍCH: Biến đã được xóa sau khi reset, nhưng dọn dẹp ở đây để an toàn
     if(reason == REASON_REMOVE) {
-        string gv_flag = g_target_symbol + "_StartupResetFlag";
-        string gv_time = g_target_symbol + "_StartupResetTime";
-
-        if(GlobalVariableCheck(gv_flag)) {
-            GlobalVariableDel(gv_flag);
-        }
+        string gv_time = g_target_symbol + "_StartupInitTime";
         if(GlobalVariableCheck(gv_time)) {
             GlobalVariableDel(gv_time);
+            Print("✓ Cleaned up GlobalVariable for ", g_target_symbol);
         }
-
-        Print("✓ Cleaned up GlobalVariables for ", g_target_symbol);
     }
 
     Print("✓ SUPER_Spy7TF_Oner V2 Deinitialized");
