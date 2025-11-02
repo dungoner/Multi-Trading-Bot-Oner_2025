@@ -2649,32 +2649,29 @@ int OnInit() {
 // SECONDARY FUNCTIONS | CAC HAM PHU
 // ============================================================
 
-// Startup Reset: 1 minute after bot starts (1 TIME ONLY)
-// Uses GlobalVariable to survive indicator reload - only resets when MT4 closes
+// Startup Reset: 1 minute after MT4 starts (1 TIME ONLY per MT4 session)
+// Uses GlobalVariable - auto-deleted after reset, recreated on next MT4 restart
 void RunStartupReset() {
     if(!EnableStartupReset) return;  // Skip if disabled
 
-    // GlobalVariable names - unique per symbol
-    string gv_done = g_target_symbol + "_StartupResetDone";      // 0 = not executed, 1 = executed
-    string gv_init_time = g_target_symbol + "_StartupInitTime";  // timestamp
+    string gv_init_time = g_target_symbol + "_StartupInitTime";
 
-    // Initialize GlobalVariables if they don't exist
-    if(GlobalVariableCheck(gv_done) == false) {
-        GlobalVariableSet(gv_done, 0);  // Not executed yet
-    }
-    if(GlobalVariableCheck(gv_init_time) == false) {
-        GlobalVariableSet(gv_init_time, TimeCurrent());  // Set init time
+    // If variable doesn't exist = First time after MT4 start
+    if(!GlobalVariableCheck(gv_init_time)) {
+        GlobalVariableSet(gv_init_time, TimeCurrent());  // Create with current time
+        return;  // Wait for next cycle
     }
 
-    // Get current values
-    double reset_done = GlobalVariableGet(gv_done);
+    // Calculate elapsed time since MT4 start
     datetime init_time = (datetime)GlobalVariableGet(gv_init_time);
+    int elapsed = (int)(TimeCurrent() - init_time);
 
-    // Execute only if not done yet AND 60 seconds passed
-    if(reset_done == 0 && (TimeCurrent() - init_time >= 60)) {
+    // After 60 seconds -> Run reset and DELETE variable immediately
+    if(elapsed >= 60) {
         Print("StartupReset: ", g_target_symbol, " | 1 min after MT4 start");
         SmartTFReset();
-        GlobalVariableSet(gv_done, 1);  // Mark as executed - NEVER runs again until MT4 restarts
+        GlobalVariableDel(gv_init_time);  // Delete immediately after reset
+        // Variable deleted -> function does nothing until next MT4 restart
     }
 }
 
@@ -2916,20 +2913,15 @@ void OnDeinit(const int reason) {
     ObjectDelete(0, "SPY_Dashboard_Line2");
     ObjectDelete(0, "SPY_Dashboard_Line3");
     ObjectDelete(0, "SPY_Dashboard_Line4");
+    ObjectDelete(0, "SPY_Dashboard_Line5");
     ObjectDelete(0, "SPY_Dashboard_NEWS");
 
     // Cleanup GlobalVariables when indicator is removed (not just reloaded)
     if(reason == REASON_REMOVE) {
-        string gv_done = g_target_symbol + "_StartupResetDone";
         string gv_init_time = g_target_symbol + "_StartupInitTime";
-
-        if(GlobalVariableCheck(gv_done)) {
-            GlobalVariableDel(gv_done);
-        }
         if(GlobalVariableCheck(gv_init_time)) {
             GlobalVariableDel(gv_init_time);
         }
-
         Print("✓ Cleaned up GlobalVariables for ", g_target_symbol);
     }
 
