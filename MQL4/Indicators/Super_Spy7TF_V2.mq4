@@ -2663,8 +2663,8 @@ int OnInit() {
         if(!GlobalVariableCheck(gv_time)) {
             // GlobalVariable not found = MT4 just restarted (or first run)
             GlobalVariableSet(gv_time, TimeCurrent());
-            GlobalVariableSet(gv_done, 0);  // Reset done flag
-            Print("StartupReset: MT4 restart detected | Will reset 7 charts in 60s");
+            GlobalVariableSet(gv_done, -1);  // -1 = chưa khởi tạo, chờ MidnightReset
+            Print("StartupReset: MT4 restart detected | Waiting for MidnightReset to init flag");
         } else {
             // GlobalVariable exists = Indicator reload (not MT4 restart)
             long init_time = (long)GlobalVariableGet(gv_time);
@@ -2709,18 +2709,21 @@ void RunStartupReset() {
 
     // Check if init time exists (set by OnInit when MT4 restart)
     if(!GlobalVariableCheck(gv_time)) return;
+    if(!GlobalVariableCheck(gv_done)) return;
 
-    // Check if already done this session
-    if(GlobalVariableCheck(gv_done) && GlobalVariableGet(gv_done) == 1) return;
-
-    // Check if 60s elapsed since MT4 start
+    // Get values
     long init_time = (long)GlobalVariableGet(gv_time);
+    double done = GlobalVariableGet(gv_done);
     long elapsed = TimeCurrent() - init_time;
 
-    if(elapsed >= 60) {
-        Print("StartupReset: ", g_target_symbol, " | ", elapsed, "s after MT4 restart -> Resetting 7 charts");
+    // ĐIỀU KIỆN: Cờ == 0 (MidnightReset đã gán) + Đủ 60s
+    // - Cờ = -1: OnInit tạo, chưa qua 0h → SKIP (chờ MidnightReset)
+    // - Cờ = 0: MidnightReset vừa gán lúc 0h → CHO PHÉP StartupReset (VPS restart)
+    // - Cờ = 1: Đã reset rồi → SKIP
+    if(done == 0 && elapsed >= 60) {
+        Print("StartupReset: ", g_target_symbol, " | Flag=", done, " elapsed=", elapsed, "s -> Resetting 7 charts");
         SmartTFReset();
-        GlobalVariableSet(gv_done, 1);
+        GlobalVariableSet(gv_done, 1);  // GÁN CỜ = 1
     }
 }
 
@@ -2929,14 +2932,35 @@ void HealthCheck() {
 void MidnightReset() {
     if(!EnableMidnightReset) return;
 
-    static int last_day = 99;  // Init != -1 to prevent first-time trigger
-    int current_day = TimeDay(TimeCurrent());
+    // Sử dụng GlobalVariable thay vì static để tránh bị reset khi OnInit()
+    string gv_last_reset_time = g_target_symbol + "_LastMidnightResetTime";
+    string gv_done = g_target_symbol + "_StartupResetDone";  // CỜ DUY NHẤT
 
-    // Check if new day (0h crossed) | Kiem tra neu sang ngay moi (qua 0h)
-    if(current_day != last_day && TimeHour(TimeCurrent()) == 0) {
-        Print("MidnightReset: ", g_target_symbol, " | New day started");
+    // Khởi tạo nếu chưa có
+    if(!GlobalVariableCheck(gv_last_reset_time)) {
+        GlobalVariableSet(gv_last_reset_time, 0);
+    }
+
+    datetime last_reset = (datetime)GlobalVariableGet(gv_last_reset_time);
+    datetime current_time = TimeCurrent();
+    int current_hour = TimeHour(current_time);
+    int current_minute = TimeMinute(current_time);
+
+    // ĐIỀU KIỆN: Ngày mới + Giờ 0h:0m + Chưa reset (ít nhất 1h từ lần trước)
+    // Tránh reset lặp lại khi SmartTFReset() trigger OnInit()
+    if(TimeDay(last_reset) != TimeDay(current_time) &&
+       current_hour == 0 &&
+       current_minute == 0 &&
+       (current_time - last_reset) >= 3600) {
+
+        Print("MidnightReset: ", g_target_symbol, " | New day at 0h:0m");
         SmartTFReset();
-        last_day = current_day;
+
+        // Cập nhật thời gian reset
+        GlobalVariableSet(gv_last_reset_time, current_time);
+
+        // GÁN CỜ = 0 (cho phép StartupReset nếu VPS restart)
+        GlobalVariableSet(gv_done, 0);
     }
 }
 
