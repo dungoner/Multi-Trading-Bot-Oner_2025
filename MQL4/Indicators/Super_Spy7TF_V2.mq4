@@ -2639,12 +2639,18 @@ int OnInit() {
     // → StartupReset check done=0 → Chỉ chạy nếu chưa có reset nào!
     if(EnableStartupReset) {
         string gv_time = g_target_symbol + "_StartupInitTime";
+        string gv_done = g_target_symbol + "_StartupResetDone";
 
-        // CHỈ tạo gv_time (để track elapsed), KHÔNG tạo gv_done
-        // gv_done chỉ được tạo bởi MidnightReset (gán = 0)
+        // Tạo gv_time để track elapsed time
         if(!GlobalVariableCheck(gv_time)) {
             GlobalVariableSet(gv_time, TimeCurrent());
-            Print("✓ StartupReset: Init time saved (", TimeToString(TimeCurrent()), ")");
+        }
+
+        // Tạo gv_done NHƯNG KHÔNG GÁN GIÁ TRỊ CỤ THỂ (để MidnightReset gán = 0)
+        // Gán = -1 để đánh dấu "chưa được MidnightReset khởi tạo"
+        if(!GlobalVariableCheck(gv_done)) {
+            GlobalVariableSet(gv_done, -1);  // -1 = chưa khởi tạo, chờ MidnightReset
+            Print("✓ StartupReset: Variables created (waiting for MidnightReset to init flag)");
         }
     }
 
@@ -2656,37 +2662,33 @@ int OnInit() {
 // SECONDARY FUNCTIONS | CAC HAM PHU
 // ============================================================
 
-// Startup Reset: Flag-based solution (flag created by MidnightReset)
-// Reset tự động: Giải pháp dựa trên cờ (cờ được tạo bởi MidnightReset)
-// LOGIC MỚI:
-// - OnInit(): Chỉ tạo gv_time (track elapsed), KHÔNG tạo gv_done
+// Startup Reset: Flag-based solution (flag created in OnInit, value set by MidnightReset)
+// Reset tự động: Giải pháp dựa trên cờ (cờ tạo trong OnInit, giá trị do MidnightReset gán)
+// LOGIC CUỐI CÙNG:
+// - OnInit(): Tạo gv_time và gv_done (gv_done = -1, chưa khởi tạo)
 // - MidnightReset lúc 0h: Gán gv_done = 0 (cho phép StartupReset nếu VPS restart)
-// - StartupReset: Check gv_done TỒN TẠI && < 2 && elapsed >= 60s → reset
-// - SmartTFReset(): Gán gv_done = gv_done + 1 (0→1, không reset lại)
+// - StartupReset: Check gv_done == 0 && elapsed >= 60s → reset → gán gv_done = 1
+// - SmartTFReset(): KHÔNG can thiệp cờ
 void RunStartupReset() {
     if(!EnableStartupReset) return;
 
     string gv_time = g_target_symbol + "_StartupInitTime";
     string gv_done = g_target_symbol + "_StartupResetDone";
 
-    // QUAN TRỌNG: gv_done PHẢI TỒN TẠI (do MidnightReset tạo)
-    // Nếu chưa qua 0h lần nào → gv_done chưa tồn tại → SKIP (chờ 0h ngày mai)
-    if(!GlobalVariableCheck(gv_done)) return;
-    if(!GlobalVariableCheck(gv_time)) return;
-
     // Get values | Lấy giá trị
     datetime init_time = (datetime)GlobalVariableGet(gv_time);
     double done = GlobalVariableGet(gv_done);
     int elapsed = TimeCurrent() - init_time;
 
-    // ĐIỀU KIỆN: Cờ == 0 (MidnightReset vừa gán) + Đủ 60s
-    // - Cờ = 0: MidnightReset vừa gán lúc 0h, CHO PHÉP StartupReset (VPS restart)
-    // - Cờ != 0: Đã reset rồi, KHÔNG reset lại
+    // ĐIỀU KIỆN: Cờ == 0 (MidnightReset đã gán) + Đủ 60s
+    // - Cờ = -1: OnInit tạo, chưa qua 0h → SKIP (chờ MidnightReset)
+    // - Cờ = 0: MidnightReset vừa gán lúc 0h → CHO PHÉP StartupReset (VPS restart)
+    // - Cờ = 1: Đã reset rồi → SKIP
     if(done == 0 && elapsed >= 60) {
         Print("✓ StartupReset: ", g_target_symbol, " | Flag=", done, " elapsed=", elapsed, "s");
         SmartTFReset();
 
-        // GÁN CỜ = 1 trực tiếp (không cho SmartTFReset gán)
+        // GÁN CỜ = 1 trực tiếp (KHÔNG cho SmartTFReset gán)
         GlobalVariableSet(gv_done, 1);
     }
 }
