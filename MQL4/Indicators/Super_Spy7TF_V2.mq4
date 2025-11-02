@@ -24,17 +24,18 @@ input int    Retry = 3;                                      // Retry Attempts p
 input string TargetSymbol = "";                              // Target Symbol - Empty = current chart | Symbol muc tieu - Rong = chart hien tai
 input bool   EnableHealthCheck = true;                       // Health check at 8h & 16h | Kiem tra suc khoe luc 8h va 16h
 input bool   EnableMidnightReset = true;                     // Midnight reset at 0h daily | Reset luc 0h hang ngay
-input bool   EnableStartupReset = true;                      // Startup reset 60s after MT4 starts | Reset 60s sau khi MT4 khoi dong
+input bool   EnableStartupReset = true;                      // Startup reset 1 minute after MT4 starts | Reset khoi dong 1 phut sau khi MT4 chay
 input bool   ProcessSignalOnOddSecond = false;               // Process Signal on ODD second only | Xu ly tin hieu giay le (tranh conflict)
 input bool   EnableMonthlyStats = true;                      // Monthly stats on 1st day of month | Thong ke thang vao ngay 1
 input string DataFolder = "DataAutoOner\\";                  // Data Storage Folder | Thu muc luu tru du lieu
 
 //--- NEWS CASCADE Configuration | Cau hinh NEWS CASCADE
+input bool   EnableCategoryEA = true;                        // Enable Category 1 (EA Trading) | Bat Category 1 (EA danh)
 input double NewsBaseLiveDiff = 2.5;                         // L1 Base Live Diff threshold (USD) | Nguong Live Diff co ban L1
 input double NewsLiveDiffStep = 0.5;                         // Live Diff increment per level (USD) | Tang Live Diff moi cap
 input int    NewsBaseTimeMinutes = 2;                        // Category 2 Base Time (minutes) 2^level | Thoi gian co so Category 2
-input bool   EnableCategoryEA = true;                        // Enable Category 1 (EA Trading) | Bat Category 1 (EA danh)
 input bool   EnableCategoryUser = true;                      // Enable Category 2 (User Reference) | Bat Category 2 (tham khao)
+input double NewsCascadeMultiplier = 0.1;                    // Category 2 USD Threshold Base (0.1->0.7 for L1-L7) | He so nguong USD Category 2
 
 //==============================================================================
 //  SECTION 2: DATA STRUCTURES (3 structs) | PHAN 2: CAU TRUC DU LIEU
@@ -807,7 +808,7 @@ void PrintDashboard() {
     }
 
     // =========================================================================
-    // DÒNG 4: D1 + NEWS + LIVE (giá + USD diff + time diff)
+    // DÒNG 4: D1 + LIVE (giá + USD diff + time diff)
     // =========================================================================
     // D1 signal
     string d1_sig = "NONE";
@@ -817,48 +818,61 @@ void PrintDashboard() {
     string d1_pricediff = DoubleToString(g_symbol_data.pricediffs[6], 2);
     if(g_symbol_data.pricediffs[6] >= 0) d1_pricediff = "+" + d1_pricediff;
 
-    // NEWS score
-    string news_str = IntegerToString(g_symbol_data.news_results[0]);
-    if(g_symbol_data.news_results[0] >= 0) news_str = "+" + news_str;
-
-    // Build line 4 - NEWS moved to end for simple gold highlighting
+    // Build line 4 (no NEWS)
     string line4 = "[D1|" + d1_sig + "|" + d1_pricediff + "|" + IntegerToString(g_symbol_data.timediffs[6]) + "m] | LIVE: " + live_price_str + " (" + live_usd_str + ", " + IntegerToString(live_time_diff) + "m)";
-    string line4_news = " | NEWS:" + news_str;
 
     // =========================================================================
-    // TẠO 4 OBJECTS RIÊNG BIỆT (KHÔNG CONFLICT VỚI COMMENT() CỦA WT)
+    // DÒNG 5: NEWS CASCADE (7 TF)
+    // =========================================================================
+    string line5 = "NEWS: ";
+    string tf_labels[7] = {"M1", "M5", "M15", "M30", "H1", "H4", "D1"};
+    for(int news_idx = 0; news_idx < 7; news_idx++) {
+        if(news_idx > 0) line5 += " | ";
+        string news_val = IntegerToString(g_symbol_data.news_results[news_idx]);
+        if(g_symbol_data.news_results[news_idx] > 0) news_val = "+" + news_val;
+        line5 += tf_labels[news_idx] + ":" + news_val;
+    }
+
+    // =========================================================================
+    // TẠO 5 OBJECTS RIÊNG BIỆT (KHÔNG CONFLICT VỚI COMMENT() CỦA WT)
     // =========================================================================
     int y_start = 120;  // Vị trí bắt đầu (120 pixels từ trên, dưới WT)
     int y_spacing = 15; // Khoảng cách giữa các dòng
 
-    string obj_names[4];
+    string obj_names[5];
     obj_names[0] = "SPY_Dashboard_Line1";
     obj_names[1] = "SPY_Dashboard_Line2";
     obj_names[2] = "SPY_Dashboard_Line3";
     obj_names[3] = "SPY_Dashboard_Line4";
+    obj_names[4] = "SPY_Dashboard_Line5";
 
-    string lines[4];
+    string lines[5];
     lines[0] = line1;
     lines[1] = line2;
     lines[2] = line3;
     lines[3] = line4;
+    lines[4] = line5;
 
-    // Tạo 4 objects
-    for(int i = 0; i < 4; i++) {
+    color line_colors[5];
+    line_colors[0] = clrWhite;       // Line 1: White
+    line_colors[1] = clrDodgerBlue;  // Line 2: Blue
+    line_colors[2] = clrWhite;       // Line 3: White
+    line_colors[3] = clrDodgerBlue;  // Line 4: Blue
+    line_colors[4] = clrGold;        // Line 5: Gold (NEWS)
+
+    // Tạo 5 objects
+    for(int i = 0; i < 5; i++) {
         // Xóa object cũ nếu có
         if(ObjectFind(0, obj_names[i]) >= 0) {
             ObjectDelete(0, obj_names[i]);
         }
-
-        // Mau xen ke: Trang -> Xanh -> Trang -> Xanh | Alternating colors: White -> Blue -> White -> Blue
-        color line_color = (i % 2 == 0) ? clrWhite : clrDodgerBlue;
 
         // Tạo object mới
         ObjectCreate(0, obj_names[i], OBJ_LABEL, 0, 0, 0);
         ObjectSetInteger(0, obj_names[i], OBJPROP_CORNER, CORNER_LEFT_UPPER);
         ObjectSetInteger(0, obj_names[i], OBJPROP_XDISTANCE, 10);
         ObjectSetInteger(0, obj_names[i], OBJPROP_YDISTANCE, y_start + (i * y_spacing));
-        ObjectSetInteger(0, obj_names[i], OBJPROP_COLOR, line_color);
+        ObjectSetInteger(0, obj_names[i], OBJPROP_COLOR, line_colors[i]);
         ObjectSetInteger(0, obj_names[i], OBJPROP_FONTSIZE, 8);
         ObjectSetString(0, obj_names[i], OBJPROP_FONT, "Courier New");
         ObjectSetString(0, obj_names[i], OBJPROP_TEXT, lines[i]);
@@ -866,20 +880,9 @@ void PrintDashboard() {
         ObjectSetInteger(0, obj_names[i], OBJPROP_HIDDEN, true);
     }
 
-    // Tạo NEWS object riêng với màu vàng gold (ở cuối dòng 4)
-    string news_obj = "SPY_Dashboard_NEWS";
-    if(ObjectFind(0, news_obj) >= 0) ObjectDelete(0, news_obj);
-
-    ObjectCreate(0, news_obj, OBJ_LABEL, 0, 0, 0);
-    ObjectSetInteger(0, news_obj, OBJPROP_CORNER, CORNER_LEFT_UPPER);
-    ObjectSetInteger(0, news_obj, OBJPROP_XDISTANCE, 470);  // Moved further right to avoid overlapping TimeDiff
-    ObjectSetInteger(0, news_obj, OBJPROP_YDISTANCE, y_start + (3 * y_spacing));
-    ObjectSetInteger(0, news_obj, OBJPROP_COLOR, clrGold);  // Gold color
-    ObjectSetInteger(0, news_obj, OBJPROP_FONTSIZE, 8);
-    ObjectSetString(0, news_obj, OBJPROP_FONT, "Courier New");
-    ObjectSetString(0, news_obj, OBJPROP_TEXT, line4_news);
-    ObjectSetInteger(0, news_obj, OBJPROP_SELECTABLE, false);
-    ObjectSetInteger(0, news_obj, OBJPROP_HIDDEN, true);
+    // Xóa NEWS object cũ nếu còn tồn tại (từ version trước)
+    string old_news_obj = "SPY_Dashboard_NEWS";
+    if(ObjectFind(0, old_news_obj) >= 0) ObjectDelete(0, old_news_obj);
 }
 
 //==============================================================================
@@ -1675,8 +1678,9 @@ bool IsWithinOneCandle(int timeframe_index, datetime signal_time) {
 }
 
 // Detect NEWS CASCADE across 7 levels of timeframe alignment | Phat hien NEWS CASCADE qua 7 cap do sap xep khung thoi gian
-// Returns: ±1-7 (Category 2: User Reference) or ±10-70 (Category 1: EA Trading)
-int DetectCASCADE_New() {
+// NATURAL LOGIC: Checks ALL 7 levels independently and writes score to each row
+// Each row (0-6) corresponds to TF level (M1-D1), value = 0 or ±1-7 or ±10-70
+void DetectCASCADE_New() {
     // Get 7 TF signals (M1=0, M5=1, ..., D1=6) from g_symbol_data
     int m1_signal = g_symbol_data.signals[0];
     int m5_signal = g_symbol_data.signals[1];
@@ -1710,250 +1714,286 @@ int DetectCASCADE_New() {
     double live_usd_diff = GetUSDValue(g_target_symbol, MathAbs(live_diff_raw));  // USD conversion
     int live_time_diff = (int)(TimeCurrent() - m1_time);     // Time since M1 signal (for breakthrough detection)
 
-    int result = 0;  // Final result
-
     // ============================================================
-    // PHASE 1: CATEGORY 1 (EA TRADING) - CHECK ALL 7 LEVELS FIRST
-    // Priority: Check strict conditions for EA trading signals
+    // PHASE 1: CATEGORY 1 (EA TRADING) - CHECK ALL 7 LEVELS INDEPENDENTLY
+    // NATURAL LOGIC: Each algorithm SELF-ASSIGNS its result (0 or score)
+    // NO external Clear ALL - algorithms decide their own output
     // ============================================================
     if(EnableCategoryEA) {
-        // L1: M1 only - Single timeframe breakthrough
+        // L1: M1 only → row 0
         // live_diff > 2.5 USD + within 1 candle → Score 10
-        if(m1_signal != 0 && result == 0) {
+        if(m1_signal != 0) {
             double l1_threshold = NewsBaseLiveDiff;  // 2.5 USD
             if(live_usd_diff > l1_threshold && IsWithinOneCandle(0, m1_time)) {
-                result = m1_signal * 10;
+                g_symbol_data.news_results[0] = m1_signal * 10;  // Algorithm OUTPUT: score
+            } else {
+                g_symbol_data.news_results[0] = 0;  // Algorithm OUTPUT: not met conditions
             }
+        } else {
+            g_symbol_data.news_results[0] = 0;  // Algorithm OUTPUT: no signal
         }
 
-        // L2: M5→M1 - Two timeframe cascade
+        // L2: M5→M1 → row 1
         // M5→M1 aligned + live_diff > 3.0 USD + M5.cross=M1.time + within 1 candle → Score 20
-        if(m5_signal != 0 && m1_signal != 0 && m1_signal == m5_signal && result == 0) {
+        if(m5_signal != 0 && m1_signal != 0 && m1_signal == m5_signal) {
             if(m5_cross == m1_time) {  // M5.cross = M1.timestamp
                 double l2_threshold = NewsBaseLiveDiff + (NewsLiveDiffStep * 1);  // 3.0 USD
                 if(live_usd_diff > l2_threshold && IsWithinOneCandle(1, m5_time)) {
-                    result = m5_signal * 20;
+                    g_symbol_data.news_results[1] = m5_signal * 20;  // Algorithm OUTPUT: score
+                } else {
+                    g_symbol_data.news_results[1] = 0;  // Algorithm OUTPUT: threshold/candle not met
                 }
+            } else {
+                g_symbol_data.news_results[1] = 0;  // Algorithm OUTPUT: cross validation failed
             }
+        } else {
+            g_symbol_data.news_results[1] = 0;  // Algorithm OUTPUT: signals not aligned
         }
 
-        // L3: M15→M5→M1 - Three timeframe full cascade
+        // L3: M15→M5→M1 → row 2
         // Full cascade + live_diff > 3.5 USD + all crosses valid + within 1 candle → Score 30
         if(m15_signal != 0 && m5_signal != 0 && m1_signal != 0 &&
-           m1_signal == m5_signal && m5_signal == m15_signal && result == 0) {
+           m1_signal == m5_signal && m5_signal == m15_signal) {
             if(m15_cross == m5_time && m5_cross == m1_time) {  // Full cascade validation
                 double l3_threshold = NewsBaseLiveDiff + (NewsLiveDiffStep * 2);  // 3.5 USD
                 if(live_usd_diff > l3_threshold && IsWithinOneCandle(2, m15_time)) {
-                    result = m15_signal * 30;
+                    g_symbol_data.news_results[2] = m15_signal * 30;  // Algorithm OUTPUT: score
+                } else {
+                    g_symbol_data.news_results[2] = 0;  // Algorithm OUTPUT: threshold/candle not met
                 }
+            } else {
+                g_symbol_data.news_results[2] = 0;  // Algorithm OUTPUT: cross validation failed
             }
+        } else {
+            g_symbol_data.news_results[2] = 0;  // Algorithm OUTPUT: signals not aligned
         }
 
-        // L4: M30→M15→M5→M1 - Four timeframe full cascade
+        // L4: M30→M15→M5→M1 → row 3
         // Full cascade + live_diff > 4.0 USD + all crosses valid + within 1 candle → Score 40
         if(m30_signal != 0 && m15_signal != 0 && m5_signal != 0 && m1_signal != 0 &&
-           m1_signal == m5_signal && m5_signal == m15_signal && m15_signal == m30_signal && result == 0) {
+           m1_signal == m5_signal && m5_signal == m15_signal && m15_signal == m30_signal) {
             if(m30_cross == m15_time && m15_cross == m5_time && m5_cross == m1_time) {
                 double l4_threshold = NewsBaseLiveDiff + (NewsLiveDiffStep * 3);  // 4.0 USD
                 if(live_usd_diff > l4_threshold && IsWithinOneCandle(3, m30_time)) {
-                    result = m30_signal * 40;
+                    g_symbol_data.news_results[3] = m30_signal * 40;  // Algorithm OUTPUT: score
+                } else {
+                    g_symbol_data.news_results[3] = 0;  // Algorithm OUTPUT: threshold/candle not met
                 }
+            } else {
+                g_symbol_data.news_results[3] = 0;  // Algorithm OUTPUT: cross validation failed
             }
+        } else {
+            g_symbol_data.news_results[3] = 0;  // Algorithm OUTPUT: signals not aligned
         }
 
-        // L5: H1→M30→M15→M5→M1 - Five timeframe full cascade
+        // L5: H1→M30→M15→M5→M1 → row 4
         // Full cascade + live_diff > 4.5 USD + all crosses valid + within 1 candle → Score 50
         if(h1_signal != 0 && m30_signal != 0 && m15_signal != 0 && m5_signal != 0 && m1_signal != 0 &&
-           m1_signal == m5_signal && m5_signal == m15_signal && m15_signal == m30_signal && m30_signal == h1_signal && result == 0) {
+           m1_signal == m5_signal && m5_signal == m15_signal && m15_signal == m30_signal && m30_signal == h1_signal) {
             if(h1_cross == m30_time && m30_cross == m15_time && m15_cross == m5_time && m5_cross == m1_time) {
                 double l5_threshold = NewsBaseLiveDiff + (NewsLiveDiffStep * 4);  // 4.5 USD
                 if(live_usd_diff > l5_threshold && IsWithinOneCandle(4, h1_time)) {
-                    result = h1_signal * 50;
+                    g_symbol_data.news_results[4] = h1_signal * 50;  // Algorithm OUTPUT: score
+                } else {
+                    g_symbol_data.news_results[4] = 0;  // Algorithm OUTPUT: threshold/candle not met
                 }
+            } else {
+                g_symbol_data.news_results[4] = 0;  // Algorithm OUTPUT: cross validation failed
             }
+        } else {
+            g_symbol_data.news_results[4] = 0;  // Algorithm OUTPUT: signals not aligned
         }
 
-        // L6: H4→H1→M30→M15→M5→M1 - Six timeframe full cascade
+        // L6: H4→H1→M30→M15→M5→M1 → row 5
         // Full cascade + live_diff > 5.0 USD + all crosses valid + within 1 candle → Score 60
         if(h4_signal != 0 && h1_signal != 0 && m30_signal != 0 && m15_signal != 0 && m5_signal != 0 && m1_signal != 0 &&
            m1_signal == m5_signal && m5_signal == m15_signal && m15_signal == m30_signal &&
-           m30_signal == h1_signal && h1_signal == h4_signal && result == 0) {
+           m30_signal == h1_signal && h1_signal == h4_signal) {
             if(h4_cross == h1_time && h1_cross == m30_time && m30_cross == m15_time &&
                m15_cross == m5_time && m5_cross == m1_time) {
                 double l6_threshold = NewsBaseLiveDiff + (NewsLiveDiffStep * 5);  // 5.0 USD
                 if(live_usd_diff > l6_threshold && IsWithinOneCandle(5, h4_time)) {
-                    result = h4_signal * 60;
+                    g_symbol_data.news_results[5] = h4_signal * 60;  // Algorithm OUTPUT: score
+                } else {
+                    g_symbol_data.news_results[5] = 0;  // Algorithm OUTPUT: threshold/candle not met
                 }
+            } else {
+                g_symbol_data.news_results[5] = 0;  // Algorithm OUTPUT: cross validation failed
             }
+        } else {
+            g_symbol_data.news_results[5] = 0;  // Algorithm OUTPUT: signals not aligned
         }
 
-        // L7: D1→H4→H1→M30→M15→M5→M1 - Seven timeframe full cascade (ULTIMATE)
+        // L7: D1→H4→H1→M30→M15→M5→M1 → row 6
         // Full cascade + live_diff > 5.5 USD + all crosses valid + within 1 candle → Score 70
         if(d1_signal != 0 && h4_signal != 0 && h1_signal != 0 && m30_signal != 0 &&
            m15_signal != 0 && m5_signal != 0 && m1_signal != 0 &&
            m1_signal == m5_signal && m5_signal == m15_signal && m15_signal == m30_signal &&
-           m30_signal == h1_signal && h1_signal == h4_signal && h4_signal == d1_signal && result == 0) {
+           m30_signal == h1_signal && h1_signal == h4_signal && h4_signal == d1_signal) {
             if(d1_cross == h4_time && h4_cross == h1_time && h1_cross == m30_time &&
                m30_cross == m15_time && m15_cross == m5_time && m5_cross == m1_time) {
                 double l7_threshold = NewsBaseLiveDiff + (NewsLiveDiffStep * 6);  // 5.5 USD
                 if(live_usd_diff > l7_threshold && IsWithinOneCandle(6, d1_time)) {
-                    result = d1_signal * 70;
+                    g_symbol_data.news_results[6] = d1_signal * 70;  // Algorithm OUTPUT: score
+                } else {
+                    g_symbol_data.news_results[6] = 0;  // Algorithm OUTPUT: threshold/candle not met
                 }
+            } else {
+                g_symbol_data.news_results[6] = 0;  // Algorithm OUTPUT: cross validation failed
             }
+        } else {
+            g_symbol_data.news_results[6] = 0;  // Algorithm OUTPUT: signals not aligned
         }
     }  // End Category 1
 
     // ============================================================
-    // PHASE 2: CATEGORY 2 (USER REFERENCE) - ONLY IF CATEGORY 1 = 0
-    // Relaxed conditions for user reference signals
+    // PHASE 2: CATEGORY 2 (USER REFERENCE) - ONLY IF CATEGORY 1 WROTE 0
+    // NATURAL LOGIC: Each algorithm checks if Category 1 wrote 0, then decides score or keep 0
+    // If Category 1 wrote score → keep Category 1 score (don't touch)
+    // If Category 1 wrote 0 → Category 2 decides: score or keep 0
     // ============================================================
-    if(result == 0 && EnableCategoryUser) {
-        // L1: M1 only
-        // live_diff > 0 + time < 2 min (1×2) → Score 1
-        if(m1_signal != 0) {
-            int l1_time_limit = 1 * NewsBaseTimeMinutes * 60;  // 1 × 2 × 60 = 120s = 2min
-            if(live_usd_diff > 0 && live_time_diff < l1_time_limit) {
-                result = m1_signal * 1;
+    if(EnableCategoryUser) {
+        // L1: M1 only → row 0
+        // live_diff > 0.1 + time < 2 min (1×2) → Score 1
+        if(g_symbol_data.news_results[0] == 0) {  // Only if Category 1 wrote 0
+            if(m1_signal != 0) {
+                double l1_usd_threshold = NewsCascadeMultiplier * 1;  // 0.1 USD
+                int l1_time_limit = 1 * NewsBaseTimeMinutes * 60;  // 1 × 2 × 60 = 120s = 2min
+                if(live_usd_diff > l1_usd_threshold && live_time_diff < l1_time_limit) {
+                    g_symbol_data.news_results[0] = m1_signal * 1;  // Algorithm OUTPUT: score
+                }
+                // else: keep 0 from Category 1 (not met conditions)
             }
+            // else: keep 0 from Category 1 (no signal)
         }
+        // else: keep Category 1 score (Category 1 wrote non-zero)
 
-        // L2: M5→M1
-        // live_diff > 0 + time < 4 min (2×2) → Score 2
-        if(m5_signal != 0 && m1_signal != 0 && m1_signal == m5_signal && result == 0) {
-            if(m5_cross == m1_time) {
-                int l2_time_limit = 2 * NewsBaseTimeMinutes * 60;  // 2 × 2 × 60 = 240s = 4min
-                if(live_usd_diff > 0 && live_time_diff < l2_time_limit) {
-                    result = m5_signal * 2;
+        // L2: M5→M1 → row 1
+        // live_diff > 0.2 + time < 4 min (2×2) → Score 2
+        if(g_symbol_data.news_results[1] == 0) {  // Only if Category 1 wrote 0
+            if(m5_signal != 0 && m1_signal != 0 && m1_signal == m5_signal) {
+                if(m5_cross == m1_time) {
+                    double l2_usd_threshold = NewsCascadeMultiplier * 2;  // 0.2 USD
+                    int l2_time_limit = 2 * NewsBaseTimeMinutes * 60;  // 2 × 2 × 60 = 240s = 4min
+                    if(live_usd_diff > l2_usd_threshold && live_time_diff < l2_time_limit) {
+                        g_symbol_data.news_results[1] = m5_signal * 2;  // Algorithm OUTPUT: score
+                    }
                 }
             }
         }
 
-        // L3: M15→M5→M1
-        // live_diff > 0 + time < 6 min (3×2) → Score 3
-        if(m15_signal != 0 && m5_signal != 0 && m1_signal != 0 &&
-           m1_signal == m5_signal && m5_signal == m15_signal && result == 0) {
-            if(m15_cross == m5_time && m5_cross == m1_time) {
-                int l3_time_limit = 3 * NewsBaseTimeMinutes * 60;  // 3 × 2 × 60 = 360s = 6min
-                if(live_usd_diff > 0 && live_time_diff < l3_time_limit) {
-                    result = m15_signal * 3;
+        // L3: M15→M5→M1 → row 2
+        // live_diff > 0.3 + time < 6 min (3×2) → Score 3
+        if(g_symbol_data.news_results[2] == 0) {  // Only if Category 1 wrote 0
+            if(m15_signal != 0 && m5_signal != 0 && m1_signal != 0 &&
+               m1_signal == m5_signal && m5_signal == m15_signal) {
+                if(m15_cross == m5_time && m5_cross == m1_time) {
+                    double l3_usd_threshold = NewsCascadeMultiplier * 3;  // 0.3 USD
+                    int l3_time_limit = 3 * NewsBaseTimeMinutes * 60;  // 3 × 2 × 60 = 360s = 6min
+                    if(live_usd_diff > l3_usd_threshold && live_time_diff < l3_time_limit) {
+                        g_symbol_data.news_results[2] = m15_signal * 3;  // Algorithm OUTPUT: score
+                    }
                 }
             }
         }
 
-        // L4: M30→M15→M5→M1
-        // live_diff > 0 + time < 8 min (4×2) → Score 4
-        if(m30_signal != 0 && m15_signal != 0 && m5_signal != 0 && m1_signal != 0 &&
-           m1_signal == m5_signal && m5_signal == m15_signal && m15_signal == m30_signal && result == 0) {
-            if(m30_cross == m15_time && m15_cross == m5_time && m5_cross == m1_time) {
-                int l4_time_limit = 4 * NewsBaseTimeMinutes * 60;  // 4 × 2 × 60 = 480s = 8min
-                if(live_usd_diff > 0 && live_time_diff < l4_time_limit) {
-                    result = m30_signal * 4;
+        // L4: M30→M15→M5→M1 → row 3
+        // live_diff > 0.4 + time < 8 min (4×2) → Score 4
+        if(g_symbol_data.news_results[3] == 0) {  // Only if Category 1 wrote 0
+            if(m30_signal != 0 && m15_signal != 0 && m5_signal != 0 && m1_signal != 0 &&
+               m1_signal == m5_signal && m5_signal == m15_signal && m15_signal == m30_signal) {
+                if(m30_cross == m15_time && m15_cross == m5_time && m5_cross == m1_time) {
+                    double l4_usd_threshold = NewsCascadeMultiplier * 4;  // 0.4 USD
+                    int l4_time_limit = 4 * NewsBaseTimeMinutes * 60;  // 4 × 2 × 60 = 480s = 8min
+                    if(live_usd_diff > l4_usd_threshold && live_time_diff < l4_time_limit) {
+                        g_symbol_data.news_results[3] = m30_signal * 4;  // Algorithm OUTPUT: score
+                    }
                 }
             }
         }
 
-        // L5: H1→M30→M15→M5→M1
-        // live_diff > 0 + time < 10 min (5×2) → Score 5
-        if(h1_signal != 0 && m30_signal != 0 && m15_signal != 0 && m5_signal != 0 && m1_signal != 0 &&
-           m1_signal == m5_signal && m5_signal == m15_signal && m15_signal == m30_signal && m30_signal == h1_signal && result == 0) {
-            if(h1_cross == m30_time && m30_cross == m15_time && m15_cross == m5_time && m5_cross == m1_time) {
-                int l5_time_limit = 5 * NewsBaseTimeMinutes * 60;  // 5 × 2 × 60 = 600s = 10min
-                if(live_usd_diff > 0 && live_time_diff < l5_time_limit) {
-                    result = h1_signal * 5;
+        // L5: H1→M30→M15→M5→M1 → row 4
+        // live_diff > 0.5 + time < 10 min (5×2) → Score 5
+        if(g_symbol_data.news_results[4] == 0) {  // Only if Category 1 wrote 0
+            if(h1_signal != 0 && m30_signal != 0 && m15_signal != 0 && m5_signal != 0 && m1_signal != 0 &&
+               m1_signal == m5_signal && m5_signal == m15_signal && m15_signal == m30_signal && m30_signal == h1_signal) {
+                if(h1_cross == m30_time && m30_cross == m15_time && m15_cross == m5_time && m5_cross == m1_time) {
+                    double l5_usd_threshold = NewsCascadeMultiplier * 5;  // 0.5 USD
+                    int l5_time_limit = 5 * NewsBaseTimeMinutes * 60;  // 5 × 2 × 60 = 600s = 10min
+                    if(live_usd_diff > l5_usd_threshold && live_time_diff < l5_time_limit) {
+                        g_symbol_data.news_results[4] = h1_signal * 5;  // Algorithm OUTPUT: score
+                    }
                 }
             }
         }
 
-        // L6: H4→H1→M30→M15→M5→M1
-        // live_diff > 0 + time < 12 min (6×2) → Score 6
-        if(h4_signal != 0 && h1_signal != 0 && m30_signal != 0 && m15_signal != 0 && m5_signal != 0 && m1_signal != 0 &&
-           m1_signal == m5_signal && m5_signal == m15_signal && m15_signal == m30_signal &&
-           m30_signal == h1_signal && h1_signal == h4_signal && result == 0) {
-            if(h4_cross == h1_time && h1_cross == m30_time && m30_cross == m15_time &&
-               m15_cross == m5_time && m5_cross == m1_time) {
-                int l6_time_limit = 6 * NewsBaseTimeMinutes * 60;  // 6 × 2 × 60 = 720s = 12min
-                if(live_usd_diff > 0 && live_time_diff < l6_time_limit) {
-                    result = h4_signal * 6;
+        // L6: H4→H1→M30→M15→M5→M1 → row 5
+        // live_diff > 0.6 + time < 12 min (6×2) → Score 6
+        if(g_symbol_data.news_results[5] == 0) {  // Only if Category 1 wrote 0
+            if(h4_signal != 0 && h1_signal != 0 && m30_signal != 0 && m15_signal != 0 && m5_signal != 0 && m1_signal != 0 &&
+               m1_signal == m5_signal && m5_signal == m15_signal && m15_signal == m30_signal &&
+               m30_signal == h1_signal && h1_signal == h4_signal) {
+                if(h4_cross == h1_time && h1_cross == m30_time && m30_cross == m15_time &&
+                   m15_cross == m5_time && m5_cross == m1_time) {
+                    double l6_usd_threshold = NewsCascadeMultiplier * 6;  // 0.6 USD
+                    int l6_time_limit = 6 * NewsBaseTimeMinutes * 60;  // 6 × 2 × 60 = 720s = 12min
+                    if(live_usd_diff > l6_usd_threshold && live_time_diff < l6_time_limit) {
+                        g_symbol_data.news_results[5] = h4_signal * 6;  // Algorithm OUTPUT: score
+                    }
                 }
             }
         }
 
-        // L7: D1→H4→H1→M30→M15→M5→M1
-        // live_diff > 0 + time < 14 min (7×2) → Score 7
-        if(d1_signal != 0 && h4_signal != 0 && h1_signal != 0 && m30_signal != 0 &&
-           m15_signal != 0 && m5_signal != 0 && m1_signal != 0 &&
-           m1_signal == m5_signal && m5_signal == m15_signal && m15_signal == m30_signal &&
-           m30_signal == h1_signal && h1_signal == h4_signal && h4_signal == d1_signal && result == 0) {
-            if(d1_cross == h4_time && h4_cross == h1_time && h1_cross == m30_time &&
-               m30_cross == m15_time && m15_cross == m5_time && m5_cross == m1_time) {
-                int l7_time_limit = 7 * NewsBaseTimeMinutes * 60;  // 7 × 2 × 60 = 840s = 14min
-                if(live_usd_diff > 0 && live_time_diff < l7_time_limit) {
-                    result = d1_signal * 7;
+        // L7: D1→H4→H1→M30→M15→M5→M1 → row 6
+        // live_diff > 0.7 + time < 14 min (7×2) → Score 7
+        if(g_symbol_data.news_results[6] == 0) {  // Only if Category 1 wrote 0
+            if(d1_signal != 0 && h4_signal != 0 && h1_signal != 0 && m30_signal != 0 &&
+               m15_signal != 0 && m5_signal != 0 && m1_signal != 0 &&
+               m1_signal == m5_signal && m5_signal == m15_signal && m15_signal == m30_signal &&
+               m30_signal == h1_signal && h1_signal == h4_signal && h4_signal == d1_signal) {
+                if(d1_cross == h4_time && h4_cross == h1_time && h1_cross == m30_time &&
+                   m30_cross == m15_time && m15_cross == m5_time && m5_cross == m1_time) {
+                    double l7_usd_threshold = NewsCascadeMultiplier * 7;  // 0.7 USD
+                    int l7_time_limit = 7 * NewsBaseTimeMinutes * 60;  // 7 × 2 × 60 = 840s = 14min
+                    if(live_usd_diff > l7_usd_threshold && live_time_diff < l7_time_limit) {
+                        g_symbol_data.news_results[6] = d1_signal * 7;  // Algorithm OUTPUT: score
+                    }
                 }
             }
         }
     }  // End Category 2
-
-    return result;
 }
 
 // Main NEWS analysis function - LIVE mode (simplified, no state) | Ham phan tich NEWS - che do LIVE don gian
+// DEPRECATED: DetectCASCADE_New() now writes directly to g_symbol_data.news_results[7]
+// This function kept for compatibility but no longer returns meaningful value
 int AnalyzeNEWS() {
-    // Simply detect and return CASCADE result directly
-    int cascade_result = DetectCASCADE_New();
-    return cascade_result;  // Return ±1-7 (User) or ±10-70 (EA)
+    // Call CASCADE detection (writes directly to array)
+    DetectCASCADE_New();
+    return 0;  // No longer returns single value (array-based now)
 }
 
 // Update LIVE NEWS for all 7 timeframes independently | Cap nhat NEWS LIVE cho 7 khung thoi gian doc lap
 void UpdateLiveNEWS() {
-    // Get CASCADE result
-    int cascade_result = DetectCASCADE_New();
+    // Detect CASCADE and update g_symbol_data.news_results[7] array directly
+    // DetectCASCADE_New() now handles clearing array + writing all 7 levels independently
+    DetectCASCADE_New();
 
-    // Clear all NEWS results first
+    // Log major news events (Category 1 L3+ only to avoid spam)
     for(int i = 0; i < 7; i++) {
-        g_symbol_data.news_results[i] = 0;
+        int score = g_symbol_data.news_results[i];
+        int abs_score = MathAbs(score);
+
+        if(abs_score >= 30) {  // Category 1 L3+ (30, 40, 50, 60, 70)
+            int level = abs_score / 10;  // 30→3, 40→4, ..., 70→7
+            string time_str = TimeToString(TimeCurrent(), TIME_DATE|TIME_SECONDS);
+            Print(time_str, " | NEWS ", g_target_symbol, " L", level, ": ", (score > 0 ? "BUY" : "SELL"), " | Score:", score);
+        }
     }
 
-    if(cascade_result == 0) {
-        return;  // No cascade detected
-    }
-
-    // Extract level from result
-    // Category 1 (EA): ±10, ±20, ±30, ±40, ±50, ±60, ±70 → levels 1-7
-    // Category 2 (User): ±1, ±2, ±3, ±4, ±5, ±6, ±7 → levels 1-7
-    int abs_result = MathAbs(cascade_result);
-    int level = 0;
-
-    if(abs_result >= 10) {
-        // Category 1: EA (10-70)
-        level = abs_result / 10;  // 10→1, 20→2, ..., 70→7
-    } else {
-        // Category 2: User (1-7)
-        level = abs_result;  // 1→1, 2→2, ..., 7→7
-    }
-
-    // Map level to row index
-    // L1 → row 0 (M1)
-    // L2 → row 1 (M5)
-    // L3 → row 2 (M15)
-    // L4 → row 3 (M30)
-    // L5 → row 4 (H1)
-    // L6 → row 5 (H4)
-    // L7 → row 6 (D1)
-
-    if(level >= 1 && level <= 7) {
-        int row_index = level - 1;  // Level 1→row 0, Level 2→row 1, ..., Level 7→row 6
-        g_symbol_data.news_results[row_index] = cascade_result;
-    }
-
-    // Log only Category 1 L3+ to avoid spam (major news events only)
-    if(abs_result >= 30) {
-        string time_str = TimeToString(TimeCurrent(), TIME_DATE|TIME_SECONDS);
-        Print(time_str, " | NEWS ", g_target_symbol, " L", level, ": ", (cascade_result > 0 ? "BUY" : "SELL"), " | Score:", cascade_result);
-    }
-
-    // Write to file
-    WriteCSDL1ArrayToFile();
+    // ALWAYS write to BOTH files to keep CSDL1 and CSDL2 synchronized
+    WriteCSDL1ArrayToFile();   // CSDL1: SYMBOL.json (10 columns + history)
+    WriteCSDL2ArrayToFile();   // CSDL2: SYMBOL_LIVE.json (6 columns, no history, 3 folders)
 }
 
 //==============================================================================
@@ -2613,6 +2653,26 @@ int OnInit() {
     // Step 7.2: Run monthly statistics (if 1st day of month)
     RunMonthlyStatsOnStartup();
 
+    // Step 7.3: Initialize Startup Reset (detects VPS/MT4 restart - 1 TIME ONLY)
+    // GlobalVariable lost when MT4 closes, survives indicator reload
+    // Set ONLY if not exists -> detects real MT4 restart (not indicator reload)
+    if(EnableStartupReset) {
+        string gv_time = g_target_symbol + "_StartupInitTime";
+        string gv_done = g_target_symbol + "_StartupResetDone";
+
+        if(!GlobalVariableCheck(gv_time)) {
+            // GlobalVariable not found = MT4 just restarted (or first run)
+            GlobalVariableSet(gv_time, TimeCurrent());
+            GlobalVariableSet(gv_done, 0);  // Reset done flag
+            Print("StartupReset: MT4 restart detected | Will reset 7 charts in 60s");
+        } else {
+            // GlobalVariable exists = Indicator reload (not MT4 restart)
+            long init_time = (long)GlobalVariableGet(gv_time);
+            Print("StartupReset: Indicator reload (not MT4 restart) | Init time: ",
+                  TimeToString(init_time, TIME_DATE|TIME_SECONDS));
+        }
+    }
+
     // Step 8: Set timer
     EventSetTimer(Timer);
 
@@ -2630,30 +2690,6 @@ int OnInit() {
     // Mark system as initialized
     g_system_initialized = true;
 
-    // ============================================================
-    // STARTUP RESET: 2 GlobalVariable (time + done flag)
-    // Reset tự động: 2 biến toàn cục (thời gian + cờ đã làm)
-    // ============================================================
-    // LOGIC THÔNG MINH: SmartTFReset() tự động gán done=1
-    // → Bất kỳ reset nào (Midnight/Health) gọi SmartTFReset() → done=1
-    // → StartupReset check done=0 → Chỉ chạy nếu chưa có reset nào!
-    if(EnableStartupReset) {
-        string gv_time = g_target_symbol + "_StartupInitTime";
-        string gv_done = g_target_symbol + "_StartupResetDone";
-
-        // Tạo gv_time để track elapsed time
-        if(!GlobalVariableCheck(gv_time)) {
-            GlobalVariableSet(gv_time, TimeCurrent());
-        }
-
-        // Tạo gv_done NHƯNG KHÔNG GÁN GIÁ TRỊ CỤ THỂ (để MidnightReset gán = 0)
-        // Gán = -1 để đánh dấu "chưa được MidnightReset khởi tạo"
-        if(!GlobalVariableCheck(gv_done)) {
-            GlobalVariableSet(gv_done, -1);  // -1 = chưa khởi tạo, chờ MidnightReset
-            Print("✓ StartupReset: Variables created (waiting for MidnightReset to init flag)");
-        }
-    }
-
     return INIT_SUCCEEDED;
 }
 
@@ -2662,33 +2698,28 @@ int OnInit() {
 // SECONDARY FUNCTIONS | CAC HAM PHU
 // ============================================================
 
-// Startup Reset: Flag-based solution (flag created in OnInit, value set by MidnightReset)
-// Reset tự động: Giải pháp dựa trên cờ (cờ tạo trong OnInit, giá trị do MidnightReset gán)
-// LOGIC CUỐI CÙNG:
-// - OnInit(): Tạo gv_time và gv_done (gv_done = -1, chưa khởi tạo)
-// - MidnightReset lúc 0h: Gán gv_done = 0 (cho phép StartupReset nếu VPS restart)
-// - StartupReset: Check gv_done == 0 && elapsed >= 60s → reset → gán gv_done = 1
-// - SmartTFReset(): KHÔNG can thiệp cờ
+// Startup Reset: 1 minute after MT4 starts (1 TIME ONLY per MT4 session)
+// _StartupInitTime set by OnInit() ONLY if not exists (detects MT4 restart)
+// This function runs every even second to check if 60s elapsed
 void RunStartupReset() {
     if(!EnableStartupReset) return;
 
     string gv_time = g_target_symbol + "_StartupInitTime";
     string gv_done = g_target_symbol + "_StartupResetDone";
 
-    // Get values | Lấy giá trị
-    datetime init_time = (datetime)GlobalVariableGet(gv_time);
-    double done = GlobalVariableGet(gv_done);
-    int elapsed = TimeCurrent() - init_time;
+    // Check if init time exists (set by OnInit when MT4 restart)
+    if(!GlobalVariableCheck(gv_time)) return;
 
-    // ĐIỀU KIỆN: Cờ == 0 (MidnightReset đã gán) + Đủ 60s
-    // - Cờ = -1: OnInit tạo, chưa qua 0h → SKIP (chờ MidnightReset)
-    // - Cờ = 0: MidnightReset vừa gán lúc 0h → CHO PHÉP StartupReset (VPS restart)
-    // - Cờ = 1: Đã reset rồi → SKIP
-    if(done == 0 && elapsed >= 60) {
-        Print("✓ StartupReset: ", g_target_symbol, " | Flag=", done, " elapsed=", elapsed, "s");
+    // Check if already done this session
+    if(GlobalVariableCheck(gv_done) && GlobalVariableGet(gv_done) == 1) return;
+
+    // Check if 60s elapsed since MT4 start
+    long init_time = (long)GlobalVariableGet(gv_time);
+    long elapsed = TimeCurrent() - init_time;
+
+    if(elapsed >= 60) {
+        Print("StartupReset: ", g_target_symbol, " | ", elapsed, "s after MT4 restart -> Resetting 7 charts");
         SmartTFReset();
-
-        // GÁN CỜ = 1 trực tiếp (KHÔNG cho SmartTFReset gán)
         GlobalVariableSet(gv_done, 1);
     }
 }
@@ -2754,27 +2785,29 @@ void OnTimer() {
     int current_second = TimeSeconds(TimeCurrent());
 
     // ========================================
-    // CHUC NANG CHINH: XU LY TIN HIEU 7 TF
+    // CHUC NANG CHINH: XU LY TIN HIEU + NEWS
+    // GHI CSDL O GIAY LE (TRANH XUNG DOT VOI EA DOC GIAY CHAN)
     // ========================================
     if(ProcessSignalOnOddSecond) {
-        // MODE: Xu ly GIAY LE (1, 3, 5, 7, 9...)
+        // MODE TRUE: Xu ly GIAY LE (1, 3, 5, 7, 9...)
         if(current_second % 2 == 1) {
             ProcessAllSignals();  // Ghi CSDL1 (A,C) + CSDL2 (A,B,C)
+            UpdateLiveNEWS();     // Update NEWS (cot 9) + Ghi CSDL1 (A,C) + CSDL2 (A,B,C)
         }
     } else {
-        // MODE: Xu ly MOI GIAY (0, 1, 2, 3, 4...)
+        // MODE FALSE: Xu ly MOI GIAY (0, 1, 2, 3, 4...)
         ProcessAllSignals();  // Ghi CSDL1 (A,C) + CSDL2 (A,B,C)
+        UpdateLiveNEWS();     // Update NEWS (cot 9) + Ghi CSDL1 (A,C) + CSDL2 (A,B,C)
     }
 
     // ========================================
     // CHUC NANG PHU: LUON CHAY GIAY CHAN
-    // (KHONG LIEN QUAN MODE CHINH)
+    // EA DOC CSDL O GIAY CHAN - KHONG BI XUNG DOT GHI FILE
     // ========================================
     if(current_second % 2 == 0) {  // Giay chan (0, 2, 4, 6, 8...)
-        UpdateLiveNEWS();            // Update NEWS LIVE (cot 9) - doc lap signal WT
-        RunStartupReset();
-        RunMidnightAndHealthCheck();
-        RunDashboardUpdate();
+        RunStartupReset();           // Startup reset (1 lan sau khi MT4 khoi dong)
+        RunMidnightAndHealthCheck(); // Midnight reset + Health check (8h, 16h)
+        RunDashboardUpdate();        // Cap nhat dashboard hien thi
     }
 }
 
@@ -2896,35 +2929,14 @@ void HealthCheck() {
 void MidnightReset() {
     if(!EnableMidnightReset) return;
 
-    // Sử dụng GlobalVariable thay vì static để tránh bị reset khi OnInit()
-    string gv_last_reset_time = g_target_symbol + "_LastMidnightResetTime";
-    string gv_done = g_target_symbol + "_StartupResetDone";  // CỜ DUY NHẤT
+    static int last_day = 99;  // Init != -1 to prevent first-time trigger
+    int current_day = TimeDay(TimeCurrent());
 
-    // Khởi tạo nếu chưa có
-    if(!GlobalVariableCheck(gv_last_reset_time)) {
-        GlobalVariableSet(gv_last_reset_time, 0);
-    }
-
-    datetime last_reset = (datetime)GlobalVariableGet(gv_last_reset_time);
-    datetime current_time = TimeCurrent();
-    int current_hour = TimeHour(current_time);
-    int current_minute = TimeMinute(current_time);
-
-    // ĐIỀU KIỆN: Ngày mới + Giờ 0h:0p + Chưa reset (ít nhất 1h từ lần trước)
-    // Tránh reset lặp lại khi SmartTFReset() trigger OnInit()
-    if(TimeDay(last_reset) != TimeDay(current_time) &&
-       current_hour == 0 &&
-       current_minute == 0 &&
-       (current_time - last_reset) >= 3600) {
-
-        Print("MidnightReset: ", g_target_symbol, " | New day at 0h:0m");
+    // Check if new day (0h crossed) | Kiem tra neu sang ngay moi (qua 0h)
+    if(current_day != last_day && TimeHour(TimeCurrent()) == 0) {
+        Print("MidnightReset: ", g_target_symbol, " | New day started");
         SmartTFReset();
-
-        // Cập nhật thời gian reset
-        GlobalVariableSet(gv_last_reset_time, current_time);
-
-        // GÁN CỜ = 0 (cho phép StartupReset nếu VPS restart)
-        GlobalVariableSet(gv_done, 0);
+        last_day = current_day;
     }
 }
 
@@ -2952,19 +2964,8 @@ void OnDeinit(const int reason) {
     ObjectDelete(0, "SPY_Dashboard_Line2");
     ObjectDelete(0, "SPY_Dashboard_Line3");
     ObjectDelete(0, "SPY_Dashboard_Line4");
+    ObjectDelete(0, "SPY_Dashboard_Line5");
     ObjectDelete(0, "SPY_Dashboard_NEWS");
-
-    // Cleanup GlobalVariables when indicator is removed (not just reloaded)
-    // Dọn dẹp biến toàn cục khi indicator bị xóa (không chỉ reload)
-    if(reason == REASON_REMOVE) {
-        string gv_time = g_target_symbol + "_StartupInitTime";
-        string gv_done = g_target_symbol + "_StartupResetDone";
-
-        if(GlobalVariableCheck(gv_time)) GlobalVariableDel(gv_time);
-        if(GlobalVariableCheck(gv_done)) GlobalVariableDel(gv_done);
-
-        Print("✓ Cleaned up GlobalVariables for ", g_target_symbol);
-    }
 
     Print("✓ SUPER_Spy7TF_Oner V2 Deinitialized");
 }
