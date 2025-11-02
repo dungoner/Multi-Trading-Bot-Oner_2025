@@ -1,51 +1,57 @@
 {
     "symbol": "LTCUSD",
     "type": "main",
-    "timestamp": 1761974861,
+    "timestamp": 1762070998,
     "rows": 7,
     "columns": 10,
     "data": [
-        {"timeframe_name": "M1", "timeframe": 1, "signal": -1, "price": 95.28000, "cross": 0, "timestamp": 1761954360, "pricediff": -9.90, "timediff": 2, "news": 0, "max_loss": -1250.43},
-        {"timeframe_name": "M5", "timeframe": 5, "signal": -1, "price": 95.47000, "cross": 1761953040, "timestamp": 1761952800, "pricediff": -11.90, "timediff": 10, "news": 0, "max_loss": -1250.48},
-        {"timeframe_name": "M15", "timeframe": 15, "signal": 1, "price": 96.11000, "cross": 1761952800, "timestamp": 1761973200, "pricediff": 0.00, "timediff": 0, "news": 0, "max_loss": -1250.42},
+        {"timeframe_name": "M1", "timeframe": 1, "signal": -1, "price": 99.54000, "cross": 0, "timestamp": 1762070880, "pricediff": -11.60, "timediff": 1, "news": -1, "max_loss": -1248.38},
+        {"timeframe_name": "M5", "timeframe": 5, "signal": 1, "price": 100.15000, "cross": 1762067100, "timestamp": 1762066800, "pricediff": -8.70, "timediff": 20, "news": 0, "max_loss": -1248.39},
+        {"timeframe_name": "M15", "timeframe": 15, "signal": -1, "price": 99.96000, "cross": 1762056000, "timestamp": 1762041600, "pricediff": 0.00, "timediff": 0, "news": 0, "max_loss": -1248.46},
         {"timeframe_name": "M30", "timeframe": 30, "signal": 1, "price": 92.64000, "cross": 1761856200, "timestamp": 1761856200, "pricediff": -15.10, "timediff": 60, "news": 0, "max_loss": -1251.14},
-        {"timeframe_name": "H1", "timeframe": 60, "signal": -1, "price": 95.06000, "cross": 1761856200, "timestamp": 1761972300, "pricediff": 0.00, "timediff": 0, "news": 0, "max_loss": -1250.42},
+        {"timeframe_name": "H1", "timeframe": 60, "signal": -1, "price": 99.20000, "cross": 1761856200, "timestamp": 1762052400, "pricediff": -18.80, "timediff": 120, "news": 0, "max_loss": -1248.46},
         {"timeframe_name": "H4", "timeframe": 240, "signal": -1, "price": 94.43000, "cross": 1761933600, "timestamp": 1761926400, "pricediff": 0.00, "timediff": 0, "news": 0, "max_loss": -1250.61},
         {"timeframe_name": "D1", "timeframe": 1440, "signal": -1, "price": 94.54000, "cross": 1761926400, "timestamp": 1761926400, "pricediff": 0.00, "timediff": 0, "news": 0, "max_loss": -1250.60}
     ],
     "history_count": {"m1": 7, "m5": 7, "m15": 7, "m30": 7, "h1": 7, "h4": 3, "d1": 1},
 "history": {
     "m1": [
-        {"timeframe": "M1", "signal": -1, "price": 95.28000, "cross": 0, "timestamp": 1761954360, "pricediff": -9.90, "timediff": 2, "news": 0
+        {"timeframe": "M1", "signal": -1, "price": 99.54000, "cross": 0, "timestamp": 1762070880, "pricediff": -11.60, "timediff": 1, "news": 0
         },
-        {"timeframe": "M1", "signal": 1, "price": 96.27000, "cross": 0, "timestamp": 1761954240, "pricediff": -10.70, "timediff": 2, "news": 0
+        {"timeframe": "M1", "signal": 1, "price": 100.70000, "cross": 0, "timestamp": 1762070820, "pricediff": -11.60, "timediff": 1, "news": 0
         },
-        {"timeframe": "M1", "signal": -1, "price": 95.20000, "cross": 0, "timestamp": 1761954120, "pricediff": -11.40, "timediff": 5, "news": 0
+        {"timeframe": "M1", "signal": -1, "price": 99.54000, "cross": 0, "timestamp": 1762070760, "pricediff": -11.30, "timediff": 2, "news": 0
         },
-        {"timeframe": "M1", "signal": 1, "price": 96.34000, "cross": 0, "timestamp": 1761953820, "pricediff": -9.00, "timediff": 7, "news": 0
+        {"timeframe": "M1", "signal": 1, "price": 100.67000, "cross": 0, "timestamp": 1762070640, "pricediff": 0.00, "timediff": 47, "news": 0
         },
-        {"timeframe": "M1", "signal": -1, "price": 95.44000, "cross": 0, "timestamp": 1761953400, "pricediff": -11.40, "timediff": 2, "news": 0
+        {"timeframe": "M1", "signal": 1, "price": 100.11000, "cross": 0, "timestamp": 1762067820, "pricediff": -11.10, "timediff": 1, "news": 0
         },
-        {"timeframe": "M1", "signal": 1, "price": 96.58000, "cross": 0, "timestamp": 1761953280, "pricediff": -11.10, "timediff": 2, "news": 0
+        {"timeframe": "M1", "signal": -1, "price": 99.00000, "cross": 0, "timestamp": 1762067760, "pricediff": -11.40, "timediff": 1, "news": 0
         },
-        {"timeframe": "M1", "signal": -1, "price": 95.47000, "cross": 0, "timestamp": 1761953160, "pricediff": -11.70, "timediff": 2, "news": 0
+        {"timeframe": "M1", "signal": 1, "price": 100.14000, "cross": 0, "timestamp": 1762067700, "pricediff": -11.20, "timediff": 4, "news": 0
         }],
     "m5": [
-        {"timeframe": "M5", "signal": -1, "price": 95.47000, "cross": 1761953040, "timestamp": 1761952800, "pricediff": -11.90, "timediff": 10, "news": 0
+        {"timeframe": "M5", "signal": 1, "price": 100.15000, "cross": 1762067100, "timestamp": 1762066800, "pricediff": -8.70, "timediff": 20, "news": 0
         },
-        {"timeframe": "M5", "signal": 1, "price": 96.66000, "cross": 1761952200, "timestamp": 1761952200, "pricediff": -12.70, "timediff": 15, "news": 0
+        {"timeframe": "M5", "signal": -1, "price": 99.28000, "cross": 1762065840, "timestamp": 1762065600, "pricediff": -14.30, "timediff": 5, "news": 0
         },
-        {"timeframe": "M5", "signal": -1, "price": 95.39000, "cross": 1761951540, "timestamp": 1761951300, "pricediff": 0.00, "timediff": 0, "news": 0
+        {"timeframe": "M5", "signal": 1, "price": 100.71000, "cross": 1762065660, "timestamp": 1762065300, "pricediff": -12.40, "timediff": 20, "news": 0
         },
-        {"timeframe": "M5", "signal": 1, "price": 95.51000, "cross": 1761948480, "timestamp": 1761948600, "pricediff": -13.00, "timediff": 25, "news": 0
+        {"timeframe": "M5", "signal": -1, "price": 99.47000, "cross": 1762063980, "timestamp": 1762064100, "pricediff": -12.20, "timediff": 10, "news": 0
         },
-        {"timeframe": "M5", "signal": -1, "price": 94.21000, "cross": 1761947040, "timestamp": 1761947100, "pricediff": 0.00, "timediff": 0, "news": 0
+        {"timeframe": "M5", "signal": 1, "price": 100.69000, "cross": 1762063680, "timestamp": 1762063500, "pricediff": -10.40, "timediff": 25, "news": 0
         },
-        {"timeframe": "M5", "signal": 1, "price": 95.24000, "cross": 1761946620, "timestamp": 1761946200, "pricediff": -10.80, "timediff": 20, "news": 0
+        {"timeframe": "M5", "signal": -1, "price": 99.65000, "cross": 1762062180, "timestamp": 1762062000, "pricediff": -12.10, "timediff": 15, "news": 0
         },
-        {"timeframe": "M5", "signal": -1, "price": 94.16000, "cross": 1761945060, "timestamp": 1761945000, "pricediff": -10.80, "timediff": 15, "news": 0
+        {"timeframe": "M5", "signal": 1, "price": 100.86000, "cross": 1762061580, "timestamp": 1762061100, "pricediff": -13.80, "timediff": 10, "news": 0
         }],
     "m15": [
+        {"timeframe": "M15", "signal": -1, "price": 99.96000, "cross": 1762056000, "timestamp": 1762041600, "pricediff": 0.00, "timediff": 0, "news": 0
+        },
+        {"timeframe": "M15", "signal": 1, "price": 100.73000, "cross": 1762040100, "timestamp": 1762015500, "pricediff": 0.00, "timediff": 0, "news": 0
+        },
+        {"timeframe": "M15", "signal": -1, "price": 97.33000, "cross": 1761999900, "timestamp": 1761986700, "pricediff": 0.00, "timediff": 0, "news": 0
+        },
         {"timeframe": "M15", "signal": 1, "price": 96.11000, "cross": 1761952800, "timestamp": 1761973200, "pricediff": 0.00, "timediff": 0, "news": 0
         },
         {"timeframe": "M15", "signal": -1, "price": 95.17000, "cross": 1761952800, "timestamp": 1761952500, "pricediff": 0.00, "timediff": 0, "news": 0
@@ -53,12 +59,6 @@
         {"timeframe": "M15", "signal": 1, "price": 95.55000, "cross": 1761946200, "timestamp": 1761946200, "pricediff": 0.00, "timediff": 90, "news": 0
         },
         {"timeframe": "M15", "signal": 1, "price": 95.53000, "cross": 1761946200, "timestamp": 1761940800, "pricediff": 0.00, "timediff": 0, "news": 0
-        },
-        {"timeframe": "M15", "signal": -1, "price": 93.95000, "cross": 1761939300, "timestamp": 1761926400, "pricediff": 0.00, "timediff": 0, "news": 0
-        },
-        {"timeframe": "M15", "signal": 1, "price": 95.16000, "cross": 1761912900, "timestamp": 1761919200, "pricediff": 0.00, "timediff": 0, "news": 0
-        },
-        {"timeframe": "M15", "signal": -1, "price": 93.78000, "cross": 1761896400, "timestamp": 1761896700, "pricediff": 0.00, "timediff": 0, "news": 0
         }],
     "m30": [
         {"timeframe": "M30", "signal": 1, "price": 92.64000, "cross": 1761856200, "timestamp": 1761856200, "pricediff": -15.10, "timediff": 60, "news": 0
@@ -76,19 +76,19 @@
         {"timeframe": "M30", "signal": 1, "price": 98.22000, "cross": 1761821100, "timestamp": 1761825600, "pricediff": 0.00, "timediff": 0, "news": 0
         }],
     "h1": [
-        {"timeframe": "H1", "signal": -1, "price": 95.06000, "cross": 1761856200, "timestamp": 1761972300, "pricediff": 0.00, "timediff": 0, "news": 0
+        {"timeframe": "H1", "signal": -1, "price": 99.20000, "cross": 1761856200, "timestamp": 1762052400, "pricediff": -18.80, "timediff": 120, "news": 0
         },
-        {"timeframe": "H1", "signal": 1, "price": 95.45000, "cross": 1761856200, "timestamp": 1761944400, "pricediff": 0.00, "timediff": 0, "news": 0
+        {"timeframe": "H1", "signal": 1, "price": 101.08000, "cross": 1761856200, "timestamp": 1762045200, "pricediff": -18.10, "timediff": 60, "news": 0
         },
-        {"timeframe": "H1", "signal": -1, "price": 94.25000, "cross": 1761856200, "timestamp": 1761933600, "pricediff": 0.00, "timediff": 0, "news": 0
+        {"timeframe": "H1", "signal": -1, "price": 99.27000, "cross": 1761856200, "timestamp": 1762041600, "pricediff": 0.00, "timediff": 0, "news": 0
         },
-        {"timeframe": "H1", "signal": 1, "price": 95.49000, "cross": 1761856200, "timestamp": 1761919200, "pricediff": 0.00, "timediff": 0, "news": 0
+        {"timeframe": "H1", "signal": 1, "price": 100.02000, "cross": 1761856200, "timestamp": 1762026300, "pricediff": 0.00, "timediff": 0, "news": 0
         },
-        {"timeframe": "H1", "signal": -1, "price": 94.12000, "cross": 1761856200, "timestamp": 1761915600, "pricediff": 0.00, "timediff": 0, "news": 0
+        {"timeframe": "H1", "signal": -1, "price": 98.06000, "cross": 1761856200, "timestamp": 1762019100, "pricediff": -10.20, "timediff": 240, "news": 0
         },
-        {"timeframe": "H1", "signal": 1, "price": 94.87000, "cross": 1761856200, "timestamp": 1761904800, "pricediff": -15.50, "timediff": 120, "news": 0
+        {"timeframe": "H1", "signal": 1, "price": 99.08000, "cross": 1761856200, "timestamp": 1762004700, "pricediff": -17.70, "timediff": 120, "news": 0
         },
-        {"timeframe": "H1", "signal": -1, "price": 93.32000, "cross": 1761856200, "timestamp": 1761897600, "pricediff": 0.00, "timediff": 0, "news": 0
+        {"timeframe": "H1", "signal": -1, "price": 97.31000, "cross": 1761856200, "timestamp": 1761997500, "pricediff": 4.90, "timediff": 180, "news": 0
         }],
     "h4": [
         {"timeframe": "H4", "signal": -1, "price": 94.43000, "cross": 1761933600, "timestamp": 1761926400, "pricediff": 0.00, "timediff": 0, "news": 0
