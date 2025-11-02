@@ -22,9 +22,8 @@
 input int    Timer = 1;                                      // Timer Interval in seconds (1-60) | Khoang thoi gian timer (1-60 giay)
 input int    Retry = 3;                                      // Retry Attempts per round (1-10) | So lan thu lai moi vong (1-10)
 input string TargetSymbol = "";                              // Target Symbol - Empty = current chart | Symbol muc tieu - Rong = chart hien tai
-input bool   EnableHealthCheck = true;                       // Health check at 8h & 16h | Kiem tra suc khoe luc 8h va 16h
+input bool   EnableHealthCheck = true;                       // Health check at 5h,10h,15h,20h | Kiem tra suc khoe luc 5h,10h,15h,20h
 input bool   EnableMidnightReset = true;                     // Midnight reset at 0h daily | Reset luc 0h hang ngay
-input bool   EnableStartupReset = true;                      // Startup reset 1 minute after MT4 starts | Reset khoi dong 1 phut sau khi MT4 chay
 input bool   ProcessSignalOnOddSecond = false;               // Process Signal on ODD second only | Xu ly tin hieu giay le (tranh conflict)
 input bool   EnableMonthlyStats = true;                      // Monthly stats on 1st day of month | Thong ke thang vao ngay 1
 input string DataFolder = "DataAutoOner\\";                  // Data Storage Folder | Thu muc luu tru du lieu
@@ -2653,25 +2652,6 @@ int OnInit() {
     // Step 7.2: Run monthly statistics (if 1st day of month)
     RunMonthlyStatsOnStartup();
 
-    // Step 7.3: Initialize Startup Reset (detects VPS/MT4 restart - 1 TIME ONLY)
-    // GlobalVariable lost when MT4 closes, survives indicator reload
-    // Set ONLY if not exists -> detects real MT4 restart (not indicator reload)
-    if(EnableStartupReset) {
-        string gv_time = g_target_symbol + "_StartupInitTime";
-
-        if(!GlobalVariableCheck(gv_time)) {
-            // GlobalVariable not found = MT4 just restarted (or first run)
-            GlobalVariableSet(gv_time, TimeCurrent());
-            // KHÔNG tạo gv_done - để MidnightReset tạo và gán = 0
-            Print("StartupReset: MT4 restart detected | Init time saved");
-        } else {
-            // GlobalVariable exists = Indicator reload (not MT4 restart)
-            long init_time = (long)GlobalVariableGet(gv_time);
-            Print("StartupReset: Indicator reload (not MT4 restart) | Init time: ",
-                  TimeToString(init_time, TIME_DATE|TIME_SECONDS));
-        }
-    }
-
     // Step 8: Set timer
     EventSetTimer(Timer);
 
@@ -2697,49 +2677,26 @@ int OnInit() {
 // SECONDARY FUNCTIONS | CAC HAM PHU
 // ============================================================
 
-// Startup Reset: 1 minute after MT4 starts (1 TIME ONLY per MT4 session)
-// _StartupInitTime set by OnInit() ONLY if not exists (detects MT4 restart)
-// This function runs every even second to check if 60s elapsed
-void RunStartupReset() {
-    if(!EnableStartupReset) return;
-
-    string gv_time = g_target_symbol + "_StartupInitTime";
-    string gv_done = g_target_symbol + "_StartupResetDone";
-
-    // Check if init time exists (set by OnInit when MT4 restart)
-    if(!GlobalVariableCheck(gv_time)) return;
-    if(!GlobalVariableCheck(gv_done)) return;
-
-    // Get values
-    long init_time = (long)GlobalVariableGet(gv_time);
-    double done = GlobalVariableGet(gv_done);
-    long elapsed = TimeCurrent() - init_time;
-
-    // ĐIỀU KIỆN: Cờ == 0 (MidnightReset đã gán) + Đủ 60s
-    // - Cờ = -1: OnInit tạo, chưa qua 0h → SKIP (chờ MidnightReset)
-    // - Cờ = 0: MidnightReset vừa gán lúc 0h → CHO PHÉP StartupReset (VPS restart)
-    // - Cờ = 1: Đã reset rồi → SKIP
-    if(done == 0 && elapsed >= 60) {
-        Print("StartupReset: ", g_target_symbol, " | Flag=", done, " elapsed=", elapsed, "s -> Resetting 7 charts");
-        SmartTFReset();
-        GlobalVariableSet(gv_done, 1);  // GÁN CỜ = 1
-    }
-}
-
 // Midnight Reset & Health Check
 void RunMidnightAndHealthCheck() {
-    int current_hour = TimeHour(TimeCurrent());
+    datetime current_time = TimeCurrent();
+    int current_hour = TimeHour(current_time);
+    int current_minute = TimeMinute(current_time);
     static int last_check_hour = -2;  // Init != -1 to allow first check
 
-    // Midnight Reset: Only at 0h daily
-    if(EnableMidnightReset && current_hour == 0 && current_hour != last_check_hour) {
+    // Midnight Reset: Only at 0h:0m daily
+    if(EnableMidnightReset &&
+       current_hour == 0 &&
+       current_minute == 0 &&
+       current_hour != last_check_hour) {
         MidnightReset();
         last_check_hour = current_hour;
     }
 
-    // Health Check: Only at 8h and 16h
+    // Health Check: 5h, 10h, 15h, 20h (4 lần/ngày) - ĐÚNG GIỜ (0 phút)
     if(EnableHealthCheck &&
-       (current_hour == 8 || current_hour == 16) &&
+       current_minute == 0 &&
+       (current_hour == 5 || current_hour == 10 || current_hour == 15 || current_hour == 20) &&
        current_hour != last_check_hour) {
         HealthCheck();
         last_check_hour = current_hour;
@@ -2807,8 +2764,7 @@ void OnTimer() {
     // EA DOC CSDL O GIAY CHAN - KHONG BI XUNG DOT GHI FILE
     // ========================================
     if(current_second % 2 == 0) {  // Giay chan (0, 2, 4, 6, 8...)
-        RunStartupReset();           // Startup reset (1 lan sau khi MT4 khoi dong)
-        RunMidnightAndHealthCheck(); // Midnight reset + Health check (8h, 16h)
+        RunMidnightAndHealthCheck(); // Midnight reset (0h) + Health check (5h,10h,15h,20h)
         RunDashboardUpdate();        // Cap nhat dashboard hien thi
     }
 }
@@ -2933,7 +2889,6 @@ void MidnightReset() {
 
     // Sử dụng GlobalVariable thay vì static để tránh bị reset khi OnInit()
     string gv_last_reset_time = g_target_symbol + "_LastMidnightResetTime";
-    string gv_done = g_target_symbol + "_StartupResetDone";  // CỜ DUY NHẤT
 
     // Khởi tạo nếu chưa có
     if(!GlobalVariableCheck(gv_last_reset_time)) {
@@ -2957,9 +2912,6 @@ void MidnightReset() {
 
         // Cập nhật thời gian reset
         GlobalVariableSet(gv_last_reset_time, current_time);
-
-        // GÁN CỜ = 0 (cho phép StartupReset nếu VPS restart)
-        GlobalVariableSet(gv_done, 0);
     }
 }
 
