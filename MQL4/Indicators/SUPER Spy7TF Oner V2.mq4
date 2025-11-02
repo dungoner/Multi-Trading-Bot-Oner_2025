@@ -1,2819 +1,1398 @@
-//+-----------------------------------------------------------------------------------+
-//  SUPER SPY BOT V2 - Multi-Timeframe Signal Monitor | BOT GIAM SAT TIN HIEU NHIEU KHUNG THOI GIAN V2
-//+-----------------------------------------------------------------------------------+
-#property copyright "SUPER_Spy7TF_Oner V2 - Multi-Timeframe Signal Spy with NEWS CASCADE Analysis"
-
-#property link      "CSDL1: 8 Columns + CSDL3: 2 Strategies Only"
+//+------------------------------------------------------------------+
+//| EAs_MTF_ONER_V2_MT4
+//| Multi Timeframe Expert Advisor for MT4 | EA nhieu khung thoi gian cho MT4
+//| 7 TF × 3 Strategies = 21 orders | 7 khung x 3 chien luoc = 21 lenh
+//| Version: 2.0 (MT4) | Phien ban: 2.0 (MT4)
+//+------------------------------------------------------------------+
+#property copyright "EAs_MTF_ONER_V2_MT4"
+#property version "2.00"
 #property strict
 
-#property indicator_chart_window  // Display on main chart | Hien thi tren bieu do chinh
-#property indicator_buffers 0     // No indicator buffers needed | Khong can buffer chi bao
+//=============================================================================
+//  PART 1: USER INPUTS (30 inputs + 4 separators) | CAU HINH NGUOI DUNG
+//=============================================================================
 
-// Import WinAPI for timeframe switching | Import WinAPI de chuyen timeframe
-#import "user32.dll"
-   int PostMessageA(long hWnd, int Msg, int wParam, int lParam);
-#import
+input string _________Menu_A___ = "___A. CORE SETTINGS _________";  //
 
-#define WM_COMMAND 0x0111  // Windows message command constant | Hang so lenh tin nhan Windows
+//--- A.1 Timeframe toggles (7) | Bat/tat khung thoi gian
+input bool TF_M1 = true;   // M1 (Signal Sym_M1 Time)
+input bool TF_M5 = true;   // M5 (Buy/Sell Symbol_M5)
+input bool TF_M15 = true;  // M15 (Signal Symbol_15)
+input bool TF_M30 = true;  // M30 (Buy/Sell Symbol_M30)
+input bool TF_H1 = true;   // H1 (Signal Symbol_H1 )
+input bool TF_H4 = true;   // H4 (Buy/Sell Symbol_H4 )
+input bool TF_D1 = true;   // D1 (Signal Symbol_D1)
 
-//==============================================================================
-//  SECTION 1: USER INPUTS - ALL SWITCHES IN ONE PLACE | TAT CA CAC NUT BAT TAT O 1 CHO
-//==============================================================================
-input int    Timer = 1;                                      // Timer Interval in seconds (1-60) | Khoang thoi gian timer (1-60 giay)
-input int    Retry = 3;                                      // Retry Attempts per round (1-10) | So lan thu lai moi vong (1-10)
-input string TargetSymbol = "";                              // Target Symbol - Empty = current chart | Symbol muc tieu - Rong = chart hien tai
-input bool   EnableHealthCheck = true;                       // Health check at 8h & 16h | Kiem tra suc khoe luc 8h va 16h
-input bool   EnableMidnightReset = true;                     // Midnight reset at 0h daily | Reset luc 0h hang ngay
-input bool   EnableStartupReset = true;                      // Startup reset 1 minute after MT4 starts | Reset khoi dong 1 phut sau khi MT4 chay
-input bool   ProcessSignalOnOddSecond = false;               // Process Signal on ODD second only | Xu ly tin hieu giay le (tranh conflict)
-input bool   EnableMonthlyStats = true;                      // Monthly stats on 1st day of month | Thong ke thang vao ngay 1
-input string DataFolder = "DataAutoOner\\";                  // Data Storage Folder | Thu muc luu tru du lieu
+//--- A.2 Strategy toggles (3) | Bat/tat chien luoc
+input bool S1_HOME = true;   // S1: Binary (Home signal)
+input bool S2_TREND = true;  // S2: Trend (Follow D1)
+input bool S3_NEWS = true;   // S3: News (High impact)
 
-//--- NEWS CASCADE Configuration | Cau hinh NEWS CASCADE
-input bool   EnableCategoryEA = true;                        // Enable Category 1 (EA Trading) | Bat Category 1 (EA danh)
-input double NewsBaseLiveDiff = 2.5;                         // L1 Base Live Diff threshold (USD) | Nguong Live Diff co ban L1
-input double NewsLiveDiffStep = 0.5;                         // Live Diff increment per level (USD) | Tang Live Diff moi cap
-input int    NewsBaseTimeMinutes = 2;                        // Category 2 Base Time (minutes) 2^level | Thoi gian co so Category 2
-input bool   EnableCategoryUser = true;                      // Enable Category 2 (User Reference) | Bat Category 2 (tham khao)
-input double NewsCascadeMultiplier = 0.1;                    // Category 2 USD Threshold Base (0.1->0.7 for L1-L7) | He so nguong USD Category 2
+//--- A.3 Risk management (2) | Quan ly rui ro
+input double FixedLotSize = 0.1;           // Lot size (0.01-1.0 recommended)
+input double MaxLoss_Fallback = -1000.0;   // Max loss fallback ($USD if CSDL fails)
 
-//==============================================================================
-//  SECTION 2: DATA STRUCTURES (3 structs) | PHAN 2: CAU TRUC DU LIEU
-//==============================================================================
-// Core data structures for signal tracking and history management
-// Cau truc du lieu chinh de theo doi tin hieu va quan ly lich su
-//==============================================================================
+//--- A.4 Data source (1) | Nguon du lieu
+enum CSDL_SOURCE_ENUM {
+    FOLDER_1 = 0,  // DataAutoOner
+    FOLDER_2 = 1,  // DataAutoOner2 (Default)
+    FOLDER_3 = 2,  // DataAutoOner3
+};
+input CSDL_SOURCE_ENUM CSDL_Source = FOLDER_2;  // CSDL folder (signal source)
 
-// History entry structure | Cau truc muc lich su
-struct SignalHistoryEntry {
-    string timeframe_name;           // Timeframe name (M1,M5,M15,M30,H1,H4,D1) | Ten khung thoi gian
-    int signal_3col;                 // Signal value: 1=BUY, -1=SELL | Gia tri tin hieu
-    double price_4col;               // Entry price | Gia vao lenh
-    long cross_5col;                 // Cross reference (timestamp of previous TF) | Tham chieu cheo timestamp TF truoc
-    long timestamp_6col;             // Signal timestamp | Dau thoi gian tin hieu
-    double pricediff_7col;           // Price difference in USD | Chenh lech gia theo USD
-    int timediff_8col;               // Time difference in minutes | Chenh lech thoi gian theo phut
-    int news_result_9col;            // NEWS CASCADE result (±11-16 or 0) | Ket qua NEWS CASCADE
+input string _________Sep_B___ = "___B. STRATEGY CONFIG _________";  //
+
+//--- B.1 S1 NEWS Filter (3) | Loc tin tuc cho S1
+input bool S1_UseNewsFilter = true;            // S1: Use NEWS filter (TRUE=strict, FALSE=basic)
+input int MinNewsLevelS1 = 20;                 // S1: Min NEWS level (20-70, higher=stricter)
+input bool S1_RequireNewsDirection = true;     // S1: Match NEWS direction (signal==news!)
+
+//--- B.2 S2 TREND Mode (1) | Che do xu huong
+enum S2_TREND_MODE {
+    S2_FOLLOW_D1 = 0,    // Follow D1 (Auto)
+    S2_FORCE_BUY = 1,    // Force BUY (manual override)
+    S2_FORCE_SELL = -1   // Force SELL (manual override)
+};
+input S2_TREND_MODE S2_TrendMode = S2_FOLLOW_D1;  // S2: Trend (D1 auto/manual)
+
+//--- B.3 S3 NEWS Configuration (4) | Cau hinh tin tuc
+input int MinNewsLevelS3 = 20;         // S3: Min NEWS level (20-70)
+input bool EnableBonusNews = true;     // S3: Enable Bonus (extra on high NEWS)
+input int BonusOrderCount = 2;         // S3: Bonus count (1-5 orders)
+input int MinNewsLevelBonus = 20;      // S3: Min NEWS for Bonus (threshold)
+input double BonusLotMultiplier = 1.0; // S3: Bonus lot multiplier (1.0-10.0)
+
+input string _________Sep_C___ = "___C. RISK PROTECTION _________";  //
+
+//--- C.1 Stoploss mode (3) | Che do cat lo
+enum STOPLOSS_MODE {
+    NONE = 0,            // No stoploss (close by signal only)
+    LAYER1_MAXLOSS = 1,  // Layer1: max_loss × lot (from CSDL)
+    LAYER2_MARGIN = 2    // Layer2: margin/divisor (emergency)
+};
+input STOPLOSS_MODE StoplossMode = LAYER1_MAXLOSS;  // Stoploss mode (0=OFF, 1=CSDL, 2=Margin)
+input double Layer2_Divisor = 5.0;  // Layer2 divisor (margin/-5 = threshold)
+
+//--- C.2 Take profit (2) | Chot loi
+input bool   UseTakeProfit = false;  // Enable take profit (FALSE=OFF, TRUE=ON)
+input double TakeProfit_Multiplier = 3;  // TP multiplier (0.5=5%, 1.0=10%, 5.0=50%)
+
+input string _________Sep_D___ = "___D. AUXILIARY SETTINGS _________";  //
+
+//--- D.1 Performance (1) | Hieu suat
+input bool UseEvenOddMode = false;  // Even/odd split mode (load balancing)
+
+//--- D.2 Health check & reset (2) | Kiem tra suc khoe
+input bool EnableWeekendReset = true;   // Weekend reset (auto close Friday 23:50)
+input bool EnableHealthCheck = true;    // Health check (8h/16h SPY bot status)
+
+//--- D.3 Display (2) | Hien thi
+input bool ShowDashboard = true;  // Show dashboard (on-chart info)
+input bool DebugMode = false;      // Debug mode (verbose logging)
+
+//=============================================================================
+//  PART 2: DATA STRUCTURES (1 struct) | CAU TRUC DU LIEU
+//=============================================================================
+
+struct CSDLLoveRow {
+    double max_loss;   // Col 1: Max loss per 1 LOT | Lo toi da tren 1 lot
+    long timestamp;    // Col 2: Timestamp | Thoi gian
+    int signal;        // Col 3: Signal (1=BUY,-1=SELL,0=NONE) | Tin hieu
+    double pricediff;  // Col 4: Price diff USD (unused) | Chenh lech gia (khong dung)
+    int timediff;      // Col 5: Time diff minutes (unused) | Chenh lech thoi gian (khong dung)
+    int news;          // Col 6: News CASCADE (±11-16) | Tin tuc CASCADE
 };
 
-#define HISTORY_SIZE 7               // 7 signals per timeframe | 7 tin hieu moi khung thoi gian
+//=============================================================================
+//  PART 3: EA DATA STRUCTURE (116 vars in struct) | CAU TRUC DU LIEU EA
+//=============================================================================
+// Contains ALL EA data for current symbol (learned from SPY Bot) | Chua tat ca du lieu EA cho symbol hien tai (hoc tu SPY Bot)
+// Each EA instance on different chart has its OWN struct | Moi EA instance tren chart khac co struct RIENG
+// This prevents conflicts when running multiple symbols simultaneously | Tranh xung dot khi chay nhieu symbol dong thoi
+//=============================================================================
 
-// ============================================================================
-// MAIN DATA STRUCTURE: SymbolCSDL1Data | CAU TRUC DU LIEU CHINH
-// ============================================================================
-// Contains ALL data for 1 symbol (current chart) | Chua tat ca du lieu cho 1 symbol
-// - 7 TF × 10 columns (CSDL1 current data) | 7 khung thoi gian x 10 cot du lieu hien tai
-// - 7 TF × 7 history entries | 7 khung thoi gian x 7 muc lich su
-// - Counters, timestamps, etc. | Bo dem, dau thoi gian, v.v.
-// ============================================================================
+struct EASymbolData {
+    // Symbol & File info (4 vars) | Thong tin symbol va file
+    string symbol_name;          // Symbol name (BTCUSD, LTCUSD...) | Ten symbol
+    string symbol_prefix;        // Symbol prefix with underscore | Tien to symbol co gach duoi
+    string csdl_folder;          // CSDL folder path | Duong dan thu muc CSDL
+    string csdl_filename;        // Full CSDL filename | Ten file CSDL day du
 
-struct SymbolCSDL1Data {
-    // Symbol identification | Nhan dien symbol
-    string symbol;                    // Current chart symbol | Symbol bieu do hien tai
+    // CSDL rows (7 rows) | Hang CSDL
+    CSDLLoveRow csdl_rows[7];    // 7 rows for 7 TF (M1-D1) | 7 hang cho 7 khung
 
-    // ==================================================
-    // CSDL1 CURRENT DATA - 7 TF × 10 COLUMNS | DU LIEU HIEN TAI
-    // ==================================================
-    // Row index: 0=M1, 1=M5, 2=M15, 3=M30, 4=H1, 5=H4, 6=D1 | Chi so hang
+    // Core signals (14 vars = 2×7 TF) | Tin hieu goc
+    int signal_old[7];           // Old signal for comparison | Tin hieu cu de so sanh
+    datetime timestamp_old[7];   // Old timestamp for comparison | Thoi gian cu de so sanh
+    // NOTE: signal_new, timestamp_new removed - use csdl_rows[tf].signal/timestamp directly
+    // CHU THICH: Da loai bo signal_new, timestamp_new - dung truc tiep csdl_rows[tf].signal/timestamp
 
-    int signals[7];                   // Column 3: Signal (-1, 0, 1) | Cot 3: Tin hieu
-    double prices[7];                 // Column 4: Price | Cot 4: Gia
-    long crosses[7];                  // Column 5: Cross (timestamp of prev TF) | Cot 5: Tham chieu cheo
-    long timestamps[7];               // Column 6: Timestamp | Cot 6: Dau thoi gian
-    double pricediffs[7];             // Column 7: PriceDiff USD | Cot 7: Chenh lech gia USD
-    int timediffs[7];                 // Column 8: TimeDiff minutes | Cot 8: Chenh lech thoi gian phut
-    int news_results[7];              // Column 9: NEWS CASCADE (±11-16 or 0) | Cot 9: Ket qua NEWS CASCADE
-    double max_losses[7];             // Column 10: Max Loss (negative value) | Cot 10: Lo toi da
+    // Magic numbers (21 vars) | So hieu lenh
+    int magic_numbers[7][3];     // [TF][Strategy]: [0]=S1, [1]=S2, [2]=S3
 
-    // ==================================================
-    // LAST SIGNAL TRACKING (for PriceDiff calculation) | THEO DOI TIN HIEU TRUOC
-    // ==================================================
-    int signals_last[7];              // Previous signal | Tin hieu truoc
-    double prices_last[7];            // Previous price | Gia truoc
-    long timestamps_last[7];          // Previous timestamp | Dau thoi gian truoc
-    long processed_timestamps[7];     // Last processed timestamp (avoid duplicate) | Timestamp da xu ly
+    // Lot sizes (21 vars - pre-calculated) | Khoi luong tinh truoc
+    double lot_sizes[7][3];      // [TF][Strategy]: [0]=S1, [1]=S2, [2]=S3
 
-    // ==================================================
-    // HISTORY ARRAYS - 7 TF × 7 ENTRIES | MANG LICH SU
-    // ==================================================
-    SignalHistoryEntry m1_history[HISTORY_SIZE];   // M1 history buffer | Bo dem lich su M1
-    SignalHistoryEntry m5_history[HISTORY_SIZE];   // M5 history buffer | Bo dem lich su M5
-    SignalHistoryEntry m15_history[HISTORY_SIZE];  // M15 history buffer | Bo dem lich su M15
-    SignalHistoryEntry m30_history[HISTORY_SIZE];  // M30 history buffer | Bo dem lich su M30
-    SignalHistoryEntry h1_history[HISTORY_SIZE];   // H1 history buffer | Bo dem lich su H1
-    SignalHistoryEntry h4_history[HISTORY_SIZE];   // H4 history buffer | Bo dem lich su H4
-    SignalHistoryEntry d1_history[HISTORY_SIZE];   // D1 history buffer | Bo dem lich su D1
+    // Strategy conditions (3 vars) | Dieu kien chien luoc
+    int trend_d1;                // S2: D1 trend (1=BUY,-1=SELL,0=NONE) | Xu huong D1
+    int news_level;              // S3: News level (abs value) | Muc do tin tuc
+    int news_direction;          // S3: News direction (-1/0/1) | Huong tin tuc
 
-    // History counters | Bo dem lich su
-    int m1_count;   // M1 history count | So luong lich su M1
-    int m5_count;   // M5 history count | So luong lich su M5
-    int m15_count;  // M15 history count | So luong lich su M15
-    int m30_count;  // M30 history count | So luong lich su M30
-    int h1_count;   // H1 history count | So luong lich su H1
-    int h4_count;   // H4 history count | So luong lich su H4
-    int d1_count;   // D1 history count | So luong lich su D1
+    // Stoploss thresholds (21 vars) | Nguong cat lo
+    double layer1_thresholds[7][3];  // [TF][Strategy]: [0]=S1, [1]=S2, [2]=S3
 
-    // ==================================================
-    // METADATA | DU LIEU META
-    // ==================================================
-    long last_file_modified;          // File modification timestamp | Dau thoi gian sua doi file
-    int files_written;                // Write counter | Bo dem ghi file
+    // Position flags (21 vars) | Co trang thai lenh
+    int position_flags[7][3];    // [TF][Strategy]: [0]=S1, [1]=S2, [2]=S3
+
+    // Global state vars (5 vars) - Prevent multi-symbol conflicts | Bien trang thai - Tranh xung dot da symbol
+    bool first_run_completed;      // Replaced g_first_run_completed | Thay the g_first_run_completed
+    int weekend_last_day;           // Replaced static last_day | Thay the last_day tinh
+    int health_last_check_hour;     // Replaced static last_check_hour | Thay the last_check_hour tinh
+    datetime timer_last_run_time;   // Replaced static last_run_time | Thay the last_run_time tinh
+    string init_summary;            // Init summary for final print in RESTORE | Tom tat khoi dong de in cuoi cung trong RESTORE
 };
 
-// ============================================================================
-// GLOBAL DATA - SINGLE STRUCT FOR CURRENT CHART | DU LIEU TOAN CAU
-// ============================================================================
-SymbolCSDL1Data g_symbol_data;  // Data for current chart symbol only | Du lieu cho symbol hien tai
+// Single global instance for current chart | Instance toan cuc duy nhat cho chart hien tai
+EASymbolData g_ea;
 
-//==============================================================================
-//  SECTION 3: GLOBAL STATE VARIABLES (2 variables) | PHAN 3: BIEN TRANG THAI TOAN CAU
-//==============================================================================
+//=============================================================================
+//  PART 4: GLOBAL STATE (0 var) | TRANG THAI TOAN CUC
+//=============================================================================
+// All global state vars moved to g_ea struct (lines 118-122) | Tat ca bien toan cuc da chuyen vao struct g_ea
 
+//=============================================================================
+//  PART 4A: GLOBAL CONSTANTS (2 arrays) | HANG SO TOAN CUC
+//=============================================================================
+// Shared by all functions to avoid duplication | Dung chung cho tat ca ham tranh trung lap
+// NOTE: These are CONST - safe for multi-symbol usage | CHU THICH: Day la CONST - an toan cho da symbol
+// 7 TF and 3 Strategies are FIXED by CSDL design | 7 TF va 3 Chien luoc CO DINH theo thiet ke CSDL
+//=============================================================================
 
-//==============================================================================
-//  SECTION 4: CONSTANTS & ANALYSIS STRUCTURES | PHAN 4: HANG SO VA CAU TRUC PHAN TICH
-//==============================================================================
+const string G_TF_NAMES[7] = {"M1", "M5", "M15", "M30", "H1", "H4", "D1"};
+const string G_STRATEGY_NAMES[3] = {"S1", "S2", "S3"};
 
-//--- Strategy result constants | Hang so ket qua chien luoc
-#define STRATEGY_BEARISH    -1  // Bearish signal | Tin hieu giam
-#define STRATEGY_NEUTRAL     0  // Neutral signal | Tin hieu trung lap
-#define STRATEGY_BULLISH     1  // Bullish signal | Tin hieu tang
+//=============================================================================
+//  PART 5: UTILITY FUNCTIONS (11 functions) | HAM TRO GIUP
+//=============================================================================
 
-//--- NEWS Impact Levels (0-4 scale) | Cap do tac dong NEWS
-#define NEWS_NONE           0    // No significant news impact | Khong co tac dong tin tuc
-#define NEWS_WEAK           1    // Minor news impact | Tac dong tin tuc nho
-#define NEWS_MEDIUM         2    // Moderate news impact | Tac dong tin tuc trung binh
-#define NEWS_STRONG         3    // Strong news impact | Tac dong tin tuc manh
-#define NEWS_EXTREME        4    // Extremely strong news impact | Tac dong tin tuc rat manh
-
-//--- Analysis Input Structure | Cau truc input phan tich
-struct AnalysisInput {
-    int signal;        // Direction: 1=BUY, -1=SELL | Huong giao dich
-    double price;      // Price to analyze | Gia phan tich
-    long timestamp;    // Time of analysis | Thoi gian phan tich
-    double usd_diff;   // USD value difference from entry | Chenh lech gia tri USD tu entry
-};
-
-//==============================================================================
-//  SECTION 5: CORE DATA FUNCTIONS (7 functions) | PHAN 5: HAM XU LY DU LIEU CHINH
-//==============================================================================
-
-// Initialize symbol data structure to default values | Khoi tao cau truc du lieu symbol ve gia tri mac dinh
-void InitSymbolData(string symbol) {
-    g_symbol_data.symbol = symbol;
-
-    // =========================================================================
-    // CH? RESET BI?N PH? - KHÔNG ??NG VÀO 10 C?T CSDL1!
-    // 10 c?t CSDL1 (signals, prices, crosses, timestamps, pricediffs, timediffs,
-    // news_results, max_losses) s? ???c LOAD t? file, KHÔNG gán =0!
-    // Bot WT t?o tín hi?u TH?C 24/7 ? SPY ch? LOAD, không can thi?p!
-    // =========================================================================
-    for(int i = 0; i < 7; i++) {
-        // Bi?n PH? ?? tính toán (signals_last, prices_last, timestamps_last)
-        g_symbol_data.signals_last[i] = 0;
-        g_symbol_data.prices_last[i] = 0.0;
-        g_symbol_data.timestamps_last[i] = 0;
-        g_symbol_data.processed_timestamps[i] = 0;
-    }
-
-    // Zero history arrays
-    for(int i = 0; i < HISTORY_SIZE; i++) {
-        g_symbol_data.m1_history[i].signal_3col = 0;
-        g_symbol_data.m5_history[i].signal_3col = 0;
-        g_symbol_data.m15_history[i].signal_3col = 0;
-        g_symbol_data.m30_history[i].signal_3col = 0;
-        g_symbol_data.h1_history[i].signal_3col = 0;
-        g_symbol_data.h4_history[i].signal_3col = 0;
-        g_symbol_data.d1_history[i].signal_3col = 0;
-    }
-
-    // Zero counters
-    g_symbol_data.m1_count = 0;
-    g_symbol_data.m5_count = 0;
-    g_symbol_data.m15_count = 0;
-    g_symbol_data.m30_count = 0;
-    g_symbol_data.h1_count = 0;
-    g_symbol_data.h4_count = 0;
-    g_symbol_data.d1_count = 0;
-
-    // Reset metadata
-    g_symbol_data.last_file_modified = 0;
-    g_symbol_data.files_written = 0;
-
-    // Print suppressed - OnInit will print summary
+// Check if TF is enabled by user | Kiem tra TF co duoc bat boi user
+bool IsTFEnabled(int tf_index) {
+    if(tf_index == 0) return TF_M1;
+    if(tf_index == 1) return TF_M5;
+    if(tf_index == 2) return TF_M15;
+    if(tf_index == 3) return TF_M30;
+    if(tf_index == 4) return TF_H1;
+    if(tf_index == 5) return TF_H4;
+    if(tf_index == 6) return TF_D1;
+    return false;
 }
 
-// Load CSDL1 JSON file data into memory structure | Doc du lieu file JSON CSDL1 vao cau truc bo nho
-bool LoadCSDL1FileIntoArray() {
-    string symbol = g_symbol_data.symbol;
-    string json_file_path = DataFolder + symbol + ".json";
+// Print debug message if DebugMode enabled | In thong bao debug neu bat che do debug
+void DebugPrint(string message) {
+    if(!DebugMode) return;
+    Print("[DEBUG] ", message);
+}
 
-    // Read file using existing function
-    string rows[];
-    ArrayResize(rows, MAINDB_ROWS + 1);
+// Log error with code, context and details | Ghi nhan loi voi ma, ngu canh va chi tiet
+void LogError(int error_code, string context, string details) {
+    Print("[ERROR] CODE:", error_code, " CONTEXT:", context, " DETAILS:", details);
+}
 
-    if(!FileIsExist(json_file_path)) {
-        // Print suppressed - OnInit will print summary
-        return false;  // File doesn't exist yet
-    }
+// Convert signal integer to readable string | Chuyen tin hieu so thanh chu doc duoc
+string SignalToString(int signal) {
+    if(signal == 1) return "BUY";
+    if(signal == -1) return "SELL";
+    return "NONE";
+}
 
-    if(!ReadJsonToRows(json_file_path, rows)) {
-        Print("ERROR: LoadCSDL1 - Failed to read: ", json_file_path);
-        return false;
-    }
+// Normalize lot size to broker requirements | Chuan hoa khoi luong theo yeu cau san
+double NormalizeLotSize(double lot_size) {
+    double min_lot = MarketInfo(Symbol(), MODE_MINLOT);
+    double max_lot = MarketInfo(Symbol(), MODE_MAXLOT);
+    double lot_step = MarketInfo(Symbol(), MODE_LOTSTEP);
 
-    // Parse rows into struct
-    for(int row = 1; row <= MAINDB_ROWS; row++) {
-        int tf_idx = row - 1;  // 0=M1, 1=M5, ..., 6=D1
+    if(lot_size < min_lot) lot_size = min_lot;
+    if(lot_size > max_lot) lot_size = max_lot;
 
-        if(rows[row] == "" || StringLen(rows[row]) < 5) continue;
+    lot_size = NormalizeDouble(lot_size / lot_step, 0) * lot_step;
+    return lot_size;
+}
 
-        // Split comma-separated row
-        string cols[];
-        int col_count = StringSplit(rows[row], ',', cols);
+// Close order with smart error handling (max 1 retry) | Dong lenh voi xu ly loi thong minh (toi da 1 retry)
+// IMPORTANT: EA never stops on errors, only logs | QUAN TRONG: EA khong bao gio dung vi loi, chi ghi nhan
+// Returns: true (success) or false, caller must reset flags | Tra ve true hoac false, nguoi goi phai reset co
+bool CloseOrderSafely(int ticket, string reason) {
 
-        if(col_count >= 8) {
-            // =========================================================================
-            // LOAD 10 C?T TR?C TI?P T? FILE (GIÁ TR? TH?C T? BOT WT)
-            // KHÔNG gán =0, KHÔNG can thi?p, load gì thì dùng ?ó!
-            // C?p signal + timestamp LUÔN ?I ?ÔI, t? nhiên t? WT
-            // =========================================================================
-            g_symbol_data.signals[tf_idx] = (int)StringToInteger(cols[2]);       // Col 3
-            g_symbol_data.prices[tf_idx] = StringToDouble(cols[3]);             // Col 4
-            g_symbol_data.crosses[tf_idx] = (long)StringToInteger(cols[4]);      // Col 5
-            g_symbol_data.timestamps[tf_idx] = (long)StringToInteger(cols[5]);   // Col 6
-            g_symbol_data.pricediffs[tf_idx] = StringToDouble(cols[6]);         // Col 7
-            g_symbol_data.timediffs[tf_idx] = (int)StringToInteger(cols[7]);     // Col 8
+    // Try to select order | Thu chon lenh
+    if(!OrderSelect(ticket, SELECT_BY_TICKET)) {
+        int error = GetLastError();
 
-            if(col_count >= 9) {
-                g_symbol_data.news_results[tf_idx] = (int)StringToInteger(cols[8]); // Col 9
-            }
-
-            if(col_count >= 10) {
-                g_symbol_data.max_losses[tf_idx] = StringToDouble(cols[9]);      // Col 10
-            }
-
-            // Mark timestamp as processed (tránh x? lý l?i tín hi?u c? t? file)
-            // KHÔNG gán signals_last - ?? =0 (ch?a có signal tr??c)
-            if(g_symbol_data.timestamps[tf_idx] > 0) {
-                g_symbol_data.processed_timestamps[tf_idx] = g_symbol_data.timestamps[tf_idx];
-            }
+        // Error 4108: Invalid ticket ? Order already closed or doesn't exist
+        // Loi 4108: Ticket sai ? Lenh da dong hoac khong ton tai
+        if(error == 4108) {
+            Print("[CLOSE_FAIL] ", reason, " #", ticket, " Err:4108 (Invalid ticket) - Skip, EA continues");
+            return false; // Caller must reset flag | Nguoi goi phai reset co
         }
-    }
 
-    // Load history arrays (7 TF × 7 entries) from "history" section
-    LoadHistoryFromCSDL1(json_file_path);
-
-    // Print suppressed - OnInit will print summary
-    return true;
-}
-
-// Load history arrays from CSDL1 JSON file | Tai lich su tu file JSON CSDL1
-bool LoadHistoryFromCSDL1(string json_file_path) {
-    string json_content;
-    if(!ReadFileWithRetry(json_file_path, json_content)) {
+        Print("[CLOSE_FAIL] ", reason, " #", ticket, " Err:", error, " (Select failed) - Skip, EA continues");
         return false;
     }
 
-    // Find history_count section
-    int history_count_start = StringFind(json_content, "\"history_count\":");
-    if(history_count_start >= 0) {
-        g_symbol_data.m1_count = ExtractJsonInt(json_content, "m1");
-        g_symbol_data.m5_count = ExtractJsonInt(json_content, "m5");
-        g_symbol_data.m15_count = ExtractJsonInt(json_content, "m15");
-        g_symbol_data.m30_count = ExtractJsonInt(json_content, "m30");
-        g_symbol_data.h1_count = ExtractJsonInt(json_content, "h1");
-        g_symbol_data.h4_count = ExtractJsonInt(json_content, "h4");
-        g_symbol_data.d1_count = ExtractJsonInt(json_content, "d1");
+    // Already closed | Da dong
+    if(OrderCloseTime() != 0) return false;
+
+    RefreshRates();
+
+    // Try 1: Close order | Lan 1: Dong lenh
+    bool result = false;
+    if(OrderType() == OP_BUY) {
+        result = OrderClose(ticket, OrderLots(), Bid, 3, clrRed);
+    } else if(OrderType() == OP_SELL) {
+        result = OrderClose(ticket, OrderLots(), Ask, 3, clrRed);
     }
 
-    // Find history section
-    int history_start = StringFind(json_content, "\"history\":");
-    if(history_start < 0) return false;
-
-    // Load M1 history
-    LoadTimeframeHistory(json_content, "m1", g_symbol_data.m1_history, g_symbol_data.m1_count);
-    LoadTimeframeHistory(json_content, "m5", g_symbol_data.m5_history, g_symbol_data.m5_count);
-    LoadTimeframeHistory(json_content, "m15", g_symbol_data.m15_history, g_symbol_data.m15_count);
-    LoadTimeframeHistory(json_content, "m30", g_symbol_data.m30_history, g_symbol_data.m30_count);
-    LoadTimeframeHistory(json_content, "h1", g_symbol_data.h1_history, g_symbol_data.h1_count);
-    LoadTimeframeHistory(json_content, "h4", g_symbol_data.h4_history, g_symbol_data.h4_count);
-    LoadTimeframeHistory(json_content, "d1", g_symbol_data.d1_history, g_symbol_data.d1_count);
-
-    return true;
-}
-
-// Load history for specific timeframe | Tai lich su cho khung thoi gian cu the
-void LoadTimeframeHistory(string json_content, string tf_key, SignalHistoryEntry& history[], int count) {
-    if(count <= 0 || count > 7) return;  // Safety check
-
-    // Find timeframe section: "m1": [
-    string search_pattern = "\"" + tf_key + "\": [";
-    int tf_start = StringFind(json_content, search_pattern);
-    if(tf_start < 0) return;
-
-    int array_start = tf_start + StringLen(search_pattern);
-
-    // Find closing bracket for this timeframe array
-    int bracket_count = 1;
-    int array_end = array_start;
-    for(int i = array_start; i < StringLen(json_content); i++) {
-        ushort ch = StringGetCharacter(json_content, i);
-        if(ch == '[') bracket_count++;
-        if(ch == ']') {
-            bracket_count--;
-            if(bracket_count == 0) {
-                array_end = i;
-                break;
-            }
-        }
+    if(result) {
+        // Success - detailed log printed by caller | Thanh cong - log chi tiet se in boi ham goi
+        return true;
     }
 
-    if(array_end <= array_start) return;
+    // FAILED - Check error | That bai - Kiem tra loi
+    int error = GetLastError();
 
-    string array_content = StringSubstr(json_content, array_start, array_end - array_start);
+    // Case 1: Context busy OR Requote ? Retry 1 time
+    // TH 1: MT4 ban HOAC Gia thay doi ? Thu lai 1 lan
+    if(error == 146 || error == 138) {
+        Print("[CLOSE_FAIL] ", reason, " #", ticket, " Err:", error, " (Retry 1x)");
+        Sleep(100);
+        RefreshRates();
 
-    // Split by objects (each object ends with })
-    string objects[];
-    int obj_count = StringSplit(array_content, '}', objects);
-
-    // Load each history entry
-    for(int i = 0; i < obj_count && i < count && i < 7; i++) {
-        string obj = objects[i];
-        StringReplace(obj, "{", "");
-        StringReplace(obj, "\"", "");
-        StringReplace(obj, "\n", "");
-        StringReplace(obj, " ", "");
-
-        // Extract 8 fields from JSON object
-        history[i].timeframe_name = ExtractHistoryValue(obj, "timeframe");
-        history[i].signal_3col = (int)StringToInteger(ExtractHistoryValue(obj, "signal"));
-        history[i].price_4col = StringToDouble(ExtractHistoryValue(obj, "price"));
-        history[i].cross_5col = (long)StringToInteger(ExtractHistoryValue(obj, "cross"));
-        history[i].timestamp_6col = (long)StringToInteger(ExtractHistoryValue(obj, "timestamp"));
-        history[i].pricediff_7col = StringToDouble(ExtractHistoryValue(obj, "pricediff"));
-        history[i].timediff_8col = (int)StringToInteger(ExtractHistoryValue(obj, "timediff"));
-        history[i].news_result_9col = (int)StringToInteger(ExtractHistoryValue(obj, "news"));
-    }
-}
-
-// Extract value from history JSON object | Trich xuat gia tri tu doi tuong JSON lich su
-string ExtractHistoryValue(string obj, string key) {
-    int key_pos = StringFind(obj, key + ":");
-    if(key_pos < 0) return "";
-
-    int value_start = key_pos + StringLen(key) + 1;
-    int value_end = StringFind(obj, ",", value_start);
-    if(value_end < 0) value_end = StringLen(obj);
-
-    string value = StringSubstr(obj, value_start, value_end - value_start);
-    StringTrimLeft(value);
-    StringTrimRight(value);
-
-    return value;
-}
-
-// Write CSDL1 data from memory to JSON file | Ghi du lieu CSDL1 tu bo nho ra file JSON
-bool WriteCSDL1ArrayToFile() {
-    string symbol = g_symbol_data.symbol;
-    string json_file_path = DataFolder + symbol + ".json";
-
-    // Build rows array
-    string rows[];
-    ArrayResize(rows, MAINDB_ROWS + 1);
-
-    int timeframe_periods[7] = {1, 5, 15, 30, 60, 240, 1440};
-
-    for(int tf_idx = 0; tf_idx < 7; tf_idx++) {
-        int row = tf_idx + 1;  // row 1-7
-
-        // Build comma-separated row (10 columns)
-        rows[row] = "0," +  // Column 0: Placeholder
-                    IntegerToString(timeframe_periods[tf_idx]) + "," +  // Column 1: TF period
-                    IntegerToString(g_symbol_data.signals[tf_idx]) + "," +  // Column 2: Signal
-                    DoubleToString(g_symbol_data.prices[tf_idx], 5) + "," +  // Column 3: Price
-                    IntegerToString(g_symbol_data.crosses[tf_idx]) + "," +  // Column 4: Cross
-                    IntegerToString(g_symbol_data.timestamps[tf_idx]) + "," +  // Column 5: Timestamp
-                    DoubleToString(g_symbol_data.pricediffs[tf_idx], 2) + "," +  // Column 6: PriceDiff
-                    IntegerToString(g_symbol_data.timediffs[tf_idx]) + "," +  // Column 7: TimeDiff
-                    IntegerToString(g_symbol_data.news_results[tf_idx]) + "," +  // Column 9: NEWS
-                    DoubleToString(g_symbol_data.max_losses[tf_idx], 2);  // Column 10: MaxLoss
-    }
-
-    // =========================================================================
-    // FILE A: DataAutoOner/SYMBOL.json - DIRECT WRITE (UNCHANGED)
-    // =========================================================================
-    if(!WriteRowsToJson(json_file_path, rows)) {
-        Print("ERROR: WriteCSDL1 - Failed: ", json_file_path);
-        return false;
-    }
-
-    // =========================================================================
-    // FILE C: DataAutoOner3/SYMBOL.json - ATOMIC WRITE (FOR PYTHON SYNC)
-    // =========================================================================
-    string json_file_path_C = "DataAutoOner3\\" + symbol + ".json";
-    if(!WriteRowsToJsonAtomic(json_file_path_C, rows)) {
-        Print("ERROR: WriteCSDL1 - Failed to write to C: ", json_file_path_C);
-        // Don't return false - A is already written successfully
-    }
-
-    g_symbol_data.files_written++;
-    // Print suppressed - ProcessSignalForTF will print summary
-    return true;
-}
-
-// Calculate maximum loss per standard lot based on symbol type | Tinh lo toi da moi lot chuan dua tren loai symbol
-double CalculateMaxLoss() {
-    string symbol_upper = g_symbol_data.symbol;
-    StringToUpper(symbol_upper);
-
-    double balance = AccountBalance();
-    double risk_percent = 1.0 / 25.0;  // M?c ??nh: 4% (1/25)
-
-    // CRYPTO - Volatility cao -> Risk th?p h?n
-    if(StringFind(symbol_upper, "BTC") >= 0) {
-        risk_percent = 1.0 / 50.0;  // 2.0%
-    }
-    else if(StringFind(symbol_upper, "ETH") >= 0) {
-        risk_percent = 1.0 / 45.0;  // 2.22%
-    }
-    else if(StringFind(symbol_upper, "LTC") >= 0 ||
-            StringFind(symbol_upper, "BNB") >= 0 ||
-            StringFind(symbol_upper, "SOL") >= 0 ||
-            StringFind(symbol_upper, "ADA") >= 0 ||
-            StringFind(symbol_upper, "XRP") >= 0) {
-        risk_percent = 1.0 / 40.0;  // 2.5%
-    }
-    // GOLD - Volatility trung bình
-    else if(StringFind(symbol_upper, "XAU") >= 0) {
-        risk_percent = 1.0 / 25.0;  // 4%
-    }
-    // SILVER - Volatility cao
-    else if(StringFind(symbol_upper, "XAG") >= 0) {
-        risk_percent = 1.0 / 40.0;  // 2.5%
-    }
-    // FOREX - Volatility th?p -> Risk cao h?n
-    else {
-        string currencies[] = {"EUR", "GBP", "USD", "JPY", "AUD", "NZD", "CHF", "CAD"};
-        for(int i = 0; i < ArraySize(currencies); i++) {
-            if(StringFind(symbol_upper, currencies[i]) >= 0) {
-                risk_percent = 1.0 / 30.0;  // 3.33%
-                break;
-            }
-        }
-    }
-
-    // TÍNH MAX LOSS CHO 1 LOT (CHU?N)
-    double max_loss_per_lot = balance * risk_percent;
-
-    return -max_loss_per_lot;  // Return negative value | Tra ve gia tri am
-}
-
-// Write CSDL2 LIVE data to 3 folders (no history) | Ghi du lieu CSDL2 LIVE ra 3 thu muc (khong co lich su)
-bool WriteCSDL2ArrayToFile() {
-    string symbol = g_symbol_data.symbol;
-
-    // Build JSON array content (7 TF × 6 columns)
-    string json_content = "[\n";
-
-    for(int tf_idx = 0; tf_idx < 7; tf_idx++) {
-        if(tf_idx > 0) json_content += ",\n";
-
-        json_content += "  {";
-        json_content += "\"max_loss\":" + DoubleToString(g_symbol_data.max_losses[tf_idx], 2) + ",";
-        json_content += "\"timestamp\":" + IntegerToString(g_symbol_data.timestamps[tf_idx]) + ",";
-        json_content += "\"signal\":" + IntegerToString(g_symbol_data.signals[tf_idx]) + ",";
-        json_content += "\"pricediff\":" + DoubleToString(g_symbol_data.pricediffs[tf_idx], 2) + ",";
-        json_content += "\"timediff\":" + IntegerToString(g_symbol_data.timediffs[tf_idx]) + ",";
-        json_content += "\"news\":" + IntegerToString(g_symbol_data.news_results[tf_idx]);
-        json_content += "}";
-    }
-
-    json_content += "\n]";
-
-    // =========================================================================
-    // GHI ĐỒNG BỘ 3 FILE: A (DIRECT), B & C (ATOMIC)
-    // =========================================================================
-
-    // FILE A: DataAutoOner/SYMBOL_LIVE.json - DIRECT WRITE (UNCHANGED)
-    string fileA = DataFolder + symbol + "_LIVE.json";
-    if(!WriteFileWithRetry(fileA, json_content)) {
-        Print("ERROR: WriteCSDL2 - Failed to write file A: ", fileA);
-        return false;
-    }
-
-    // FILE B: DataAutoOner2/SYMBOL_LIVE.json - ATOMIC WRITE (FOR EA)
-    string fileB = "DataAutoOner2\\" + symbol + "_LIVE.json";
-    if(!AtomicWriteFileWithRetry(fileB, json_content)) {
-        Print("ERROR: WriteCSDL2 - Failed to write file B: ", fileB);
-        // Don't return false - A is already written successfully
-    }
-
-    // FILE C: DataAutoOner3/SYMBOL_LIVE.json - ATOMIC WRITE (FOR PYTHON)
-    string fileC = "DataAutoOner3\\" + symbol + "_LIVE.json";
-    if(!AtomicWriteFileWithRetry(fileC, json_content)) {
-        Print("ERROR: WriteCSDL2 - Failed to write file C: ", fileC);
-        // Don't return false - A is already written successfully
-    }
-
-    return true;
-}
-
-// [REMOVED] CopyCSDL2ToBackupFolders() - File B now written synchronously in WriteCSDL2ArrayToFile()
-
-// Write string content to file with auto folder creation | Ghi noi dung chuoi vao file va tu dong tao thu muc
-bool WriteStringToFile(string file_path, string content) {
-    // MQL4 FileOpen() t? ??ng t?o folder n?u ch?a có
-    int handle = FileOpen(file_path, FILE_WRITE|FILE_TXT|FILE_COMMON);
-    if(handle == INVALID_HANDLE) {
-        // Th? l?i không dùng FILE_COMMON
-        handle = FileOpen(file_path, FILE_WRITE|FILE_TXT);
-        if(handle == INVALID_HANDLE) {
+        if(!OrderSelect(ticket, SELECT_BY_TICKET)) {
+            Print("[CLOSE_FAIL] ", reason, " #", ticket, " Retry select failed - Skip, EA continues");
             return false;
         }
-    }
 
-    FileWriteString(handle, content);
-    FileClose(handle);
-    return true;
-}
-
-//==============================================================================
-//  SECTION 6: SIGNAL PROCESSING FUNCTIONS (3 functions) | PHAN 6: HAM XU LY TIN HIEU
-//==============================================================================
-
-// Update history array for specific timeframe (shift and insert) | Cap nhat mang lich su cho khung thoi gian cu the
-void UpdateHistoryForTF(int tf_idx, int signal, double price, long cross_ref,
-                        long timestamp, double pricediff, int timediff, int news_result) {
-
-    // M1 (tf_idx = 0)
-    if(tf_idx == 0) {
-        // Shift array
-        for(int i = HISTORY_SIZE - 1; i > 0; i--) {
-            g_symbol_data.m1_history[i] = g_symbol_data.m1_history[i-1];
-        }
-        // Insert new
-        g_symbol_data.m1_history[0].timeframe_name = "M1";
-        g_symbol_data.m1_history[0].signal_3col = signal;
-        g_symbol_data.m1_history[0].price_4col = price;
-        g_symbol_data.m1_history[0].cross_5col = cross_ref;
-        g_symbol_data.m1_history[0].timestamp_6col = timestamp;
-        g_symbol_data.m1_history[0].pricediff_7col = pricediff;
-        g_symbol_data.m1_history[0].timediff_8col = timediff;
-        g_symbol_data.m1_history[0].news_result_9col = news_result;
-        if(g_symbol_data.m1_count < HISTORY_SIZE) g_symbol_data.m1_count++;
-    }
-    // M5 (tf_idx = 1)
-    else if(tf_idx == 1) {
-        for(int i = HISTORY_SIZE - 1; i > 0; i--) {
-            g_symbol_data.m5_history[i] = g_symbol_data.m5_history[i-1];
-        }
-        g_symbol_data.m5_history[0].timeframe_name = "M5";
-        g_symbol_data.m5_history[0].signal_3col = signal;
-        g_symbol_data.m5_history[0].price_4col = price;
-        g_symbol_data.m5_history[0].cross_5col = cross_ref;
-        g_symbol_data.m5_history[0].timestamp_6col = timestamp;
-        g_symbol_data.m5_history[0].pricediff_7col = pricediff;
-        g_symbol_data.m5_history[0].timediff_8col = timediff;
-        g_symbol_data.m5_history[0].news_result_9col = news_result;
-        if(g_symbol_data.m5_count < HISTORY_SIZE) g_symbol_data.m5_count++;
-    }
-    // M15 (tf_idx = 2)
-    else if(tf_idx == 2) {
-        for(int i = HISTORY_SIZE - 1; i > 0; i--) {
-            g_symbol_data.m15_history[i] = g_symbol_data.m15_history[i-1];
-        }
-        g_symbol_data.m15_history[0].timeframe_name = "M15";
-        g_symbol_data.m15_history[0].signal_3col = signal;
-        g_symbol_data.m15_history[0].price_4col = price;
-        g_symbol_data.m15_history[0].cross_5col = cross_ref;
-        g_symbol_data.m15_history[0].timestamp_6col = timestamp;
-        g_symbol_data.m15_history[0].pricediff_7col = pricediff;
-        g_symbol_data.m15_history[0].timediff_8col = timediff;
-        g_symbol_data.m15_history[0].news_result_9col = news_result;
-        if(g_symbol_data.m15_count < HISTORY_SIZE) g_symbol_data.m15_count++;
-    }
-    // M30 (tf_idx = 3)
-    else if(tf_idx == 3) {
-        for(int i = HISTORY_SIZE - 1; i > 0; i--) {
-            g_symbol_data.m30_history[i] = g_symbol_data.m30_history[i-1];
-        }
-        g_symbol_data.m30_history[0].timeframe_name = "M30";
-        g_symbol_data.m30_history[0].signal_3col = signal;
-        g_symbol_data.m30_history[0].price_4col = price;
-        g_symbol_data.m30_history[0].cross_5col = cross_ref;
-        g_symbol_data.m30_history[0].timestamp_6col = timestamp;
-        g_symbol_data.m30_history[0].pricediff_7col = pricediff;
-        g_symbol_data.m30_history[0].timediff_8col = timediff;
-        g_symbol_data.m30_history[0].news_result_9col = news_result;
-        if(g_symbol_data.m30_count < HISTORY_SIZE) g_symbol_data.m30_count++;
-    }
-    // H1 (tf_idx = 4)
-    else if(tf_idx == 4) {
-        for(int i = HISTORY_SIZE - 1; i > 0; i--) {
-            g_symbol_data.h1_history[i] = g_symbol_data.h1_history[i-1];
-        }
-        g_symbol_data.h1_history[0].timeframe_name = "H1";
-        g_symbol_data.h1_history[0].signal_3col = signal;
-        g_symbol_data.h1_history[0].price_4col = price;
-        g_symbol_data.h1_history[0].cross_5col = cross_ref;
-        g_symbol_data.h1_history[0].timestamp_6col = timestamp;
-        g_symbol_data.h1_history[0].pricediff_7col = pricediff;
-        g_symbol_data.h1_history[0].timediff_8col = timediff;
-        g_symbol_data.h1_history[0].news_result_9col = news_result;
-        if(g_symbol_data.h1_count < HISTORY_SIZE) g_symbol_data.h1_count++;
-    }
-    // H4 (tf_idx = 5)
-    else if(tf_idx == 5) {
-        for(int i = HISTORY_SIZE - 1; i > 0; i--) {
-            g_symbol_data.h4_history[i] = g_symbol_data.h4_history[i-1];
-        }
-        g_symbol_data.h4_history[0].timeframe_name = "H4";
-        g_symbol_data.h4_history[0].signal_3col = signal;
-        g_symbol_data.h4_history[0].price_4col = price;
-        g_symbol_data.h4_history[0].cross_5col = cross_ref;
-        g_symbol_data.h4_history[0].timestamp_6col = timestamp;
-        g_symbol_data.h4_history[0].pricediff_7col = pricediff;
-        g_symbol_data.h4_history[0].timediff_8col = timediff;
-        g_symbol_data.h4_history[0].news_result_9col = news_result;
-        if(g_symbol_data.h4_count < HISTORY_SIZE) g_symbol_data.h4_count++;
-    }
-    // D1 (tf_idx = 6)
-    else if(tf_idx == 6) {
-        for(int i = HISTORY_SIZE - 1; i > 0; i--) {
-            g_symbol_data.d1_history[i] = g_symbol_data.d1_history[i-1];
-        }
-        g_symbol_data.d1_history[0].timeframe_name = "D1";
-        g_symbol_data.d1_history[0].signal_3col = signal;
-        g_symbol_data.d1_history[0].price_4col = price;
-        g_symbol_data.d1_history[0].cross_5col = cross_ref;
-        g_symbol_data.d1_history[0].timestamp_6col = timestamp;
-        g_symbol_data.d1_history[0].pricediff_7col = pricediff;
-        g_symbol_data.d1_history[0].timediff_8col = timediff;
-        g_symbol_data.d1_history[0].news_result_9col = news_result;
-        if(g_symbol_data.d1_count < HISTORY_SIZE) g_symbol_data.d1_count++;
-    }
-}
-
-// Process new signal for timeframe with full analysis and file writes | Xu ly tin hieu moi cho khung thoi gian voi phan tich day du
-bool ProcessSignalForTF(int tf_idx, int signal, long signal_time) {
-    // Validate
-    if(tf_idx < 0 || tf_idx >= 7) return false;
-    if(signal_time <= 0) return false;
-    if(signal == 0) return false;
-
-    string symbol = g_symbol_data.symbol;
-    string tf_names[7] = {"M1", "M5", "M15", "M30", "H1", "H4", "D1"};
-
-    // Check if already processed (timestamp check is sufficient)
-    if(signal_time <= g_symbol_data.processed_timestamps[tf_idx]) {
-        return false;  // Already processed
-    }
-
-    // Get current price
-    double current_price = (signal > 0) ? Ask : Bid;
-
-    // Calculate Column 7: PriceDiff USD
-    double price_diff = 0.0;
-    if(g_symbol_data.signals_last[tf_idx] != 0) {
-        if(signal > 0 && g_symbol_data.signals_last[tf_idx] < 0) {
-            // BUY after SELL ? evaluate SELL
-            price_diff = g_symbol_data.prices_last[tf_idx] - current_price;
-        }
-        else if(signal < 0 && g_symbol_data.signals_last[tf_idx] > 0) {
-            // SELL after BUY ? evaluate BUY
-            price_diff = current_price - g_symbol_data.prices_last[tf_idx];
-        }
-    }
-
-    double pricediff_usd = GetUSDValue(symbol, MathAbs(price_diff));
-    if(price_diff < 0) pricediff_usd = -pricediff_usd;
-
-    // Calculate Column 8: TimeDiff minutes
-    int timediff_min = 0;
-    if(g_symbol_data.timestamps_last[tf_idx] > 0) {
-        timediff_min = (int)((signal_time - g_symbol_data.timestamps_last[tf_idx]) / 60);
-    }
-
-    // Calculate Column 5: Cross (timestamp of previous TF)
-    long cross_ref = 0;
-    if(tf_idx > 0) {
-        cross_ref = g_symbol_data.timestamps[tf_idx - 1];
-    }
-
-    // Update current arrays BEFORE calculating NEWS
-    g_symbol_data.signals[tf_idx] = signal;
-    g_symbol_data.prices[tf_idx] = current_price;
-    g_symbol_data.timestamps[tf_idx] = signal_time;
-    g_symbol_data.crosses[tf_idx] = cross_ref;
-    g_symbol_data.pricediffs[tf_idx] = pricediff_usd;
-    g_symbol_data.timediffs[tf_idx] = timediff_min;
-
-    // Column 9: NEWS - Updated by UpdateLiveNEWS() independently (runs every 2 seconds)
-    // Column 10: Max Loss
-    double max_loss = CalculateMaxLoss();
-    g_symbol_data.max_losses[tf_idx] = max_loss;
-
-    // Get current NEWS result for history/logging (set by UpdateLiveNEWS)
-    int news_result = g_symbol_data.news_results[tf_idx];
-
-    // Update last tracking
-    g_symbol_data.signals_last[tf_idx] = signal;
-    g_symbol_data.prices_last[tf_idx] = current_price;
-    g_symbol_data.timestamps_last[tf_idx] = signal_time;
-    g_symbol_data.processed_timestamps[tf_idx] = signal_time;
-
-    // Update history
-    UpdateHistoryForTF(tf_idx, signal, current_price, cross_ref,
-                       signal_time, pricediff_usd, timediff_min, news_result);
-
-    // Write files
-    WriteCSDL1ArrayToFile();   // CSDL1: SYMBOL.json (10 columns + history)
-    WriteCSDL2ArrayToFile();   // CSDL2: SYMBOL_LIVE.json (6 columns, no history, 3 folders)
-
-    // Print signal notification to Expert Tab | In thong bao tin hieu vao Expert Tab
-    string signal_text = (signal > 0) ? "BUY" : "SELL";
-    string price_str = DoubleToString(current_price, 5);
-    string pricediff_str = (pricediff_usd >= 0) ? "+" + DoubleToString(pricediff_usd, 2) : DoubleToString(pricediff_usd, 2);
-    string news_str_log = (news_result >= 0) ? "+" + IntegerToString(news_result) : IntegerToString(news_result);
-    Print("=> [SPY] " + tf_names[tf_idx] + " " + signal_text + " @ " + TimeToString(signal_time, TIME_DATE|TIME_MINUTES) +
-          " | Timestamp: " + IntegerToString(signal_time) +
-          " | Price: " + price_str + " | Diff: " + pricediff_str + " USD | Time: " + IntegerToString(timediff_min) + "m | NEWS: " + news_str_log + " | CSDL WRITTEN <=");
-
-    // Dashboard will be updated by OnTimer() every second
-
-    return true;
-}
-
-// Print professional dashboard with 4 lines showing all 7 timeframe data | In bang dieu khien chuyen nghiep 4 dong hien thi du lieu 7 khung thoi gian
-void PrintDashboard() {
-    string symbol = g_symbol_data.symbol;
-    string tf_names[7] = {"M1", "M5", "M15", "M30", "H1", "H4", "D1"};
-
-    // Dòng 1: Thông tin cơ bản + LIVE values
-    double pip_value = GetPipValue(symbol);
-    double point_value = MarketInfo(symbol, MODE_POINT);
-    if(point_value <= 0) point_value = Point;
-    double usd_test = GetUSDValue(symbol, 1.0);
-
-    // Calculate LIVE USD diff and Time diff (real-time từ M1)
-    double m1_price = g_symbol_data.prices[0];           // M1 last signal price
-    datetime m1_time = (datetime)g_symbol_data.timestamps[0];  // M1 last signal time
-    double current_price = (Ask + Bid) / 2.0;           // Current real-time price
-    double live_diff_raw = current_price - m1_price;    // Raw price difference
-    double live_usd_diff = GetUSDValue(symbol, MathAbs(live_diff_raw));  // USD conversion
-    int live_time_diff = (int)((TimeCurrent() - m1_time) / 60);  // Minutes since M1 signal
-
-    // Format LIVE price string
-    string live_price_str = DoubleToString(current_price, (Digits > 0 ? Digits : 5));
-
-    // Format LIVE USD diff
-    string live_usd_str = DoubleToString(live_usd_diff, 2);
-    if(live_diff_raw >= 0) live_usd_str = "+" + live_usd_str;
-    else live_usd_str = "-" + live_usd_str;
-
-    // =========================================================================
-    // DÒNG 1: Thông tin cơ bản (GIỮ NGUYÊN)
-    // =========================================================================
-    string line1 = "[" + symbol + "] SPY | CSDL1: Active | 7TF | USD:" + DoubleToString(usd_test, 2) + " pip:" + DoubleToString(pip_value, 5);
-
-    // =========================================================================
-    // DÒNG 2: M1, M5, M15 (3 TF)
-    // =========================================================================
-    string line2 = "";
-    for(int i = 0; i < 3; i++) {  // 0=M1, 1=M5, 2=M15
-        string sig = "NONE";
-        if(g_symbol_data.signals[i] > 0) sig = "BUY";
-        else if(g_symbol_data.signals[i] < 0) sig = "SELL";
-
-        string pricediff = DoubleToString(g_symbol_data.pricediffs[i], 2);
-        if(g_symbol_data.pricediffs[i] >= 0) pricediff = "+" + pricediff;
-
-        line2 += "[" + tf_names[i] + "|" + sig + "|" + pricediff + "|" + IntegerToString(g_symbol_data.timediffs[i]) + "m] ";
-    }
-
-    // =========================================================================
-    // DÒNG 3: M30, H1, H4 (3 TF)
-    // =========================================================================
-    string line3 = "";
-    for(int i = 3; i < 6; i++) {  // 3=M30, 4=H1, 5=H4
-        string sig = "NONE";
-        if(g_symbol_data.signals[i] > 0) sig = "BUY";
-        else if(g_symbol_data.signals[i] < 0) sig = "SELL";
-
-        string pricediff = DoubleToString(g_symbol_data.pricediffs[i], 2);
-        if(g_symbol_data.pricediffs[i] >= 0) pricediff = "+" + pricediff;
-
-        line3 += "[" + tf_names[i] + "|" + sig + "|" + pricediff + "|" + IntegerToString(g_symbol_data.timediffs[i]) + "m] ";
-    }
-
-    // =========================================================================
-    // DÒNG 4: D1 + LIVE (giá + USD diff + time diff)
-    // =========================================================================
-    // D1 signal
-    string d1_sig = "NONE";
-    if(g_symbol_data.signals[6] > 0) d1_sig = "BUY";
-    else if(g_symbol_data.signals[6] < 0) d1_sig = "SELL";
-
-    string d1_pricediff = DoubleToString(g_symbol_data.pricediffs[6], 2);
-    if(g_symbol_data.pricediffs[6] >= 0) d1_pricediff = "+" + d1_pricediff;
-
-    // Build line 4 (no NEWS)
-    string line4 = "[D1|" + d1_sig + "|" + d1_pricediff + "|" + IntegerToString(g_symbol_data.timediffs[6]) + "m] | LIVE: " + live_price_str + " (" + live_usd_str + ", " + IntegerToString(live_time_diff) + "m)";
-
-    // =========================================================================
-    // DÒNG 5: NEWS CASCADE (7 TF)
-    // =========================================================================
-    string line5 = "NEWS: ";
-    string tf_labels[7] = {"M1", "M5", "M15", "M30", "H1", "H4", "D1"};
-    for(int news_idx = 0; news_idx < 7; news_idx++) {
-        if(news_idx > 0) line5 += " | ";
-        string news_val = IntegerToString(g_symbol_data.news_results[news_idx]);
-        if(g_symbol_data.news_results[news_idx] > 0) news_val = "+" + news_val;
-        line5 += tf_labels[news_idx] + ":" + news_val;
-    }
-
-    // =========================================================================
-    // TẠO 5 OBJECTS RIÊNG BIỆT (KHÔNG CONFLICT VỚI COMMENT() CỦA WT)
-    // =========================================================================
-    int y_start = 120;  // Vị trí bắt đầu (120 pixels từ trên, dưới WT)
-    int y_spacing = 15; // Khoảng cách giữa các dòng
-
-    string obj_names[5];
-    obj_names[0] = "SPY_Dashboard_Line1";
-    obj_names[1] = "SPY_Dashboard_Line2";
-    obj_names[2] = "SPY_Dashboard_Line3";
-    obj_names[3] = "SPY_Dashboard_Line4";
-    obj_names[4] = "SPY_Dashboard_Line5";
-
-    string lines[5];
-    lines[0] = line1;
-    lines[1] = line2;
-    lines[2] = line3;
-    lines[3] = line4;
-    lines[4] = line5;
-
-    color line_colors[5];
-    line_colors[0] = clrWhite;       // Line 1: White
-    line_colors[1] = clrDodgerBlue;  // Line 2: Blue
-    line_colors[2] = clrWhite;       // Line 3: White
-    line_colors[3] = clrDodgerBlue;  // Line 4: Blue
-    line_colors[4] = clrGold;        // Line 5: Gold (NEWS)
-
-    // Tạo 5 objects
-    for(int i = 0; i < 5; i++) {
-        // Xóa object cũ nếu có
-        if(ObjectFind(0, obj_names[i]) >= 0) {
-            ObjectDelete(0, obj_names[i]);
+        if(OrderType() == OP_BUY) {
+            result = OrderClose(ticket, OrderLots(), Bid, 3, clrRed);
+        } else if(OrderType() == OP_SELL) {
+            result = OrderClose(ticket, OrderLots(), Ask, 3, clrRed);
         }
 
-        // Tạo object mới
-        ObjectCreate(0, obj_names[i], OBJ_LABEL, 0, 0, 0);
-        ObjectSetInteger(0, obj_names[i], OBJPROP_CORNER, CORNER_LEFT_UPPER);
-        ObjectSetInteger(0, obj_names[i], OBJPROP_XDISTANCE, 10);
-        ObjectSetInteger(0, obj_names[i], OBJPROP_YDISTANCE, y_start + (i * y_spacing));
-        ObjectSetInteger(0, obj_names[i], OBJPROP_COLOR, line_colors[i]);
-        ObjectSetInteger(0, obj_names[i], OBJPROP_FONTSIZE, 8);
-        ObjectSetString(0, obj_names[i], OBJPROP_FONT, "Courier New");
-        ObjectSetString(0, obj_names[i], OBJPROP_TEXT, lines[i]);
-        ObjectSetInteger(0, obj_names[i], OBJPROP_SELECTABLE, false);
-        ObjectSetInteger(0, obj_names[i], OBJPROP_HIDDEN, true);
-    }
-
-    // Xóa NEWS object cũ nếu còn tồn tại (từ version trước)
-    string old_news_obj = "SPY_Dashboard_NEWS";
-    if(ObjectFind(0, old_news_obj) >= 0) ObjectDelete(0, old_news_obj);
-}
-
-//==============================================================================
-//  SECTION 7: ADDITIONAL GLOBAL VARIABLES (10 variables) | PHAN 7: BIEN TOAN CAU BO SUNG
-//==============================================================================
-
-// Enhanced database structure constants | Hang so cau truc co so du lieu
-const int MAINDB_COLUMNS = 10;  // Column 9 = NEWS result, Column 10 = MAX LOSS | 10 cot du lieu
-const int MAINDB_ROWS = 7;      // Number of database rows (7 timeframes) | So hang du lieu (7 khung thoi gian)
-
-// System global variables | Bien toan cau he thong
-string g_target_symbol = "";                                 // Target symbol discovered | Symbol muc tieu da phat hien
-bool g_system_initialized = false;                           // System initialization status | Trang thai khoi tao he thong
-int g_files_written = 0;                                     // Files written counter | Bo dem file da ghi
-
-// Instance management constants | Hang so quan ly instance
-const int MAX_INSTANCES = 10;                                // Maximum concurrent instances | So instance toi da
-
-// Dashboard globals | Bien toan cau bang dieu khien
-string g_dashboard_info = "";                                // Dashboard information | Thong tin bang dieu khien
-
-// Health check system | He thong kiem tra suc khoe
-datetime g_last_health_check = 0;                            // Last health check time | Thoi gian kiem tra suc khoe cuoi
-datetime g_last_csdl1_modified = 0;                          // Last CSDL1 modification time | Thoi gian sua doi CSDL1 cuoi
-
-// CSDL1A Cache structure for LiveSignalAnalyzer | Cau truc bo nho dem CSDL1A
-struct CSDL1ACache {
-    // Timeframe data arrays | Mang du lieu khung thoi gian
-    int signals[7];           // M1, M5, M15, M30, H1, H4 signals | Tin hieu cac khung
-    double prices[7];         // M1, M5, M15, M30, H1, H4 prices | Gia cac khung
-    long crosses[7];          // M1, M5, M15, M30, H1, H4 crosses | Tham chieu cheo
-    long timestamps[7];       // M1, M5, M15, M30, H1, H4 timestamps | Dau thoi gian
-    double pricediffs[7];     // M1, M5, M15, M30, H1, H4 price diffs | Chenh lech gia
-    int timediffs[7];         // M1, M5, M15, M30, H1, H4 time diffs | Chenh lech thoi gian
-
-    // History data | Du lieu lich su
-    double history_prices[7]; // M1 history prices for sideways detection | Gia lich su M1 de phat hien dao dong ngang
-    long last_file_time;      // Last file modification time | Thoi gian sua doi file cuoi
-};
-
-//==============================================================================
-//  SECTION 8: LIVE SIGNAL CLASS (1 class) | PHAN 8: LOP TIN HIEU TRUC TIEP
-//==============================================================================
-
-// Simple live signal generator using MA crossover | Bo tao tin hieu truc tiep don gian dung MA cat nhau
-class SimpleLiveSignal {
-private:
-    int m_last_signal;
-    double m_ma5_prev;
-    double m_ma10_prev;
-
-public:
-    SimpleLiveSignal() {
-        m_last_signal = 0;
-        m_ma5_prev = 0;
-        m_ma10_prev = 0;
-    }
-
-    int GenerateLive() {
-        double ma5 = iMA(NULL, 0, 5, 0, MODE_SMA, PRICE_CLOSE, 0);
-        double ma10 = iMA(NULL, 0, 10, 0, MODE_SMA, PRICE_CLOSE, 0);
-
-        if(ma5 > ma10 && m_ma5_prev <= m_ma10_prev) {
-            if(m_last_signal <= 0) {
-                m_last_signal = 1;
-                m_ma5_prev = ma5;
-                m_ma10_prev = ma10;
-                return 1;
-            }
-        }
-        else if(ma5 < ma10 && m_ma5_prev >= m_ma10_prev) {
-            if(m_last_signal >= 0) {
-                m_last_signal = -1;
-                m_ma5_prev = ma5;
-                m_ma10_prev = ma10;
-                return -1;
-            }
-        }
-
-        m_ma5_prev = ma5;
-        m_ma10_prev = ma10;
-        return 0;
-    }
-
-    void Reset() {
-        m_last_signal = 0;
-        m_ma5_prev = 0;
-        m_ma10_prev = 0;
-    }
-};
-
-//==============================================================================
-//  SECTION 9: HELPER FUNCTIONS (20 functions) | PHAN 9: HAM HO TRO
-//==============================================================================
-
-// Calculate pip value for symbol (varies by asset type) | Tinh gia tri pip cho symbol (thay doi theo loai tai san)
-double GetPipValue(string symbol) {
-    // Get market info for the symbol
-    double point = MarketInfo(symbol, MODE_POINT);
-    int digits = (int)MarketInfo(symbol, MODE_DIGITS);
-
-    if(point <= 0) {
-        // Fallback: use current symbol if symbol info not available
-        point = Point;
-        digits = Digits;
-    }
-
-    // Convert symbol name to uppercase for comparison
-    string symbol_upper = symbol;
-    StringToUpper(symbol_upper);
-
-    // ============ PRECIOUS METALS ============
-    // GOLD - 1 PIP = 1.00 USD (integer part)
-    if(StringFind(symbol_upper, "XAU") >= 0 ||
-       StringFind(symbol_upper, "GOLD") >= 0) {
-        return 1.00;  // FIXED: Gold 1 pip = 1.00 USD
-    }
-    // SILVER - 1 PIP = 0.01 USD
-    else if(StringFind(symbol_upper, "XAG") >= 0 ||
-            StringFind(symbol_upper, "SILVER") >= 0) {
-        return 0.01;  // Silver 1 pip = 0.01 USD
-    }
-
-    // ============ JPY PAIRS ============
-    // 1 PIP = 0.01 (2nd decimal place)
-    else if(StringFind(symbol_upper, "JPY") >= 0) {
-        if(digits == 3) {
-            return 0.01;  // Standard JPY: 145.000
-        }
-        else if(digits == 4) {
-            return 0.001;  // ECN JPY with pipette: 145.0000
-        }
-        else {
-            return point * 10;  // Fallback
-        }
-    }
-
-    // ============ CRYPTOCURRENCY ============
-    // 1 PIP = 1.00 (integer part like gold)
-    else if(StringFind(symbol_upper, "BTC") >= 0 ||
-            StringFind(symbol_upper, "ETH") >= 0 ||
-            StringFind(symbol_upper, "LTC") >= 0 ||
-            StringFind(symbol_upper, "XRP") >= 0) {
-        if(digits <= 2) {
-            return 1.00;  // Crypto 1 pip = 1.00 USD
-        }
-        else {
-            return point * 10;  // Higher precision crypto
-        }
-    }
-
-    // ============ FOREX STANDARD PAIRS ============
-    else if(digits == 4) {
-        return point;  // 4-digit broker: 1 PIP = POINT
-    }
-    else if(digits == 5) {
-        return point * 10;  // 5-digit ECN: 1 PIP = 10 POINTS
-    }
-
-    // ============ INDICES ============
-    // US30, NAS100, SPX500, etc - 1 PIP = 1.00
-    else if(StringFind(symbol_upper, "US30") >= 0 ||
-            StringFind(symbol_upper, "NAS100") >= 0 ||
-            StringFind(symbol_upper, "SPX500") >= 0 ||
-            StringFind(symbol_upper, "GER40") >= 0 ||
-            digits <= 2) {
-        return 1.00;  // Indices 1 pip = 1.00
-    }
-
-    // ============ OIL ============
-    else if(StringFind(symbol_upper, "OIL") >= 0 ||
-            StringFind(symbol_upper, "WTI") >= 0 ||
-            StringFind(symbol_upper, "BRENT") >= 0) {
-        if(digits == 2) return 0.01;
-        else if(digits == 3) return 0.01;
-        else return point;
-    }
-
-    // ============ FALLBACK ============
-    else {
-        if(digits >= 4) {
-            return point * 10;  // Assume forex-like
-        }
-        else if(digits == 3) {
-            return 0.01;  // Could be JPY-like or commodity
-        }
-        else {
-            return point;  // Conservative
-        }
-    }
-}
-// Convert price change to USD value using GOLD STANDARD | Chuyen doi thay doi gia sang gia tri USD dung chuan VANG
-// GOLD STANDARD: 1 pip GOLD (0.01) = $0.10 USD as reference for all symbols
-// Chuan vang: 1 pip VANG (0.01) = $0.10 USD lam tham chieu cho tat ca symbol
-double GetUSDValue(string symbol, double price_change) {
-    string symbol_upper = symbol;
-    StringToUpper(symbol_upper);
-
-    double point = MarketInfo(symbol, MODE_POINT);
-    double digits = MarketInfo(symbol, MODE_DIGITS);
-
-    // ========== CRYPTO - Already in USD ==========
-    if(StringFind(symbol_upper, "BTC") >= 0 || StringFind(symbol_upper, "ETH") >= 0 ||
-       StringFind(symbol_upper, "LTC") >= 0 || StringFind(symbol_upper, "BNB") >= 0 ||
-       StringFind(symbol_upper, "SOL") >= 0 || StringFind(symbol_upper, "ADA") >= 0) {
-        if(StringFind(symbol_upper, "BTC") >= 0) {
-            return (price_change / 10.0) * 1.0;  // $10 BTC change ≈ $1 (match GOLD standard)
-        }
-        else if(StringFind(symbol_upper, "ETH") >= 0) {
-            return (price_change / 2.0) * 1.0;  // $2 ETH change ≈ $1 (match GOLD standard)
-        }
-        else if(StringFind(symbol_upper, "LTC") >= 0) {
-            return (price_change / 0.01) * 0.10;
-        }
-        else {
-            return (price_change / 0.01) * 0.10;
-        }
-    }
-
-    // ========== GOLD/SILVER - Our standard ==========
-    if(StringFind(symbol_upper, "XAU") >= 0) {
-        return (price_change / 0.01) * 0.10;
-    }
-
-    if(StringFind(symbol_upper, "XAG") >= 0) {
-        return (price_change / 0.001) * 0.05;
-    }
-
-    // ========== FOREX PAIRS ==========
-    bool is_forex = false;
-    string currencies[] = {"EUR", "GBP", "USD", "JPY", "AUD", "NZD", "CHF", "CAD"};
-    for(int i = 0; i < ArraySize(currencies); i++) {
-        if(StringFind(symbol_upper, currencies[i]) >= 0) {
-            is_forex = true;
-            break;
-        }
-    }
-
-    if(is_forex) {
-        double pip_size = 0;
-        if(digits == 2 || digits == 3) {
-            pip_size = 0.01;
-        } else if(digits == 4 || digits == 5) {
-            pip_size = 0.0001;
-        }
-
-        if(digits == 5) pip_size = 0.0001;
-        if(digits == 3) pip_size = 0.01;
-
-        double pips = price_change / pip_size;
-
-        if(StringFind(symbol_upper, "USD") == StringLen(symbol_upper) - 3) {
-            return pips * 1.0;
-        }
-        else if(StringFind(symbol_upper, "USD") == 0) {
-            double current_price = MarketInfo(symbol, MODE_BID);
-            if(current_price > 0) {
-                if(StringFind(symbol_upper, "JPY") > 0) {
-                    return pips * 10.0 / current_price;  // Normalize to match GOLD standard
-                } else {
-                    return pips * 0.10 / current_price;  // Scale down to match GOLD standard
-                }
-            }
-        }
-        else {
-            double tick_value = MarketInfo(symbol, MODE_TICKVALUE);
-            if(tick_value > 0) {
-                return pips * tick_value * 0.01;
-            }
-        }
-    }
-
-    // ========== INDICES ==========
-    if(StringFind(symbol_upper, "US30") >= 0 || StringFind(symbol_upper, "US100") >= 0 ||
-       StringFind(symbol_upper, "NAS") >= 0 || StringFind(symbol_upper, "SP") >= 0 ||
-       StringFind(symbol_upper, "DAX") >= 0 || StringFind(symbol_upper, "FTSE") >= 0) {
-        return (price_change / point) * 0.10;
-    }
-
-    // ========== OIL ==========
-    if(StringFind(symbol_upper, "XTI") >= 0 || StringFind(symbol_upper, "XBR") >= 0 ||
-       StringFind(symbol_upper, "OIL") >= 0 || StringFind(symbol_upper, "WTI") >= 0) {
-        return (price_change / 0.01) * 0.10;
-    }
-
-    // ========== DEFAULT FALLBACK ==========
-    double tick_value = MarketInfo(symbol, MODE_TICKVALUE);
-    double tick_size = MarketInfo(symbol, MODE_TICKSIZE);
-
-    if(tick_size > 0 && tick_value > 0) {
-        return (price_change / tick_size) * tick_value * 0.01;
-    }
-
-    return (price_change / point) * 0.10;
-}
-
-// Convert signal integer to string representation | Chuyen doi so nguyen tin hieu sang chuoi dai dien
-string SignalToString(int signal) {
-    if(signal > 0) return "BUY";   // Buy signal | Tin hieu mua
-    if(signal < 0) return "SELL";  // Sell signal | Tin hieu ban
-    return "NONE";                 // No signal | Khong co tin hieu
-}
-
-// Calculate hash value for symbol string | Tinh gia tri hash cho chuoi symbol
-int GetSymbolHash(string symbol) {
-    int hash = 0;
-    for(int i = 0; i < StringLen(symbol); i++) {
-        hash = hash * 31 + StringGetCharacter(symbol, i);
-    }
-    return MathAbs(hash);
-}
-
-// Convert timeframe minutes to array index (1-7) | Chuyen doi phut khung thoi gian sang chi so mang
-int GetTFIndex(int minutes) {
-    switch(minutes) {
-        case 1: return 1;
-        case 5: return 2;
-        case 15: return 3;
-        case 30: return 4;
-        case 60: return 5;
-        case 240: return 6;
-        case 1440: return 7;  // D1
-    }
-    return 0;
-}
-
-//...........................................................
-
-string ExtractJsonValue(string json_obj, string key) {
-    int key_pos = StringFind(json_obj, "\"" + key + "\":");
-    if(key_pos < 0) return "0";
-
-    int value_start = StringFind(json_obj, ":", key_pos) + 1;
-
-    // Skip whitespace
-    while(value_start < StringLen(json_obj) &&
-          (StringGetChar(json_obj, value_start) == ' ' ||
-           StringGetChar(json_obj, value_start) == '\t')) {
-        value_start++;
-    }
-
-    // Find end (comma or })
-    int value_end = value_start;
-    while(value_end < StringLen(json_obj) &&
-          StringGetChar(json_obj, value_end) != ',' &&
-          StringGetChar(json_obj, value_end) != '}') {
-        value_end++;
-    }
-
-    string value = StringSubstr(json_obj, value_start, value_end - value_start);
-    StringTrimLeft(value);
-    StringTrimRight(value);
-
-    return value;
-}
-
-//==============================================================================
-//  SECTION 10: FILE I/O FUNCTIONS (10 functions) | PHAN 10: HAM XUONG NHAP FILE
-//==============================================================================
-
-// Convert timeframe period number to string name | Chuyen doi so chu ky khung thoi gian sang ten chuoi
-string TimeframeToString(int tf_period) {
-    switch(tf_period) {
-        case 1: return "M1";
-        case 5: return "M5";
-        case 15: return "M15";
-        case 30: return "M30";
-        case 60: return "H1";
-        case 240: return "H4";
-        case 1440: return "D1";
-        case 10080: return "W1";
-        case 43200: return "MN1";
-        default: return "M" + IntegerToString(tf_period);
-    }
-}
-
-// Read file with 2-round retry mechanism (3 attempts per round) | Doc file voi co che thu lai 2 vong (3 lan thu moi vong)
-bool ReadFileWithRetry(string filename, string& content) {
-    // ROUND 1: First 3 attempts
-    for(int retry = 0; retry < Retry; retry++) {
-        int handle = FileOpen(filename, FILE_READ|FILE_TXT|FILE_ANSI);
-        if(handle != INVALID_HANDLE) {
-            content = "";
-            while(!FileIsEnding(handle)) {
-                content = content + FileReadString(handle) + "\n";
-            }
-            FileClose(handle);
+        if(result) {
+            // Retry success - detailed log printed by caller | Thanh cong sau retry - log chi tiet se in boi ham goi
             return true;
         }
-        Sleep(250);
+
+        error = GetLastError();
+        Print("[CLOSE_FAIL] ", reason, " #", ticket, " Retry Err:", error, " - Skip, EA continues");
+        return false;
     }
-    
-    // ROUND 1 FAILED ? Auto unlock file
-    int handle_unlock = FileOpen(filename, FILE_READ|FILE_SHARE_READ|FILE_SHARE_WRITE);
-    if(handle_unlock != INVALID_HANDLE) {
-        FileClose(handle_unlock);
-    }
-    Sleep(250);
-    
-    // ROUND 2: Second 3 attempts (after unlock)
-    for(int retry = 0; retry < Retry; retry++) {
-        int handle = FileOpen(filename, FILE_READ|FILE_TXT|FILE_ANSI);
-        if(handle != INVALID_HANDLE) {
-            content = "";
-            while(!FileIsEnding(handle)) {
-                content = content + FileReadString(handle) + "\n";
-            }
-            FileClose(handle);
-            return true;
-        }
-        Sleep(250);
-    }
-    
-    // ROUND 2 FAILED ? Simple warning (NO STOP BOT)
-    Print("? File read failed after 2 rounds (", Retry*2, " attempts): ", filename, " - Bot continues");
+
+    // Case 2: Other errors ? Log and continue
+    // TH 2: Loi khac ? Ghi nhan va tiep tuc
+    Print("[CLOSE_FAIL] ", reason, " #", ticket, " Err:", error, " - Skip, EA continues");
     return false;
 }
 
-// Write file with 2-round retry mechanism (3 attempts per round) | Ghi file voi co che thu lai 2 vong (3 lan thu moi vong)
-bool WriteFileWithRetry(string filename, string content) {
-    // ROUND 1: First 3 attempts
-    for(int retry = 0; retry < Retry; retry++) {
-        int handle = FileOpen(filename, FILE_WRITE|FILE_TXT);
-        if(handle != INVALID_HANDLE) {
-            FileWrite(handle, content);
-            FileClose(handle);
-            return true;
+// Draw arrow on chart - simple version | Ve mui ten tren do thi - phien ban don gian
+
+// Open order with smart error handling (max 1 retry) | Mo lenh voi xu ly loi thong minh (toi da 1 retry)
+// IMPORTANT: EA never stops on errors, only logs | QUAN TRONG: EA khong bao gio dung vi loi, chi ghi nhan
+// Returns: ticket (>0) or -1, caller must check and handle flag | Tra ve ticket hoac -1, nguoi goi phai kiem tra va xu ly co
+int OrderSendSafe(int tf, string symbol, int cmd, double lot_smart,
+                  double price, int slippage,
+                  string comment, int magic, color arrow_color) {
+
+    RefreshRates();
+
+    // Update price | Cap nhat gia
+    if(cmd == OP_BUY) price = Ask;
+    else if(cmd == OP_SELL) price = Bid;
+
+    // Try 1: Smart lot | Lan 1: Lot thong minh
+    int ticket = OrderSend(symbol, cmd, lot_smart, price, slippage, 0, 0, comment, magic, 0, clrNONE);
+
+    if(ticket > 0) {
+        // Success - detailed log printed by strategy caller | Thanh cong - log chi tiet se in boi ham chien luoc
+        return ticket;
+    }
+
+    // FAILED - Check error | That bai - Kiem tra loi
+    int error = GetLastError();
+
+    // Case 1: Not enough money OR Invalid volume ? Retry with 0.01 lot
+    // TH 1: Het von HOAC Lot sai ? Thu lai voi 0.01 lot
+    if(error == 134 || error == 131) {
+        Print("[ORDER_FAIL] ", comment, " Err:", error, " (Retry 0.01 lot)");
+
+        ticket = OrderSend(symbol, cmd, 0.01, price, slippage, 0, 0, comment + "_Min", magic, 0, clrNONE);
+
+        if(ticket > 0) {
+            // Fallback success - detailed log printed by strategy caller | Thanh cong du phong - log chi tiet se in boi ham chien luoc
+            return ticket;
         }
-        Sleep(250);
+
+        error = GetLastError();
+        Print("[ORDER_FAIL] ", comment, "_Min Err:", error, " - Skip, EA continues");
+        return -1;
     }
-    
-    // ROUND 1 FAILED ? Auto unlock file
-    int handle_unlock = FileOpen(filename, FILE_READ|FILE_SHARE_READ|FILE_SHARE_WRITE);
-    if(handle_unlock != INVALID_HANDLE) {
-        FileClose(handle_unlock);
-    }
-    Sleep(250);
-    
-    // ROUND 2: Second 3 attempts (after unlock)
-    for(int retry = 0; retry < Retry; retry++) {
-        int handle = FileOpen(filename, FILE_WRITE|FILE_TXT);
-        if(handle != INVALID_HANDLE) {
-            FileWrite(handle, content);
-            FileClose(handle);
-            return true;
+
+    // Case 2: Context busy OR Requote ? Retry 1 time
+    // TH 2: MT4 ban HOAC Gia thay doi ? Thu lai 1 lan
+    if(error == 146 || error == 138) {
+        Print("[ORDER_FAIL] ", comment, " Err:", error, " (Retry 1x)");
+        Sleep(100);
+        RefreshRates();
+
+        if(cmd == OP_BUY) price = Ask;
+        else if(cmd == OP_SELL) price = Bid;
+
+        ticket = OrderSend(symbol, cmd, lot_smart, price, slippage, 0, 0, comment, magic, 0, clrNONE);
+
+        if(ticket > 0) {
+            // Retry success - detailed log printed by strategy caller | Thanh cong sau retry - log chi tiet se in boi ham chien luoc
+            return ticket;
         }
-        Sleep(250);
+
+        error = GetLastError();
+        Print("[ORDER_FAIL] ", comment, " Retry Err:", error, " - Skip, EA continues");
+        return -1;
     }
-    
-    // ROUND 2 FAILED ? Simple warning (NO STOP BOT)
-    Print("? File write failed after 2 rounds (", Retry*2, " attempts): ", filename, " - Bot continues");
-    return false;
+
+    // Case 3: Other errors ? Log and continue
+    // TH 3: Loi khac ? Ghi nhan va tiep tuc
+    Print("[ORDER_FAIL] ", comment, " Err:", error, " - Skip, EA continues");
+    return -1;
 }
 
-//==============================================================================
-// ATOMIC WRITE FUNCTIONS - SAFE FOR CONCURRENT ACCESS | HAM GHI ATOMIC - AN TOAN CHO TRUY CAP DONG THOI
-//==============================================================================
+//=============================================================================
+//  PART 6: SYMBOL & FILE MANAGEMENT (6 functions) | QUAN LY KY HIEU VA FILE
+//=============================================================================
 
-// Write file atomically using TMP + Rename pattern (no logs unless error) | Ghi file atomic bang pattern TMP + Rename (khong log tru khi loi)
-bool AtomicWriteFile(string filename, string content) {
-    string tmp_filename = filename + ".tmp";
+// Trim whitespace from string | Loai bo khoang trang tu chuoi
+string StringTrim(string input_string) {
+    int start = 0;
+    int end = StringLen(input_string) - 1;
 
-    // PHASE 1: Write to TMP file
-    int handle = FileOpen(tmp_filename, FILE_WRITE|FILE_TXT);
-    if(handle == INVALID_HANDLE) {
-        Print("ERROR: AtomicWrite - Cannot create tmp: ", tmp_filename);
-        return false;
+    while(start <= end && StringGetCharacter(input_string, start) == 32) {
+        start++;
     }
 
-    FileWrite(handle, content);
-    FileClose(handle);
-
-    // PHASE 2: Verify TMP exists
-    if(!FileIsExist(tmp_filename)) {
-        Print("ERROR: AtomicWrite - TMP not found after write: ", tmp_filename);
-        return false;
+    while(end >= start && StringGetCharacter(input_string, end) == 32) {
+        end--;
     }
 
-    // PHASE 3: Atomic rename (delete old + rename TMP)
-    if(FileIsExist(filename)) {
-        FileDelete(filename);
-    }
-
-    if(!FileMove(tmp_filename, 0, filename, 0)) {
-        Print("ERROR: AtomicWrite - Rename failed: ", tmp_filename, " → ", filename);
-        FileDelete(tmp_filename);  // Cleanup orphan
-        return false;
-    }
-
-    return true;
+    if(start > end) return "";
+    return StringSubstr(input_string, start, end - start + 1);
 }
 
-// Atomic write with 2-round retry (no logs unless error) | Ghi atomic voi thu lai 2 vong (khong log tru khi loi)
-bool AtomicWriteFileWithRetry(string filename, string content) {
-    // ROUND 1: First 3 attempts
-    for(int retry = 0; retry < Retry; retry++) {
-        if(AtomicWriteFile(filename, content)) {
-            return true;
-        }
-        Sleep(250);
-    }
-
-    // ROUND 1 FAILED ? Try to unlock file
-    int handle_unlock = FileOpen(filename, FILE_READ|FILE_SHARE_READ|FILE_SHARE_WRITE);
-    if(handle_unlock != INVALID_HANDLE) {
-        FileClose(handle_unlock);
-    }
-    Sleep(250);
-
-    // ROUND 2: Second 3 attempts
-    for(int retry = 0; retry < Retry; retry++) {
-        if(AtomicWriteFile(filename, content)) {
-            return true;
-        }
-        Sleep(250);
-    }
-
-    Print("ERROR: AtomicWriteFileWithRetry - Failed after ", Retry*2, " attempts: ", filename);
-    return false;
-}
-
-// Write rows to JSON with atomic write (for Folder C only) | Ghi rows vao JSON voi atomic write (chi cho Folder C)
-bool WriteRowsToJsonAtomic(string file_path, string& rows[]) {
-    string json_content = BuildEnhancedJsonContent(rows);
-
-    // Use atomic write mechanism
-    if(!AtomicWriteFileWithRetry(file_path, json_content)) {
-        return false;
-    }
-
-    return true;
-}
-
-// Discover symbol from current chart or input parameter | Phat hien symbol tu bieu do hien tai hoac tham so dau vao
+// Discover symbol name from chart | Nhan dien ten ky hieu tu do thi
 string DiscoverSymbolFromChart() {
-    // First try: Use TargetSymbol if provided
-    if(StringLen(TargetSymbol) > 0) {
-        return TargetSymbol;
-    }
-
-    // Second try: Use current chart symbol
     string chart_symbol = Symbol();
-    if(StringLen(chart_symbol) > 0) {
-        return chart_symbol;
-    }
 
-    // Fallback
-    return "EURUSD";
+    string normalized = chart_symbol;
+    StringReplace(normalized, ".raw", "");
+    StringReplace(normalized, ".a", "");
+    StringReplace(normalized, ".b", "");
+    StringReplace(normalized, ".c", "");
+    StringReplace(normalized, "_", "");
+
+    return normalized;
 }
 
-// Create all 3 data folder structures if not exist | Tao tat ca 3 cau truc thu muc du lieu neu chua ton tai
-void CreateFolderStructure() {
-    // T?O 3 TH? M?C N?U CH?A CÓ
-    // MQL4 không có FolderCreate() - dùng FileOpen() trick
-    // T?o dummy file ?? force t?o folder, sau ?ó xóa
+// Initialize symbol recognition from chart | Khoi tao nhan dien ky hieu tu do thi
+bool InitializeSymbolRecognition() {
+    g_ea.symbol_name = DiscoverSymbolFromChart();
 
-    // Folder 1: DataAutoOner (cho CSDL1 + CSDL2 A)
-    string test1 = "DataAutoOner\\.test";
-    if(!FileIsExist(test1)) {
-        string dummy1 = "DataAutoOner\\.dummy";
-        int handle1 = FileOpen(dummy1, FILE_WRITE|FILE_TXT);
-        if(handle1 != INVALID_HANDLE) {
-            FileClose(handle1);
-            FileDelete(dummy1);
-        }
-    }
-
-    // Folder 2: DataAutoOner2 (cho CSDL2 B)
-    string test2 = "DataAutoOner2\\.test";
-    if(!FileIsExist(test2)) {
-        string dummy2 = "DataAutoOner2\\.dummy";
-        int handle2 = FileOpen(dummy2, FILE_WRITE|FILE_TXT);
-        if(handle2 != INVALID_HANDLE) {
-            FileClose(handle2);
-            FileDelete(dummy2);
-        }
-    }
-
-    // Folder 3: DataAutoOner3 (cho CSDL2 C)
-    string test3 = "DataAutoOner3\\.test";
-    if(!FileIsExist(test3)) {
-        string dummy3 = "DataAutoOner3\\.dummy";
-        int handle3 = FileOpen(dummy3, FILE_WRITE|FILE_TXT);
-        if(handle3 != INVALID_HANDLE) {
-            FileClose(handle3);
-            FileDelete(dummy3);
-        }
-    }
-
-    // Folder 4: DataAutoOner\HISTORY (cho thong ke thang)
-    string test4 = "DataAutoOner\\HISTORY\\.test";
-    if(!FileIsExist(test4)) {
-        string dummy4 = "DataAutoOner\\HISTORY\\.dummy";
-        int handle4 = FileOpen(dummy4, FILE_WRITE|FILE_TXT);
-        if(handle4 != INVALID_HANDLE) {
-            FileClose(handle4);
-            FileDelete(dummy4);
-        }
-    }
-}
-
-// Create empty CSDL1 file if not exist (called from OnInit) | Tao file CSDL1 rong neu chua ton tai (goi tu OnInit)
-void CreateEmptyCSDL1File() {
-    string file_path = DataFolder + g_symbol_data.symbol + ".json";
-
-    // Neu file da co thi khong lam gi | If file exists, do nothing
-    if(FileIsExist(file_path)) return;
-
-    // Tao file moi voi cau truc day du: metadata + data + history_count + history
-    // Create new file with full structure: metadata + data + history_count + history
-    string symbol = g_symbol_data.symbol;
-    long current_time = TimeCurrent();
-
-    string json = "{\n";
-    json += "    \"symbol\": \"" + symbol + "\",\n";
-    json += "    \"type\": \"main\",\n";
-    json += "    \"timestamp\": " + IntegerToString(current_time) + ",\n";
-    json += "    \"rows\": 7,\n";
-    json += "    \"columns\": 10,\n";
-    json += "    \"data\": [\n";
-
-    // 7 TF × 10 columns (all zeros) | 7 khung thoi gian × 10 cot (tat ca = 0)
-    string tf_names[7] = {"M1", "M5", "M15", "M30", "H1", "H4", "D1"};
-    int tf_periods[7] = {1, 5, 15, 30, 60, 240, 1440};
-
-    for(int i = 0; i < 7; i++) {
-        if(i > 0) json += ",\n";
-        json += "        {\"timeframe_name\": \"" + tf_names[i] + "\", ";
-        json += "\"timeframe\": " + IntegerToString(tf_periods[i]) + ", ";
-        json += "\"signal\": 0, ";
-        json += "\"price\": 0.00000, ";
-        json += "\"cross\": 0, ";
-        json += "\"timestamp\": 0, ";
-        json += "\"pricediff\": 0.00, ";
-        json += "\"timediff\": 0, ";
-        json += "\"news\": 0, ";
-        json += "\"max_loss\": 0.00}";
-    }
-
-    json += "\n    ],\n";
-
-    // history_count: all zeros | Dem lich su: tat ca = 0
-    json += "    \"history_count\": {\"m1\": 0, \"m5\": 0, \"m15\": 0, \"m30\": 0, \"h1\": 0, \"h4\": 0, \"d1\": 0},\n";
-
-    // history: empty arrays | Lich su: mang rong
-    json += "\"history\": {\n";
-    json += "    \"m1\": [\n";
-    json += "    ],\n";
-    json += "    \"m5\": [\n";
-    json += "    ],\n";
-    json += "    \"m15\": [\n";
-    json += "    ],\n";
-    json += "    \"m30\": [],\n";
-    json += "    \"h1\": [],\n";
-    json += "    \"h4\": [],\n";
-    json += "    \"d1\": [\n";
-    json += "    ]\n";
-    json += "}\n";
-    json += "}\n";
-
-    // Write to file | Ghi vao file
-    int handle = FileOpen(file_path, FILE_WRITE|FILE_TXT);
-    if(handle != INVALID_HANDLE) {
-        FileWriteString(handle, json);
-        FileClose(handle);
-        Print("[CSDL1_CREATE] Empty file created with full structure: ", file_path);
-    } else {
-        Print("[CSDL1_CREATE_ERROR] Failed to create file: ", file_path, " Error: ", GetLastError());
-    }
-}
-
-// Copy CSDL1 File C from A if not exist (called from OnInit once) | Sao chep CSDL1 File C tu A neu chua ton tai (goi 1 lan tu OnInit)
-void CreateEmptyCSDL1FileC() {
-    string symbol = g_symbol_data.symbol;
-    string fileA = DataFolder + symbol + ".json";
-    string fileC = "DataAutoOner3\\" + symbol + ".json";
-
-    // Nếu File C đã tồn tại → Không làm gì
-    if(FileIsExist(fileC)) return;
-
-    // Nếu File A không tồn tại → Không làm gì (sẽ tạo sau khi có signal)
-    if(!FileIsExist(fileA)) return;
-
-    // Copy File A → File C (1 lần duy nhất khi khởi động)
-    int handleA = FileOpen(fileA, FILE_READ|FILE_TXT);
-    if(handleA == INVALID_HANDLE) return;
-
-    string content = "";
-    while(!FileIsEnding(handleA)) {
-        content += FileReadString(handleA);
-    }
-    FileClose(handleA);
-
-    if(StringLen(content) > 10) {
-        int handleC = FileOpen(fileC, FILE_WRITE|FILE_TXT);
-        if(handleC != INVALID_HANDLE) {
-            FileWrite(handleC, content);
-            FileClose(handleC);
-            Print("OK: CSDL1 C copied from A (OnInit)");
-        }
-    }
-}
-
-// Create empty CSDL2 files A,B,C if not exist (called from OnInit) | Tao file CSDL2 rong A,B,C neu chua ton tai (goi tu OnInit)
-void CreateEmptyCSDL2Files() {
-    string symbol = g_symbol_data.symbol;
-    string fileA = DataFolder + symbol + "_LIVE.json";
-    string fileB = "DataAutoOner2\\" + symbol + "_LIVE.json";
-    string fileC = "DataAutoOner3\\" + symbol + "_LIVE.json";
-
-    // 1. T?O FILE A R?NG N?U CH?A CÓ
-    if(!FileIsExist(fileA)) {
-        string empty_json = "[\n";
-        empty_json += "  {\"max_loss\":0.00,\"timestamp\":0,\"signal\":0,\"pricediff\":0.00,\"timediff\":0,\"news\":0},\n";  // M1
-        empty_json += "  {\"max_loss\":0.00,\"timestamp\":0,\"signal\":0,\"pricediff\":0.00,\"timediff\":0,\"news\":0},\n";  // M5
-        empty_json += "  {\"max_loss\":0.00,\"timestamp\":0,\"signal\":0,\"pricediff\":0.00,\"timediff\":0,\"news\":0},\n";  // M15
-        empty_json += "  {\"max_loss\":0.00,\"timestamp\":0,\"signal\":0,\"pricediff\":0.00,\"timediff\":0,\"news\":0},\n";  // M30
-        empty_json += "  {\"max_loss\":0.00,\"timestamp\":0,\"signal\":0,\"pricediff\":0.00,\"timediff\":0,\"news\":0},\n";  // H1
-        empty_json += "  {\"max_loss\":0.00,\"timestamp\":0,\"signal\":0,\"pricediff\":0.00,\"timediff\":0,\"news\":0},\n";  // H4
-        empty_json += "  {\"max_loss\":0.00,\"timestamp\":0,\"signal\":0,\"pricediff\":0.00,\"timediff\":0,\"news\":0}\n";   // D1
-        empty_json += "]\n";
-
-        int handleA = FileOpen(fileA, FILE_WRITE|FILE_TXT);
-        if(handleA != INVALID_HANDLE) {
-            FileWrite(handleA, empty_json);
-            FileClose(handleA);
-            Print("? CSDL2 A empty file created");
-        }
-    }
-
-    // 2. COPY FILE B T? A N?U CH?A CÓ (KHÔNG T?O R?NG!)
-    if(!FileIsExist(fileB) && FileIsExist(fileA)) {
-        int handleA = FileOpen(fileA, FILE_READ|FILE_TXT);
-        if(handleA != INVALID_HANDLE) {
-            string content = "";
-            while(!FileIsEnding(handleA)) {
-                content += FileReadString(handleA);
-            }
-            FileClose(handleA);
-
-            if(StringLen(content) > 10) {
-                int handleB = FileOpen(fileB, FILE_WRITE|FILE_TXT);
-                if(handleB != INVALID_HANDLE) {
-                    FileWrite(handleB, content);
-                    FileClose(handleB);
-                    Print("? CSDL2 B copied from A");
-                }
-            }
-        }
-    }
-
-    // 3. COPY FILE C T? A N?U CH?A CÓ (KHÔNG T?O R?NG!)
-    if(!FileIsExist(fileC) && FileIsExist(fileA)) {
-        int handleA = FileOpen(fileA, FILE_READ|FILE_TXT);
-        if(handleA != INVALID_HANDLE) {
-            string content = "";
-            while(!FileIsEnding(handleA)) {
-                content += FileReadString(handleA);
-            }
-            FileClose(handleA);
-
-            if(StringLen(content) > 10) {
-                int handleC = FileOpen(fileC, FILE_WRITE|FILE_TXT);
-                if(handleC != INVALID_HANDLE) {
-                    FileWrite(handleC, content);
-                    FileClose(handleC);
-                    Print("? CSDL2 C copied from A");
-                }
-            }
-        }
-    }
-}
-
-//==============================================================================
-//  SECTION 11: NEWS CASCADE STRATEGY (5 functions) | PHAN 11: CHIEN LUOC NEWS CASCADE
-//==============================================================================
-// 7-level cascade detection system for multi-timeframe signal alignment with 2 categories
-// He thong phat hien cascade 7 cap do de sap xep tin hieu nhieu khung thoi gian voi 2 category
-
-// Helper function: Check if signal timestamp is within current candle of specified timeframe
-// Ham ho tro: Kiem tra timestamp tin hieu co nam trong nen hien tai cua khung thoi gian chi dinh
-bool IsWithinOneCandle(int timeframe_index, datetime signal_time) {
-    // timeframe_index: 0=M1, 1=M5, 2=M15, 3=M30, 4=H1, 5=H4, 6=D1
-    int tf_periods[] = {PERIOD_M1, PERIOD_M5, PERIOD_M15, PERIOD_M30, PERIOD_H1, PERIOD_H4, PERIOD_D1};
-
-    if(timeframe_index < 0 || timeframe_index > 6) return false;
-
-    // Get current candle start time for this timeframe
-    datetime candle_start = iTime(g_target_symbol, tf_periods[timeframe_index], 0);
-
-    // Signal must be >= candle_start (within current candle)
-    return (signal_time >= candle_start);
-}
-
-// Detect NEWS CASCADE across 7 levels of timeframe alignment | Phat hien NEWS CASCADE qua 7 cap do sap xep khung thoi gian
-// Returns: ±1-7 (Category 2: User Reference) or ±10-70 (Category 1: EA Trading)
-int DetectCASCADE_New() {
-    // Get 7 TF signals (M1=0, M5=1, ..., D1=6) from g_symbol_data
-    int m1_signal = g_symbol_data.signals[0];
-    int m5_signal = g_symbol_data.signals[1];
-    int m15_signal = g_symbol_data.signals[2];
-    int m30_signal = g_symbol_data.signals[3];
-    int h1_signal = g_symbol_data.signals[4];
-    int h4_signal = g_symbol_data.signals[5];
-    int d1_signal = g_symbol_data.signals[6];
-
-    // Get timestamps & crosses
-    datetime m1_time = (datetime)g_symbol_data.timestamps[0];
-    datetime m5_time = (datetime)g_symbol_data.timestamps[1];
-    datetime m15_time = (datetime)g_symbol_data.timestamps[2];
-    datetime m30_time = (datetime)g_symbol_data.timestamps[3];
-    datetime h1_time = (datetime)g_symbol_data.timestamps[4];
-    datetime h4_time = (datetime)g_symbol_data.timestamps[5];
-    datetime d1_time = (datetime)g_symbol_data.timestamps[6];
-
-    datetime m1_cross = (datetime)g_symbol_data.crosses[0];
-    datetime m5_cross = (datetime)g_symbol_data.crosses[1];
-    datetime m15_cross = (datetime)g_symbol_data.crosses[2];
-    datetime m30_cross = (datetime)g_symbol_data.crosses[3];
-    datetime h1_cross = (datetime)g_symbol_data.crosses[4];
-    datetime h4_cross = (datetime)g_symbol_data.crosses[5];
-    datetime d1_cross = (datetime)g_symbol_data.crosses[6];
-
-    // Calculate LIVE USD diff from current price (real-time)
-    double m1_price = g_symbol_data.prices[0];               // M1 last signal price
-    double current_price = (Ask + Bid) / 2.0;                // Current real-time price
-    double live_diff_raw = current_price - m1_price;         // Raw price difference
-    double live_usd_diff = GetUSDValue(g_target_symbol, MathAbs(live_diff_raw));  // USD conversion
-    int live_time_diff = (int)(TimeCurrent() - m1_time);     // Time since M1 signal (for breakthrough detection)
-
-    int result = 0;  // Final result
-
-    // ============================================================
-    // PHASE 1: CATEGORY 1 (EA TRADING) - CHECK ALL 7 LEVELS FIRST
-    // Priority: Check strict conditions for EA trading signals
-    // ============================================================
-    if(EnableCategoryEA) {
-        // L1: M1 only - Single timeframe breakthrough
-        // live_diff > 2.5 USD + within 1 candle → Score 10
-        if(m1_signal != 0 && result == 0) {
-            double l1_threshold = NewsBaseLiveDiff;  // 2.5 USD
-            if(live_usd_diff > l1_threshold && IsWithinOneCandle(0, m1_time)) {
-                result = m1_signal * 10;
-            }
-        }
-
-        // L2: M5→M1 - Two timeframe cascade
-        // M5→M1 aligned + live_diff > 3.0 USD + M5.cross=M1.time + within 1 candle → Score 20
-        if(m5_signal != 0 && m1_signal != 0 && m1_signal == m5_signal && result == 0) {
-            if(m5_cross == m1_time) {  // M5.cross = M1.timestamp
-                double l2_threshold = NewsBaseLiveDiff + (NewsLiveDiffStep * 1);  // 3.0 USD
-                if(live_usd_diff > l2_threshold && IsWithinOneCandle(1, m5_time)) {
-                    result = m5_signal * 20;
-                }
-            }
-        }
-
-        // L3: M15→M5→M1 - Three timeframe full cascade
-        // Full cascade + live_diff > 3.5 USD + all crosses valid + within 1 candle → Score 30
-        if(m15_signal != 0 && m5_signal != 0 && m1_signal != 0 &&
-           m1_signal == m5_signal && m5_signal == m15_signal && result == 0) {
-            if(m15_cross == m5_time && m5_cross == m1_time) {  // Full cascade validation
-                double l3_threshold = NewsBaseLiveDiff + (NewsLiveDiffStep * 2);  // 3.5 USD
-                if(live_usd_diff > l3_threshold && IsWithinOneCandle(2, m15_time)) {
-                    result = m15_signal * 30;
-                }
-            }
-        }
-
-        // L4: M30→M15→M5→M1 - Four timeframe full cascade
-        // Full cascade + live_diff > 4.0 USD + all crosses valid + within 1 candle → Score 40
-        if(m30_signal != 0 && m15_signal != 0 && m5_signal != 0 && m1_signal != 0 &&
-           m1_signal == m5_signal && m5_signal == m15_signal && m15_signal == m30_signal && result == 0) {
-            if(m30_cross == m15_time && m15_cross == m5_time && m5_cross == m1_time) {
-                double l4_threshold = NewsBaseLiveDiff + (NewsLiveDiffStep * 3);  // 4.0 USD
-                if(live_usd_diff > l4_threshold && IsWithinOneCandle(3, m30_time)) {
-                    result = m30_signal * 40;
-                }
-            }
-        }
-
-        // L5: H1→M30→M15→M5→M1 - Five timeframe full cascade
-        // Full cascade + live_diff > 4.5 USD + all crosses valid + within 1 candle → Score 50
-        if(h1_signal != 0 && m30_signal != 0 && m15_signal != 0 && m5_signal != 0 && m1_signal != 0 &&
-           m1_signal == m5_signal && m5_signal == m15_signal && m15_signal == m30_signal && m30_signal == h1_signal && result == 0) {
-            if(h1_cross == m30_time && m30_cross == m15_time && m15_cross == m5_time && m5_cross == m1_time) {
-                double l5_threshold = NewsBaseLiveDiff + (NewsLiveDiffStep * 4);  // 4.5 USD
-                if(live_usd_diff > l5_threshold && IsWithinOneCandle(4, h1_time)) {
-                    result = h1_signal * 50;
-                }
-            }
-        }
-
-        // L6: H4→H1→M30→M15→M5→M1 - Six timeframe full cascade
-        // Full cascade + live_diff > 5.0 USD + all crosses valid + within 1 candle → Score 60
-        if(h4_signal != 0 && h1_signal != 0 && m30_signal != 0 && m15_signal != 0 && m5_signal != 0 && m1_signal != 0 &&
-           m1_signal == m5_signal && m5_signal == m15_signal && m15_signal == m30_signal &&
-           m30_signal == h1_signal && h1_signal == h4_signal && result == 0) {
-            if(h4_cross == h1_time && h1_cross == m30_time && m30_cross == m15_time &&
-               m15_cross == m5_time && m5_cross == m1_time) {
-                double l6_threshold = NewsBaseLiveDiff + (NewsLiveDiffStep * 5);  // 5.0 USD
-                if(live_usd_diff > l6_threshold && IsWithinOneCandle(5, h4_time)) {
-                    result = h4_signal * 60;
-                }
-            }
-        }
-
-        // L7: D1→H4→H1→M30→M15→M5→M1 - Seven timeframe full cascade (ULTIMATE)
-        // Full cascade + live_diff > 5.5 USD + all crosses valid + within 1 candle → Score 70
-        if(d1_signal != 0 && h4_signal != 0 && h1_signal != 0 && m30_signal != 0 &&
-           m15_signal != 0 && m5_signal != 0 && m1_signal != 0 &&
-           m1_signal == m5_signal && m5_signal == m15_signal && m15_signal == m30_signal &&
-           m30_signal == h1_signal && h1_signal == h4_signal && h4_signal == d1_signal && result == 0) {
-            if(d1_cross == h4_time && h4_cross == h1_time && h1_cross == m30_time &&
-               m30_cross == m15_time && m15_cross == m5_time && m5_cross == m1_time) {
-                double l7_threshold = NewsBaseLiveDiff + (NewsLiveDiffStep * 6);  // 5.5 USD
-                if(live_usd_diff > l7_threshold && IsWithinOneCandle(6, d1_time)) {
-                    result = d1_signal * 70;
-                }
-            }
-        }
-    }  // End Category 1
-
-    // ============================================================
-    // PHASE 2: CATEGORY 2 (USER REFERENCE) - ONLY IF CATEGORY 1 = 0
-    // Relaxed conditions for user reference signals
-    // ============================================================
-    if(result == 0 && EnableCategoryUser) {
-        // L1: M1 only
-        // live_diff > 0.1 + time < 2 min (1×2) → Score 1
-        if(m1_signal != 0) {
-            double l1_usd_threshold = NewsCascadeMultiplier * 1;  // 0.1 USD
-            int l1_time_limit = 1 * NewsBaseTimeMinutes * 60;  // 1 × 2 × 60 = 120s = 2min
-            if(live_usd_diff > l1_usd_threshold && live_time_diff < l1_time_limit) {
-                result = m1_signal * 1;
-            }
-        }
-
-        // L2: M5→M1
-        // live_diff > 0.2 + time < 4 min (2×2) → Score 2
-        if(m5_signal != 0 && m1_signal != 0 && m1_signal == m5_signal && result == 0) {
-            if(m5_cross == m1_time) {
-                double l2_usd_threshold = NewsCascadeMultiplier * 2;  // 0.2 USD
-                int l2_time_limit = 2 * NewsBaseTimeMinutes * 60;  // 2 × 2 × 60 = 240s = 4min
-                if(live_usd_diff > l2_usd_threshold && live_time_diff < l2_time_limit) {
-                    result = m5_signal * 2;
-                }
-            }
-        }
-
-        // L3: M15→M5→M1
-        // live_diff > 0.3 + time < 6 min (3×2) → Score 3
-        if(m15_signal != 0 && m5_signal != 0 && m1_signal != 0 &&
-           m1_signal == m5_signal && m5_signal == m15_signal && result == 0) {
-            if(m15_cross == m5_time && m5_cross == m1_time) {
-                double l3_usd_threshold = NewsCascadeMultiplier * 3;  // 0.3 USD
-                int l3_time_limit = 3 * NewsBaseTimeMinutes * 60;  // 3 × 2 × 60 = 360s = 6min
-                if(live_usd_diff > l3_usd_threshold && live_time_diff < l3_time_limit) {
-                    result = m15_signal * 3;
-                }
-            }
-        }
-
-        // L4: M30→M15→M5→M1
-        // live_diff > 0.4 + time < 8 min (4×2) → Score 4
-        if(m30_signal != 0 && m15_signal != 0 && m5_signal != 0 && m1_signal != 0 &&
-           m1_signal == m5_signal && m5_signal == m15_signal && m15_signal == m30_signal && result == 0) {
-            if(m30_cross == m15_time && m15_cross == m5_time && m5_cross == m1_time) {
-                double l4_usd_threshold = NewsCascadeMultiplier * 4;  // 0.4 USD
-                int l4_time_limit = 4 * NewsBaseTimeMinutes * 60;  // 4 × 2 × 60 = 480s = 8min
-                if(live_usd_diff > l4_usd_threshold && live_time_diff < l4_time_limit) {
-                    result = m30_signal * 4;
-                }
-            }
-        }
-
-        // L5: H1→M30→M15→M5→M1
-        // live_diff > 0.5 + time < 10 min (5×2) → Score 5
-        if(h1_signal != 0 && m30_signal != 0 && m15_signal != 0 && m5_signal != 0 && m1_signal != 0 &&
-           m1_signal == m5_signal && m5_signal == m15_signal && m15_signal == m30_signal && m30_signal == h1_signal && result == 0) {
-            if(h1_cross == m30_time && m30_cross == m15_time && m15_cross == m5_time && m5_cross == m1_time) {
-                double l5_usd_threshold = NewsCascadeMultiplier * 5;  // 0.5 USD
-                int l5_time_limit = 5 * NewsBaseTimeMinutes * 60;  // 5 × 2 × 60 = 600s = 10min
-                if(live_usd_diff > l5_usd_threshold && live_time_diff < l5_time_limit) {
-                    result = h1_signal * 5;
-                }
-            }
-        }
-
-        // L6: H4→H1→M30→M15→M5→M1
-        // live_diff > 0.6 + time < 12 min (6×2) → Score 6
-        if(h4_signal != 0 && h1_signal != 0 && m30_signal != 0 && m15_signal != 0 && m5_signal != 0 && m1_signal != 0 &&
-           m1_signal == m5_signal && m5_signal == m15_signal && m15_signal == m30_signal &&
-           m30_signal == h1_signal && h1_signal == h4_signal && result == 0) {
-            if(h4_cross == h1_time && h1_cross == m30_time && m30_cross == m15_time &&
-               m15_cross == m5_time && m5_cross == m1_time) {
-                double l6_usd_threshold = NewsCascadeMultiplier * 6;  // 0.6 USD
-                int l6_time_limit = 6 * NewsBaseTimeMinutes * 60;  // 6 × 2 × 60 = 720s = 12min
-                if(live_usd_diff > l6_usd_threshold && live_time_diff < l6_time_limit) {
-                    result = h4_signal * 6;
-                }
-            }
-        }
-
-        // L7: D1→H4→H1→M30→M15→M5→M1
-        // live_diff > 0.7 + time < 14 min (7×2) → Score 7
-        if(d1_signal != 0 && h4_signal != 0 && h1_signal != 0 && m30_signal != 0 &&
-           m15_signal != 0 && m5_signal != 0 && m1_signal != 0 &&
-           m1_signal == m5_signal && m5_signal == m15_signal && m15_signal == m30_signal &&
-           m30_signal == h1_signal && h1_signal == h4_signal && h4_signal == d1_signal && result == 0) {
-            if(d1_cross == h4_time && h4_cross == h1_time && h1_cross == m30_time &&
-               m30_cross == m15_time && m15_cross == m5_time && m5_cross == m1_time) {
-                double l7_usd_threshold = NewsCascadeMultiplier * 7;  // 0.7 USD
-                int l7_time_limit = 7 * NewsBaseTimeMinutes * 60;  // 7 × 2 × 60 = 840s = 14min
-                if(live_usd_diff > l7_usd_threshold && live_time_diff < l7_time_limit) {
-                    result = d1_signal * 7;
-                }
-            }
-        }
-    }  // End Category 2
-
-    return result;
-}
-
-// Main NEWS analysis function - LIVE mode (simplified, no state) | Ham phan tich NEWS - che do LIVE don gian
-int AnalyzeNEWS() {
-    // Simply detect and return CASCADE result directly
-    int cascade_result = DetectCASCADE_New();
-    return cascade_result;  // Return ±1-7 (User) or ±10-70 (EA)
-}
-
-// Update LIVE NEWS for all 7 timeframes independently | Cap nhat NEWS LIVE cho 7 khung thoi gian doc lap
-void UpdateLiveNEWS() {
-    // Get CASCADE result
-    int cascade_result = DetectCASCADE_New();
-
-    // Clear all NEWS results first
-    for(int i = 0; i < 7; i++) {
-        g_symbol_data.news_results[i] = 0;
-    }
-
-    // Only process if cascade detected (cascade_result != 0)
-    if(cascade_result != 0) {
-        // Extract level from result
-    // Category 1 (EA): ±10, ±20, ±30, ±40, ±50, ±60, ±70 → levels 1-7
-    // Category 2 (User): ±1, ±2, ±3, ±4, ±5, ±6, ±7 → levels 1-7
-    int abs_result = MathAbs(cascade_result);
-    int level = 0;
-
-    if(abs_result >= 10) {
-        // Category 1: EA (10-70)
-        level = abs_result / 10;  // 10→1, 20→2, ..., 70→7
-    } else {
-        // Category 2: User (1-7)
-        level = abs_result;  // 1→1, 2→2, ..., 7→7
-    }
-
-    // Map level to row index
-    // L1 → row 0 (M1)
-    // L2 → row 1 (M5)
-    // L3 → row 2 (M15)
-    // L4 → row 3 (M30)
-    // L5 → row 4 (H1)
-    // L6 → row 5 (H4)
-    // L7 → row 6 (D1)
-
-    if(level >= 1 && level <= 7) {
-        int row_index = level - 1;  // Level 1→row 0, Level 2→row 1, ..., Level 7→row 6
-        g_symbol_data.news_results[row_index] = cascade_result;
-    }
-
-    // Log only Category 1 L3+ to avoid spam (major news events only)
-    if(abs_result >= 30) {
-        string time_str = TimeToString(TimeCurrent(), TIME_DATE|TIME_SECONDS);
-        Print(time_str, " | NEWS ", g_target_symbol, " L", level, ": ", (cascade_result > 0 ? "BUY" : "SELL"), " | Score:", cascade_result);
-        }
-    }
-
-    // ALWAYS write to files (even when cascade = 0) to update NEWS values immediately
-    // FIX: Previously only wrote CSDL1, now writes BOTH CSDL1 and CSDL2
-    WriteCSDL1ArrayToFile();   // CSDL1: SYMBOL.json (10 columns + history)
-    WriteCSDL2ArrayToFile();   // CSDL2: SYMBOL_LIVE.json (6 columns, no history, 3 folders) - FIXED!
-}
-
-//==============================================================================
-//  SECTION 12: JSON & DATABASE FUNCTIONS (8 functions) | PHAN 12: HAM JSON VA CO SO DU LIEU
-//==============================================================================
-
-// Read JSON file and parse to rows array | Doc file JSON va phan tich thanh mang hang
-bool ReadJsonToRows(string file_path, string& rows[]) {
-    string json_content;
-    if(!ReadFileWithRetry(file_path, json_content)) {
+    if(StringLen(g_ea.symbol_name) == 0) {
+        LogError(4201, "InitializeSymbolRecognition", "Cannot detect symbol");
         return false;
     }
 
-    return ParseJsonToRows(json_content, rows);
+    DebugPrint("Symbol detected: " + g_ea.symbol_name);
+    return true;
 }
 
-// Parse JSON content string to rows array | Phan tich chuoi noi dung JSON thanh mang hang
-bool ParseJsonToRows(string json_content, string& rows[]) {
-    // Find data array
-    int data_start = StringFind(json_content, "\"data\": [");
-    if(data_start < 0) return false;
+// Initialize symbol prefix with underscore | Khoi tao tien to ky hieu voi gach duoi
+void InitializeSymbolPrefix() {
+    g_ea.symbol_prefix = g_ea.symbol_name + "_";
+}
 
-    int array_start = StringFind(json_content, "[", data_start) + 1;
-    int array_end = StringFind(json_content, "]", array_start);
-    if(array_end < 0) return false;
+// Build full CSDL filename path | Xay dung duong dan day du file CSDL
+void BuildCSDLFilename() {
+    g_ea.csdl_filename = g_ea.csdl_folder + g_ea.symbol_name + "_LIVE.json";
+    DebugPrint("CSDL file: " + g_ea.csdl_filename);
+}
 
-    string data_content = StringSubstr(json_content, array_start, array_end - array_start);
+//=============================================================================
+//  PART 7: CSDL PARSING (3 functions) | PHAN TICH DU LIEU CSDL
+//=============================================================================
+// ParseLoveRow() - Parse single row | Phan tich 1 dong
+// ParseCSDLLoveJSON() - Parse entire JSON | Phan tich toan bo JSON
+// TryReadFile() - Try read local file | Thu doc file local
+// ReadCSDLFile() - Local file reading only | Chi doc file local
 
-    // Split by objects
-    string objects[];
-    int obj_count = StringSplit(data_content, '}', objects);
+// Parse one row of CSDL data (6 columns) | Phan tich 1 hang du lieu CSDL (6 cot)
+bool ParseLoveRow(string row_data, int row_index) {
+    // Column 1: max_loss
+    int maxloss_pos = StringFind(row_data, "\"max_loss\":");
+    if(maxloss_pos >= 0) {
+        string temp = StringSubstr(row_data, maxloss_pos + 11);
+        int comma = StringFind(temp, ",");
+        if(comma > 0) {
+            g_ea.csdl_rows[row_index].max_loss = StringToDouble(StringTrim(StringSubstr(temp, 0, comma)));
+        }
+    }
 
-    for(int i = 0; i < obj_count && i < MAINDB_ROWS; i++) {
-        string obj = objects[i];
-        StringReplace(obj, "{", "");
-        StringReplace(obj, "\"", "");
+    // Column 2: timestamp
+    int ts_pos = StringFind(row_data, "\"timestamp\":");
+    if(ts_pos >= 0) {
+        string temp = StringSubstr(row_data, ts_pos + 12);
+        int comma = StringFind(temp, ",");
+        if(comma > 0) {
+            g_ea.csdl_rows[row_index].timestamp = (long)StringToInteger(StringTrim(StringSubstr(temp, 0, comma)));
+        }
+    }
 
-        // Extract timeframe value directly
-        int row_num = 0;
-        string tf_value = ExtractValue(obj, "timeframe");
+    // Column 3: signal
+    int signal_pos = StringFind(row_data, "\"signal\":");
+    if(signal_pos >= 0) {
+        string temp = StringSubstr(row_data, signal_pos + 9);
+        int comma = StringFind(temp, ",");
+        if(comma > 0) {
+            g_ea.csdl_rows[row_index].signal = (int)StringToInteger(StringTrim(StringSubstr(temp, 0, comma)));
+        }
+    }
 
-        if(tf_value == "1") row_num = 1;      // M1
-        else if(tf_value == "5") row_num = 2;  // M5
-        else if(tf_value == "15") row_num = 3; // M15
-        else if(tf_value == "30") row_num = 4; // M30
-        else if(tf_value == "60") row_num = 5; // H1
-        else if(tf_value == "240") row_num = 6; // H4
-        else if(tf_value == "1440") row_num = 7; // D1
+    // Column 4: pricediff (EA không dùng - nh?ng v?n parse)
+    int pricediff_pos = StringFind(row_data, "\"pricediff\":");
+    if(pricediff_pos >= 0) {
+        string temp = StringSubstr(row_data, pricediff_pos + 12);
+        int comma = StringFind(temp, ",");
+        if(comma > 0) {
+            g_ea.csdl_rows[row_index].pricediff = StringToDouble(StringTrim(StringSubstr(temp, 0, comma)));
+        }
+    }
 
-        // Skip if row number not found or invalid
-        if(row_num < 1 || row_num > MAINDB_ROWS) continue;
+    // Column 5: timediff (EA không dùng - nh?ng v?n parse)
+    int timediff_pos = StringFind(row_data, "\"timediff\":");
+    if(timediff_pos >= 0) {
+        string temp = StringSubstr(row_data, timediff_pos + 11);
+        int comma = StringFind(temp, ",");
+        if(comma > 0) {
+            g_ea.csdl_rows[row_index].timediff = (int)StringToInteger(StringTrim(StringSubstr(temp, 0, comma)));
+        }
+    }
 
-        rows[row_num] = ParseObjectToRowString(obj);
-
+    // Column 6: news (??i tên t? s1_news)
+    int news_pos = StringFind(row_data, "\"news\":");
+    if(news_pos >= 0) {
+        string temp = StringSubstr(row_data, news_pos + 7);
+        int comma = StringFind(temp, ",");
+        int bracket = StringFind(temp, "}");
+        int end_pos = (comma > 0 && comma < bracket) ? comma : bracket;
+        if(end_pos > 0) {
+            g_ea.csdl_rows[row_index].news = (int)StringToInteger(StringTrim(StringSubstr(temp, 0, end_pos)));
+        }
     }
 
     return true;
 }
 
-// Parse JSON object to CSV row string | Phan tich doi tuong JSON thanh chuoi hang CSV
-string ParseObjectToRowString(string obj) {
-    // Extract values in order
-    string values[10];  // 10 columns (with news_result and max_loss)
+// Parse CSDL LOVE JSON array (7 rows) | Phan tich mang JSON CSDL LOVE (7 hang)
+bool ParseCSDLLoveJSON(string json_content) {
+    StringReplace(json_content, "[", "");
+    StringReplace(json_content, "]", "");
+    StringReplace(json_content, "\n", "");
+    StringReplace(json_content, "\r", "");
 
-    // Internal array needs placeholder at [0] and timeframe value at [1] for compatibility
-    values[0] = "0";  // placeholder (internal use)
+    string rows[];
+    int row_count = StringSplit(json_content, '}', rows);
 
-    // Extract timeframe as number
-    string tf_str = ExtractValue(obj, "timeframe");
-    if(tf_str == "") {
-        // Try to parse from timeframe_name
-        string tf_name = ExtractValue(obj, "timeframe_name");
-        if(tf_name == "M1") values[1] = "1";
-        else if(tf_name == "M5") values[1] = "5";
-        else if(tf_name == "M15") values[1] = "15";
-        else if(tf_name == "M30") values[1] = "30";
-        else if(tf_name == "H1") values[1] = "60";
-        else if(tf_name == "H4") values[1] = "240";
-        else if(tf_name == "D1") values[1] = "1440";
-        else values[1] = "0";
-    } else {
-        values[1] = tf_str;
-    }
+    DebugPrint("LOVE JSON: Found " + IntegerToString(row_count) + " rows");
 
-    // Map 10 JSON columns to internal array
-    values[2] = ExtractValue(obj, "signal");        // Column 3 in JSON
-    values[3] = ExtractValue(obj, "price");         // Column 4 in JSON
-    values[4] = ExtractValue(obj, "cross");         // Column 5 in JSON
-    values[5] = ExtractValue(obj, "timestamp");     // Column 6 in JSON
-    values[6] = ExtractValue(obj, "pricediff");     // Column 7 in JSON
-    values[7] = ExtractValue(obj, "timediff");      // Column 8 in JSON
-    values[8] = ExtractValue(obj, "news");          // Column 9 in JSON
-    values[9] = ExtractValue(obj, "max_loss");      // Column 10 in JSON
+    int parsed_count = 0;
+    for(int i = 0; i < 7 && i < row_count; i++) {
+        string row_data = rows[i];
+        StringReplace(row_data, ",{", "");
+        StringReplace(row_data, "{", "");
 
-    // Build row string
-    string row = "";
-    for(int i = 0; i < MAINDB_COLUMNS; i++) {
-        if(i > 0) row = row + ",";
-        if(values[i] == "") values[i] = "0";  // Default to 0 if missing
-        row = row + values[i];
-    }
+        if(StringLen(row_data) < 10) continue;
 
-    return row;
-}
-
-// Extract value for key from JSON object string | Trich xuat gia tri cho khoa tu chuoi doi tuong JSON
-string ExtractValue(string obj, string key) {
-    int key_pos = StringFind(obj, key + ": ");
-    if(key_pos < 0) return "";
-
-    int value_start = key_pos + StringLen(key) + 2;
-    int value_end = StringFind(obj, ",", value_start);
-    if(value_end < 0) value_end = StringLen(obj);
-
-    string value = StringSubstr(obj, value_start, value_end - value_start);
-    StringTrimLeft(value);
-    StringTrimRight(value);
-
-    return value;
-}
-
-// Write rows array to JSON file with retry mechanism | Ghi mang hang ra file JSON voi co che thu lai
-bool WriteRowsToJson(string file_path, string& rows[]) {
-    string json_content = BuildEnhancedJsonContent(rows);
-
-    // Use retry mechanism for main file write
-    if(!WriteFileWithRetry(file_path, json_content)) {
-        return false;
-    }
-
-    g_files_written++;  // Increment write counter
-
-
-    return true;
-}
-
-// Build enhanced JSON content with metadata and history | Xay dung noi dung JSON nang cao voi du lieu meta va lich su
-string BuildEnhancedJsonContent(string& rows[]) {
-    string json_content = "{\n";
-    json_content = json_content + "    \"symbol\": \"" + g_target_symbol + "\",\n";
-    json_content = json_content + "    \"type\": \"main\",\n";
-    json_content = json_content + "    \"timestamp\": " + IntegerToString(TimeCurrent()) + ",\n";
-    json_content = json_content + "    \"rows\": " + IntegerToString(MAINDB_ROWS) + ",\n";
-    json_content = json_content + "    \"columns\": " + IntegerToString(MAINDB_COLUMNS) + ",\n";     // 10 columns
-    json_content = json_content + "    \"data\": [\n";
-
-    // Build data for each row
-    for(int i = 1; i <= MAINDB_ROWS; i++) {
-        if(i > 1) json_content = json_content + ",\n";
-        json_content = json_content + "        " + RowToJsonObject(rows[i], i);
-    }
-
-    json_content = json_content + "\n    ],\n";
-
-    // Add history_count metadata for each timeframe
-    json_content = json_content + "    \"history_count\": {";
-    json_content = json_content + "\"m1\": " + IntegerToString(g_symbol_data.m1_count);
-    json_content = json_content + ", \"m5\": " + IntegerToString(g_symbol_data.m5_count);
-    json_content = json_content + ", \"m15\": " + IntegerToString(g_symbol_data.m15_count);
-    json_content = json_content + ", \"m30\": " + IntegerToString(g_symbol_data.m30_count);
-    json_content = json_content + ", \"h1\": " + IntegerToString(g_symbol_data.h1_count);
-    json_content = json_content + ", \"h4\": " + IntegerToString(g_symbol_data.h4_count);
-    json_content = json_content + ", \"d1\": " + IntegerToString(g_symbol_data.d1_count);
-    json_content = json_content + "},\n";
-
-    // Add enhanced history section
-    json_content = json_content + BuildEnhancedHistoryJson();
-
-    json_content = json_content + "\n}";
-    return json_content;
-}
-
-
-//==============================================================================
-//    SECTION: CSDL2 FILE MANAGEMENT
-//==============================================================================
-
-
-int ExtractJsonInt(string json, string key) {
-    int key_pos = StringFind(json, "\"" + key + "\":");
-    if(key_pos < 0) return 0;
-
-    int value_start = key_pos + StringLen("\"" + key + "\":");
-
-    string value_str = "";
-    for(int i = value_start; i < StringLen(json); i++) {
-        ushort ch = StringGetCharacter(json, i);
-        if(ch == '"' || ch == ',') break;
-        if((ch >= '0' && ch <= '9') || ch == '-') {
-            value_str = value_str + CharToString((uchar)ch);
+        if(ParseLoveRow(row_data, i)) {
+            parsed_count++;
         }
     }
 
-    return (int)StringToInteger(value_str);
+    return (parsed_count >= 1);
 }
 
-// REMOVED: WriteCSDL2ToFile() and BuildCSDL2JsonContent() - CSDL2 not used
+// Helper: Try to read and parse file | Ham phu: Thu doc va phan tich file
+bool TryReadFile(string filename) {
+    int handle = FileOpen(filename, FILE_READ | FILE_TXT | FILE_SHARE_READ | FILE_SHARE_WRITE);
+    if(handle == INVALID_HANDLE) return false;
 
-
-// Convert row string to JSON object
-string RowToJsonObject(string row, int row_num) {
-    string parts[];
-    int part_count = StringSplit(row, ',', parts);
-
-    // Ensure we have enough parts
-    if(part_count < MAINDB_COLUMNS) {
-        ArrayResize(parts, MAINDB_COLUMNS);
-        for(int i = part_count; i < MAINDB_COLUMNS; i++) {
-            parts[i] = "0";
-        }
+    string json_content = "";
+    while(!FileIsEnding(handle)) {
+        json_content += FileReadString(handle);
     }
-
-    string timeframe_names[7] = {"M1", "M5", "M15", "M30", "H1", "H4", "D1"};
-    int timeframe_periods[7] = {1, 5, 15, 30, 60, 240, 1440};
-
-    // Output exactly 10 columns (with news_result and max_loss)
-    string obj = "{";
-    obj = obj + "\"timeframe_name\": \"" + timeframe_names[row_num-1] + "\", ";  // Column 1
-    obj = obj + "\"timeframe\": " + IntegerToString(timeframe_periods[row_num-1]) + ", ";  // Column 2
-    obj = obj + "\"signal\": " + parts[2] + ", ";                      // Column 3
-    obj = obj + "\"price\": " + parts[3] + ", ";                       // Column 4
-    obj = obj + "\"cross\": " + parts[4] + ", ";                       // Column 5
-    obj = obj + "\"timestamp\": " + parts[5] + ", ";                   // Column 6
-    obj = obj + "\"pricediff\": " + parts[6] + ", ";                   // Column 7
-    obj = obj + "\"timediff\": " + parts[7] + ", ";                    // Column 8
-    obj = obj + "\"news\": " + parts[8] + ", ";                        // Column 9
-    obj = obj + "\"max_loss\": " + parts[9];                           // Column 10
-
-    obj = obj + "}";
-    return obj;
-}
-
-// Build enhanced history JSON (simplified)
-string BuildEnhancedHistoryJson() {
-    string history_json = "\"history\": {";
-
-    // M1 history (7 signals) - WITH NEWLINES
-    history_json = history_json + "\n    \"m1\": [";
-    for(int i = 0; i < g_symbol_data.m1_count; i++) {
-        if(i > 0) history_json = history_json + ",";
-        history_json = history_json + "\n        {";
-        history_json = history_json + "\"timeframe\": \"" + g_symbol_data.m1_history[i].timeframe_name + "\"";
-        history_json = history_json + ", \"signal\": " + IntegerToString(g_symbol_data.m1_history[i].signal_3col);
-        history_json = history_json + ", \"price\": " + DoubleToString(g_symbol_data.m1_history[i].price_4col, 5);
-        history_json = history_json + ", \"cross\": " + IntegerToString(g_symbol_data.m1_history[i].cross_5col);
-        history_json = history_json + ", \"timestamp\": " + IntegerToString(g_symbol_data.m1_history[i].timestamp_6col);
-        history_json = history_json + ", \"pricediff\": " + DoubleToString(g_symbol_data.m1_history[i].pricediff_7col, 2);
-        history_json = history_json + ", \"timediff\": " + IntegerToString(g_symbol_data.m1_history[i].timediff_8col);
-        history_json = history_json + ", \"news\": " + IntegerToString(g_symbol_data.m1_history[i].news_result_9col);
-        history_json = history_json + "\n        }";
-    }
-    history_json = history_json + "]";
-
-    // M5 history
-    history_json = history_json + ",\n    \"m5\": [";
-    for(int i = 0; i < g_symbol_data.m5_count; i++) {
-        if(i > 0) history_json = history_json + ",";
-        history_json = history_json + "\n        {";
-        history_json = history_json + "\"timeframe\": \"" + g_symbol_data.m5_history[i].timeframe_name + "\"";
-        history_json = history_json + ", \"signal\": " + IntegerToString(g_symbol_data.m5_history[i].signal_3col);
-        history_json = history_json + ", \"price\": " + DoubleToString(g_symbol_data.m5_history[i].price_4col, 5);
-        history_json = history_json + ", \"cross\": " + IntegerToString(g_symbol_data.m5_history[i].cross_5col);
-        history_json = history_json + ", \"timestamp\": " + IntegerToString(g_symbol_data.m5_history[i].timestamp_6col);
-        history_json = history_json + ", \"pricediff\": " + DoubleToString(g_symbol_data.m5_history[i].pricediff_7col, 2);
-        history_json = history_json + ", \"timediff\": " + IntegerToString(g_symbol_data.m5_history[i].timediff_8col);
-        history_json = history_json + ", \"news\": " + IntegerToString(g_symbol_data.m5_history[i].news_result_9col);
-        history_json = history_json + "\n        }";
-    }
-    history_json = history_json + "]";
-
-    // M15 history
-    history_json = history_json + ",\n    \"m15\": [";
-    for(int i = 0; i < g_symbol_data.m15_count; i++) {
-        if(i > 0) history_json = history_json + ",";
-        history_json = history_json + "\n        {";
-        history_json = history_json + "\"timeframe\": \"" + g_symbol_data.m15_history[i].timeframe_name + "\"";
-        history_json = history_json + ", \"signal\": " + IntegerToString(g_symbol_data.m15_history[i].signal_3col);
-        history_json = history_json + ", \"price\": " + DoubleToString(g_symbol_data.m15_history[i].price_4col, 5);
-        history_json = history_json + ", \"cross\": " + IntegerToString(g_symbol_data.m15_history[i].cross_5col);
-        history_json = history_json + ", \"timestamp\": " + IntegerToString(g_symbol_data.m15_history[i].timestamp_6col);
-        history_json = history_json + ", \"pricediff\": " + DoubleToString(g_symbol_data.m15_history[i].pricediff_7col, 2);
-        history_json = history_json + ", \"timediff\": " + IntegerToString(g_symbol_data.m15_history[i].timediff_8col);
-        history_json = history_json + ", \"news\": " + IntegerToString(g_symbol_data.m15_history[i].news_result_9col);
-        history_json = history_json + "\n        }";
-    }
-    history_json = history_json + "]";
-
-    // M30 history
-    history_json = history_json + ",\n    \"m30\": [";
-    for(int i = 0; i < g_symbol_data.m30_count; i++) {
-        if(i > 0) history_json = history_json + ",";
-        history_json = history_json + "\n        {";
-        history_json = history_json + "\"timeframe\": \"" + g_symbol_data.m30_history[i].timeframe_name + "\"";
-        history_json = history_json + ", \"signal\": " + IntegerToString(g_symbol_data.m30_history[i].signal_3col);
-        history_json = history_json + ", \"price\": " + DoubleToString(g_symbol_data.m30_history[i].price_4col, 5);
-        history_json = history_json + ", \"cross\": " + IntegerToString(g_symbol_data.m30_history[i].cross_5col);
-        history_json = history_json + ", \"timestamp\": " + IntegerToString(g_symbol_data.m30_history[i].timestamp_6col);
-        history_json = history_json + ", \"pricediff\": " + DoubleToString(g_symbol_data.m30_history[i].pricediff_7col, 2);
-        history_json = history_json + ", \"timediff\": " + IntegerToString(g_symbol_data.m30_history[i].timediff_8col);
-        history_json = history_json + ", \"news\": " + IntegerToString(g_symbol_data.m30_history[i].news_result_9col);
-        history_json = history_json + "\n        }";
-    }
-    history_json = history_json + "]";
-
-    // H1 history
-    history_json = history_json + ",\n    \"h1\": [";
-    for(int i = 0; i < g_symbol_data.h1_count; i++) {
-        if(i > 0) history_json = history_json + ",";
-        history_json = history_json + "\n        {";
-        history_json = history_json + "\"timeframe\": \"" + g_symbol_data.h1_history[i].timeframe_name + "\"";
-        history_json = history_json + ", \"signal\": " + IntegerToString(g_symbol_data.h1_history[i].signal_3col);
-        history_json = history_json + ", \"price\": " + DoubleToString(g_symbol_data.h1_history[i].price_4col, 5);
-        history_json = history_json + ", \"cross\": " + IntegerToString(g_symbol_data.h1_history[i].cross_5col);
-        history_json = history_json + ", \"timestamp\": " + IntegerToString(g_symbol_data.h1_history[i].timestamp_6col);
-        history_json = history_json + ", \"pricediff\": " + DoubleToString(g_symbol_data.h1_history[i].pricediff_7col, 2);
-        history_json = history_json + ", \"timediff\": " + IntegerToString(g_symbol_data.h1_history[i].timediff_8col);
-        history_json = history_json + ", \"news\": " + IntegerToString(g_symbol_data.h1_history[i].news_result_9col);
-        history_json = history_json + "\n        }";
-    }
-    history_json = history_json + "]";
-
-    // H4 history
-    history_json = history_json + ",\n    \"h4\": [";
-    for(int i = 0; i < g_symbol_data.h4_count; i++) {
-        if(i > 0) history_json = history_json + ",";
-        history_json = history_json + "\n        {";
-        history_json = history_json + "\"timeframe\": \"" + g_symbol_data.h4_history[i].timeframe_name + "\"";
-        history_json = history_json + ", \"signal\": " + IntegerToString(g_symbol_data.h4_history[i].signal_3col);
-        history_json = history_json + ", \"price\": " + DoubleToString(g_symbol_data.h4_history[i].price_4col, 5);
-        history_json = history_json + ", \"cross\": " + IntegerToString(g_symbol_data.h4_history[i].cross_5col);
-        history_json = history_json + ", \"timestamp\": " + IntegerToString(g_symbol_data.h4_history[i].timestamp_6col);
-        history_json = history_json + ", \"pricediff\": " + DoubleToString(g_symbol_data.h4_history[i].pricediff_7col, 2);
-        history_json = history_json + ", \"timediff\": " + IntegerToString(g_symbol_data.h4_history[i].timediff_8col);
-        history_json = history_json + ", \"news\": " + IntegerToString(g_symbol_data.h4_history[i].news_result_9col);
-        history_json = history_json + "\n        }";
-    }
-    history_json = history_json + "]";
-
-    // D1 history - HÀNG 7 M?I THÊM
-    history_json = history_json + ",\n    \"d1\": [";
-    for(int i = 0; i < g_symbol_data.d1_count; i++) {
-        if(i > 0) history_json = history_json + ",";
-        history_json = history_json + "\n        {";
-        history_json = history_json + "\"timeframe\": \"" + g_symbol_data.d1_history[i].timeframe_name + "\"";
-        history_json = history_json + ", \"signal\": " + IntegerToString(g_symbol_data.d1_history[i].signal_3col);
-        history_json = history_json + ", \"price\": " + DoubleToString(g_symbol_data.d1_history[i].price_4col, 5);
-        history_json = history_json + ", \"cross\": " + IntegerToString(g_symbol_data.d1_history[i].cross_5col);
-        history_json = history_json + ", \"timestamp\": " + IntegerToString(g_symbol_data.d1_history[i].timestamp_6col);
-        history_json = history_json + ", \"pricediff\": " + DoubleToString(g_symbol_data.d1_history[i].pricediff_7col, 2);
-        history_json = history_json + ", \"timediff\": " + IntegerToString(g_symbol_data.d1_history[i].timediff_8col);
-        history_json = history_json + ", \"news\": " + IntegerToString(g_symbol_data.d1_history[i].news_result_9col);
-        history_json = history_json + "\n        }";
-    }
-    history_json = history_json + "\n    ]";
-
-    history_json = history_json + "\n}";
-    return history_json;
-}
-
-//==============================================================================
-//  SECTION 12.5: MONTHLY STATISTICS | PHAN 12.5: THONG KE THANG
-//==============================================================================
-
-// Monthly statistics structure | Cau truc thong ke thang
-struct MonthlyStats {
-    string symbol;           // Symbol name | Ten symbol
-    int year;                // Year | Nam
-    int month;               // Month (1-12) | Thang
-    int total_trades;        // Total trades | Tong so lenh
-    int winning_trades;      // Winning trades | Lenh thang
-    int losing_trades;       // Losing trades | Lenh thua
-    double total_profit;     // Total profit USD | Tong loi USD
-    double total_loss;       // Total loss USD | Tong lo USD
-    double net_profit;       // Net profit USD | Lai rong USD
-    double win_rate;         // Win rate % | Ti le thang %
-    double avg_win;          // Average win USD | Trung binh thang USD
-    double avg_loss;         // Average loss USD | Trung binh thua USD
-    double largest_win;      // Largest win USD | Thang lon nhat USD
-    double largest_loss;     // Largest loss USD | Thua lon nhat USD
-    double total_lots;       // Total lots traded | Tong khoi luong
-};
-
-// Calculate monthly statistics for previous month | Tinh thong ke thang truoc
-MonthlyStats CalculateMonthlyStats(string target_symbol, int year, int month) {
-    MonthlyStats stats;
-
-    // Initialize
-    stats.symbol = target_symbol;
-    stats.year = year;
-    stats.month = month;
-    stats.total_trades = 0;
-    stats.winning_trades = 0;
-    stats.losing_trades = 0;
-    stats.total_profit = 0.0;
-    stats.total_loss = 0.0;
-    stats.largest_win = 0.0;
-    stats.largest_loss = 0.0;
-    stats.total_lots = 0.0;
-
-    // Calculate time range for target month
-    datetime month_start = StrToTime(IntegerToString(year) + "." +
-                                      StringFormat("%02d", month) + ".01 00:00:00");
-    datetime month_end;
-
-    if(month == 12) {
-        month_end = StrToTime(IntegerToString(year + 1) + ".01.01 00:00:00");
-    } else {
-        month_end = StrToTime(IntegerToString(year) + "." +
-                               StringFormat("%02d", month + 1) + ".01 00:00:00");
-    }
-
-    // Scan all history orders
-    int total_history = OrdersHistoryTotal();
-
-    for(int i = 0; i < total_history; i++) {
-        if(!OrderSelect(i, SELECT_BY_POS, MODE_HISTORY)) continue;
-
-        // Filter by symbol
-        if(OrderSymbol() != target_symbol) continue;
-
-        // Filter by close time (must be in target month)
-        datetime close_time = OrderCloseTime();
-        if(close_time < month_start || close_time >= month_end) continue;
-
-        // Calculate net profit (profit + swap + commission)
-        double net = OrderProfit() + OrderSwap() + OrderCommission();
-
-        stats.total_trades++;
-        stats.total_lots += OrderLots();
-
-        if(net > 0) {
-            stats.winning_trades++;
-            stats.total_profit += net;
-            if(net > stats.largest_win) stats.largest_win = net;
-        } else {
-            stats.losing_trades++;
-            stats.total_loss += net;  // Negative value
-            if(net < stats.largest_loss) stats.largest_loss = net;
-        }
-    }
-
-    // Calculate derived statistics
-    stats.net_profit = stats.total_profit + stats.total_loss;
-
-    if(stats.total_trades > 0) {
-        stats.win_rate = (double)stats.winning_trades / stats.total_trades * 100.0;
-    }
-
-    if(stats.winning_trades > 0) {
-        stats.avg_win = stats.total_profit / stats.winning_trades;
-    }
-
-    if(stats.losing_trades > 0) {
-        stats.avg_loss = stats.total_loss / stats.losing_trades;
-    }
-
-    return stats;
-}
-
-// Write monthly stats to JSON file | Ghi thong ke thang vao file JSON
-bool WriteMonthlyStatsToFile(MonthlyStats& stats) {
-    // Create HISTORY folder if not exists
-    string history_folder = DataFolder + "HISTORY\\";
-
-    // Build filename: SYMBOL_YYYY_MM.json
-    string filename = history_folder + stats.symbol + "_" +
-                      IntegerToString(stats.year) + "_" +
-                      StringFormat("%02d", stats.month) + ".json";
-
-    // Build JSON content - Summary section
-    string json = "{\n";
-    json += "  \"symbol\": \"" + stats.symbol + "\",\n";
-    json += "  \"year\": " + IntegerToString(stats.year) + ",\n";
-    json += "  \"month\": " + IntegerToString(stats.month) + ",\n";
-    json += "  \"generated_time\": " + IntegerToString(TimeCurrent()) + ",\n";
-    json += "  \"total_trades\": " + IntegerToString(stats.total_trades) + ",\n";
-    json += "  \"winning_trades\": " + IntegerToString(stats.winning_trades) + ",\n";
-    json += "  \"losing_trades\": " + IntegerToString(stats.losing_trades) + ",\n";
-    json += "  \"total_profit\": " + DoubleToString(stats.total_profit, 2) + ",\n";
-    json += "  \"total_loss\": " + DoubleToString(stats.total_loss, 2) + ",\n";
-    json += "  \"net_profit\": " + DoubleToString(stats.net_profit, 2) + ",\n";
-    json += "  \"win_rate\": " + DoubleToString(stats.win_rate, 2) + ",\n";
-    json += "  \"avg_win\": " + DoubleToString(stats.avg_win, 2) + ",\n";
-    json += "  \"avg_loss\": " + DoubleToString(stats.avg_loss, 2) + ",\n";
-    json += "  \"largest_win\": " + DoubleToString(stats.largest_win, 2) + ",\n";
-    json += "  \"largest_loss\": " + DoubleToString(stats.largest_loss, 2) + ",\n";
-    json += "  \"total_lots\": " + DoubleToString(stats.total_lots, 2) + ",\n";
-
-    // Build trades array
-    json += "  \"trades\": [\n";
-
-    // Calculate time range for target month
-    datetime month_start = StrToTime(IntegerToString(stats.year) + "." +
-                                      StringFormat("%02d", stats.month) + ".01 00:00:00");
-    datetime month_end;
-    if(stats.month == 12) {
-        month_end = StrToTime(IntegerToString(stats.year + 1) + ".01.01 00:00:00");
-    } else {
-        month_end = StrToTime(IntegerToString(stats.year) + "." +
-                               StringFormat("%02d", stats.month + 1) + ".01 00:00:00");
-    }
-
-    // Collect all trades for this month
-    int total_history = OrdersHistoryTotal();
-    int trade_count = 0;
-
-    for(int i = 0; i < total_history; i++) {
-        if(!OrderSelect(i, SELECT_BY_POS, MODE_HISTORY)) continue;
-
-        // Filter by symbol
-        if(OrderSymbol() != stats.symbol) continue;
-
-        // Filter by close time (must be in target month)
-        datetime close_time = OrderCloseTime();
-        if(close_time < month_start || close_time >= month_end) continue;
-
-        // Calculate net profit
-        double net = OrderProfit() + OrderSwap() + OrderCommission();
-
-        // Calculate duration
-        datetime open_time = OrderOpenTime();
-        int duration_seconds = (int)(close_time - open_time);
-        int hours = duration_seconds / 3600;
-        int minutes = (duration_seconds % 3600) / 60;
-        string duration_str = IntegerToString(hours) + "h " + IntegerToString(minutes) + "m";
-
-        // Order type
-        string type_str = (OrderType() == OP_BUY) ? "BUY" : "SELL";
-
-        // Add comma before each trade except first
-        if(trade_count > 0) json += ",\n";
-
-        // Build trade JSON object
-        json += "    {\n";
-        json += "      \"ticket\": " + IntegerToString(OrderTicket()) + ",\n";
-        json += "      \"open_time\": \"" + TimeToString(open_time, TIME_DATE|TIME_MINUTES) + "\",\n";
-        json += "      \"close_time\": \"" + TimeToString(close_time, TIME_DATE|TIME_MINUTES) + "\",\n";
-        json += "      \"type\": \"" + type_str + "\",\n";
-        json += "      \"lots\": " + DoubleToString(OrderLots(), 2) + ",\n";
-        json += "      \"open_price\": " + DoubleToString(OrderOpenPrice(), 5) + ",\n";
-        json += "      \"close_price\": " + DoubleToString(OrderClosePrice(), 5) + ",\n";
-        json += "      \"profit\": " + DoubleToString(net, 2) + ",\n";
-        json += "      \"duration\": \"" + duration_str + "\"\n";
-        json += "    }";
-
-        trade_count++;
-    }
-
-    json += "\n  ]\n";
-    json += "}";
-
-    // Write to file
-    int handle = FileOpen(filename, FILE_WRITE|FILE_TXT);
-    if(handle == INVALID_HANDLE) {
-        Print("ERROR: Failed to create monthly stats file: ", filename);
-        return false;
-    }
-
-    FileWriteString(handle, json);
     FileClose(handle);
 
-    Print("Monthly stats saved: ", filename, " (", trade_count, " trades)");
+    if(StringLen(json_content) < 20) return false;
+    if(!ParseCSDLLoveJSON(json_content)) return false;
+
+    return true;  // SUCCESS | Thanh cong
+}
+
+// Read CSDL from local file only | Chi doc CSDL tu file local
+// Supports 3 sources: FOLDER_1, FOLDER_2, FOLDER_3 | Ho tro 3 nguon: 3 folder local
+void ReadCSDLFile() {
+    bool success = false;
+
+    // ========== LOCAL FILE (FOLDER_1 / FOLDER_2 / FOLDER_3) ==========
+    // TRY 1: Read main local file | Lan 1: Doc file local chinh
+    success = TryReadFile(g_ea.csdl_filename);
+
+    if(!success) {
+        // TRY 2: Wait 100ms and retry | Lan 2: Cho 100ms va doc lai
+        Sleep(100);
+        success = TryReadFile(g_ea.csdl_filename);
+    }
+
+    if(!success) {
+        // TRY 3: Read backup file in DataAutoOner (FOLDER_1) | Lan 3: Doc file du phong trong DataAutoOner
+        string backup_file = "DataAutoOner\\" + g_ea.symbol_name + "_LIVE.json";
+        success = TryReadFile(backup_file);
+
+        if(success) {
+            Print("[BACKUP] Using DataAutoOner (FOLDER_1) file");
+        }
+    }
+
+    // ========== FINAL CHECK ==========
+    if(!success) {
+        // ALL FAILED: Keep old data, continue (no spam warning - only debug)
+        // Tat ca that bai: Giu du lieu cu, tiep tuc (khong spam warning - chi debug)
+        DebugPrint("[WARNING] All read attempts failed. Using old data.");
+    }
+}
+
+//=============================================================================
+//  PART 8: MAGIC NUMBER GENERATION (3 functions) | TAO SO HIEU LENH
+//=============================================================================
+
+// Generate symbol hash from ALL characters using DJB2 algorithm | Tao ma hash tu TAT CA ky tu dung thuat toan DJB2
+// This ensures unique hash for each symbol, preventing magic number collisions | Dam bao hash duy nhat cho moi symbol, tranh trung magic number
+int GenerateSymbolHash(string symbol) {
+    int hash = 5381;  // DJB2 hash initial value | Gia tri khoi dau DJB2
+
+    // Process ALL characters in symbol name | Xu ly TAT CA ky tu trong ten symbol
+    for(int i = 0; i < StringLen(symbol); i++) {
+        int c = StringGetCharacter(symbol, i);
+        hash = ((hash << 5) + hash) + c;  // hash * 33 + c (DJB2 formula)
+    }
+
+    // Make positive and limit to reasonable range (100-9999) | Dam bao duong va gioi han pham vi
+    hash = MathAbs(hash % 10000);  // Modulo 10000 = range 0-9999
+
+    if(hash < 100) hash += 100;  // Minimum 100 to avoid small numbers | Toi thieu 100 tranh so nho
+
+    return hash;
+}
+
+// Generate smart magic: hash + tf*1000 + strat*100 | Tao so hieu thong minh theo cong thuc
+int GenerateSmartMagicNumber(string symbol, int tf_index, int strategy_index) {
+    int symbol_hash = GenerateSymbolHash(symbol);
+    int tf_code = tf_index * 1000;      // M1=0, M5=1000, M15=2000, ...
+    int strategy_code = strategy_index * 100;  // S1=0, S2=100, S3=200
+
+    return symbol_hash + tf_code + strategy_code;
+}
+
+// Generate all 21 magic numbers (7 TF × 3 S) | Tao tat ca 21 so hieu (7 khung x 3 chien luoc)
+bool GenerateMagicNumbers() {
+    string symbol = g_ea.symbol_name;
+
+    for(int tf = 0; tf < 7; tf++) {
+        for(int s = 0; s < 3; s++) {
+            g_ea.magic_numbers[tf][s] = GenerateSmartMagicNumber(symbol, tf, s);
+        }
+    }
+
+    // Silent - only debug log | Im lang - chi log debug
+    DebugPrint("Magic M1: S1=" + IntegerToString(g_ea.magic_numbers[0][0]) +
+               ", S2=" + IntegerToString(g_ea.magic_numbers[0][1]) +
+               ", S3=" + IntegerToString(g_ea.magic_numbers[0][2]));
+
     return true;
 }
 
-// Run monthly statistics on startup (if 1st day of month) | Chay thong ke thang khi khoi dong
-void RunMonthlyStatsOnStartup() {
-    if(!EnableMonthlyStats) return;
+//=============================================================================
+//  PART 9: LOT SIZE CALCULATION (2 functions) | TINH TOAN KHOI LUONG
+//=============================================================================
 
-    datetime now = TimeCurrent();
-    int current_day = TimeDay(now);
+// Calculate lot with progressive formula | Tinh lot theo cong thuc luy tien
+// Formula: (base × strategy_multiplier) + tf_increment | Cong thuc: (goc × he so chien luoc) + tang TF
+// Result format: X.YZ where Y=strategy(1-3), Z=TF(1-7) | Dinh dang: X.YZ voi Y=chien luoc, Z=khung
+double CalculateSmartLotSize(double base_lot, int tf_index, int strategy_index) {
+    // NEW FORMULA: (base × strategy_multiplier) + tf_increment
+    // LOT FORMAT: X.YZ where X=strategy base, Y=same as X, Z=TF identifier (1-7)
+    //
+    // Strategy multipliers: S2=×1 (standard), S1=×2 (strong), S3=×3 (strongest)
+    // TF increments: M1=+0.01, M5=+0.02, M15=+0.03, M30=+0.04, H1=+0.05, H4=+0.06, D1=+0.07
+    //
+    // EXAMPLES (base_lot = 0.10):
+    //   M1_S2 = (0.10×1) + 0.01 = 0.11
+    //   M1_S1 = (0.10×2) + 0.01 = 0.21
+    //   M1_S3 = (0.10×3) + 0.01 = 0.31
+    //   M5_S2 = (0.10×1) + 0.02 = 0.12
+    //   D1_S3 = (0.10×3) + 0.07 = 0.37
 
-    // Only run on 1st day of month
-    if(current_day != 1) return;
+    // Strategy multipliers: index 0=S1(×2), 1=S2(×1), 2=S3(×3)
+    double strategy_multipliers[3] = {2.0, 1.0, 3.0};
 
-    // Calculate previous month
-    int current_year = TimeYear(now);
-    int current_month = TimeMonth(now);
+    // TF increments: index 0=M1(+0.01), 1=M5(+0.02), ..., 6=D1(+0.07)
+    double tf_increments[7] = {0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.07};
 
-    int target_year = current_year;
-    int target_month = current_month - 1;
+    // Calculate final lot
+    double lot = (base_lot * strategy_multipliers[strategy_index]) + tf_increments[tf_index];
 
-    if(target_month < 1) {
-        target_month = 12;
-        target_year = current_year - 1;
+    return NormalizeLotSize(lot);
+}
+
+// Pre-calculate all 21 lot sizes once | Tinh truoc tat ca 21 khoi luong mot lan
+// Called once in OnInit for performance | Goi 1 lan trong OnInit de tang hieu suat
+void InitializeLotSizes() {
+    for(int tf = 0; tf < 7; tf++) {
+        for(int s = 0; s < 3; s++) {
+            g_ea.lot_sizes[tf][s] = CalculateSmartLotSize(FixedLotSize, tf, s);
+        }
     }
 
-    // Check if stats file already exists for this month
-    string history_folder = DataFolder + "HISTORY\\";
-    string filename = history_folder + g_target_symbol + "_" +
-                      IntegerToString(target_year) + "_" +
-                      StringFormat("%02d", target_month) + ".json";
+    // Silent - only debug log | Im lang - chi log debug
+    DebugPrint("Lot M1: S1=" + DoubleToStr(g_ea.lot_sizes[0][0], 2) +
+               " S2=" + DoubleToStr(g_ea.lot_sizes[0][1], 2) +
+               " S3=" + DoubleToStr(g_ea.lot_sizes[0][2], 2));
+}
 
-    if(FileIsExist(filename)) {
-        Print("Monthly stats already exists for ", target_year, "-",
-              StringFormat("%02d", target_month), ": ", filename);
+//=============================================================================
+//  PART 10: LAYER1 STOPLOSS INIT (1 function) | KHOI TAO CAT LO TANG 1
+//=============================================================================
+
+// Initialize all 21 Layer1 thresholds (7 TF × 3 S) | Khoi tao 21 nguong cat lo tang 1
+// OPTIMIZED: Uses pre-calculated lot sizes | TOI UU: Dung khoi luong da tinh truoc
+void InitializeLayer1Thresholds() {
+    for(int tf = 0; tf < 7; tf++) {
+        double max_loss_per_lot = g_ea.csdl_rows[tf].max_loss;
+
+        if(MathAbs(max_loss_per_lot) < 1.0) {
+            max_loss_per_lot = MaxLoss_Fallback;
+        }
+
+        // Use pre-calculated lots instead of calculating again | Dung lot da tinh thay vi tinh lai
+        for(int s = 0; s < 3; s++) {
+            g_ea.layer1_thresholds[tf][s] = max_loss_per_lot * g_ea.lot_sizes[tf][s];
+        }
+    }
+
+    // Silent - only debug log | Im lang - chi log debug
+    DebugPrint("Layer1 M1: S1=$" + DoubleToStr(g_ea.layer1_thresholds[0][0], 2) +
+               " S2=$" + DoubleToStr(g_ea.layer1_thresholds[0][1], 2) +
+               " S3=$" + DoubleToStr(g_ea.layer1_thresholds[0][2], 2));
+}
+
+//=============================================================================
+//  PART 11: MAP CSDL TO EA (1 function) | ANH XA CSDL SANG EA
+//=============================================================================
+
+// Map CSDL data to EA variables for all 7 TF | Anh xa du lieu CSDL sang bien EA cho 7 khung
+// OPTIMIZED: Single TREND variable + Smart NEWS mode selection | TOI UU: Bien TREND don + Che do NEWS thong minh
+// NOTE: signal_new/timestamp_new removed - use csdl_rows[tf] directly | Loai bo signal_new/timestamp_new - dung truc tiep csdl_rows[tf]
+void MapCSDLToEAVariables() {
+    // S2: TREND - Always use D1 (row 6) for all TF | Luon dung D1 cho tat ca TF
+    g_ea.trend_d1 = g_ea.csdl_rows[6].signal;
+
+    // S3: NEWS - Use STRONGEST NEWS from all 7 TF | Dung TIN TUC MANH NHAT tu 7 khung
+    // Find strongest NEWS across all 7 TF as single decision point
+    // Tim tin tuc manh nhat trong 7 khung lam diem quyet dinh duy nhat
+    int strongest_news = g_ea.csdl_rows[0].news;
+    for(int tf = 1; tf < 7; tf++) {
+        if(MathAbs(g_ea.csdl_rows[tf].news) > MathAbs(strongest_news)) {
+            strongest_news = g_ea.csdl_rows[tf].news;
+        }
+    }
+    g_ea.news_level = MathAbs(strongest_news);
+    g_ea.news_direction = (strongest_news > 0) ? 1 :
+                       (strongest_news < 0) ? -1 : 0;
+
+    DebugPrint("Mapped 7 TF | signal[0]=" + IntegerToString(g_ea.csdl_rows[0].signal) +
+               " trend_d1=" + IntegerToString(g_ea.trend_d1) +
+               " news_lv=" + IntegerToString(g_ea.news_level) + " (STRONGEST)");
+}
+
+//=============================================================================
+//  PART 12: POSITION MANAGEMENT (2 functions) | QUAN LY LENH
+//=============================================================================
+// RestoreOrCleanupPositions() - Restore/cleanup on EA startup | Khoi phuc/don dep khi EA khoi dong
+// CloseAllStrategiesByMagicForTF() - Close all strategies for specific TF | Dong tat ca chien luoc cho 1 TF cu the
+
+// Restore or cleanup positions on EA startup | Khoi phuc hoac don dep lenh khi EA khoi dong
+// PHASE 2: Signal-based validation with consolidated AND logic | Xac thuc dua tren tin hieu voi logic AND gop
+// LOGIC: Scan 7×3 combinations, if ANY condition fails ? CLOSE, if ALL pass ? KEEP
+bool RestoreOrCleanupPositions() {
+    // Step 1: Reset all flags first | Buoc 1: Reset tat ca co truoc
+    for(int tf = 0; tf < 7; tf++) {
+        for(int s = 0; s < 3; s++) {
+            g_ea.position_flags[tf][s] = 0;
+        }
+    }
+
+    int kept_count = 0;
+    int closed_count = 0;
+
+    // Step 2: Scan all open orders | Buoc 2: Quet tat ca lenh mo
+    for(int i = OrdersTotal() - 1; i >= 0; i--) {
+        if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) continue;
+
+        // Get order info | Lay thong tin lenh
+        int magic = OrderMagicNumber();
+        int ticket = OrderTicket();
+        int order_type = OrderType();
+        string order_symbol = OrderSymbol();
+
+        // Filter: Only this symbol | Loc: Chi lenh cua symbol nay
+        if(order_symbol != Symbol()) continue;
+
+        // Get order signal from MT4 | Lay tin hieu tu lenh MT4
+        int order_signal = 0;
+        if(order_type == OP_BUY) order_signal = 1;
+        else if(order_type == OP_SELL) order_signal = -1;
+        else continue;  // Skip pending orders | Bo qua lenh pending
+
+        // Step 3: Scan 7×3 combinations to find valid match | Buoc 3: Quet 7x3 de tim khop hop le
+        bool found = false;
+        int found_tf = -1;
+        int found_s = -1;
+
+        for(int tf = 0; tf < 7; tf++) {
+            // Skip if TF disabled | Bo qua neu TF tat
+            if(!IsTFEnabled(tf)) continue;
+
+            for(int s = 0; s < 3; s++) {
+                // CONDITION 1: Magic match | Dieu kien 1: Magic khop
+                bool cond1_magic = (magic == g_ea.magic_numbers[tf][s]);
+
+                // CONDITION 2: Signal pair match (4 variables) | Dieu kien 2: Cap tin hieu khop (4 bien)
+                // Order signal == OLD == CSDL (triple match) AND timestamp OLD == CSDL (locked)
+                // Tin hieu lenh == CU == CSDL (khop 3) VA timestamp CU == CSDL (khoa)
+                bool cond2_signal_pair = (order_signal == g_ea.signal_old[tf] &&
+                                          order_signal == g_ea.csdl_rows[tf].signal &&
+                                          g_ea.timestamp_old[tf] == (datetime)g_ea.csdl_rows[tf].timestamp);
+
+                // CONDITION 3: Strategy enabled | Dieu kien 3: Chien luoc bat
+                bool cond3_strategy = false;
+                if(s == 0) cond3_strategy = S1_HOME;
+                else if(s == 1) cond3_strategy = S2_TREND;
+                else if(s == 2) cond3_strategy = S3_NEWS;
+
+                // CONDITION 4: Not duplicate (flag must be 0) | Dieu kien 4: Khong trung lap
+                bool cond4_unique = (g_ea.position_flags[tf][s] == 0);
+
+                // CONSOLIDATED CHECK: ALL with AND | KIEM TRA GOP: Tat ca voi AND
+                if(cond1_magic && cond2_signal_pair && cond3_strategy && cond4_unique) {
+                    found = true;
+                    found_tf = tf;
+                    found_s = s;
+                    break;  // Exit strategy loop | Thoat vong chien luoc
+                }
+            }
+
+            if(found) break;  // Exit TF loop | Thoat vong TF
+        }
+
+        // Step 4: Decide KEEP or CLOSE | Buoc 4: Quyet dinh GIU hoac DONG
+        if(found) {
+            // ? KEEP: All conditions passed ? Restore flag | GIU: Tat ca dieu kien qua ? Khoi phuc co
+            g_ea.position_flags[found_tf][found_s] = 1;
+            kept_count++;
+
+            DebugPrint("[RESTORE_KEEP] #" + IntegerToString(ticket) +
+                      " TF:" + IntegerToString(found_tf) + " S:" + IntegerToString(found_s + 1) +
+                      " Signal:" + IntegerToString(order_signal) + " | Flag=1");
+
+        } else {
+            // ? CLOSE: ANY condition failed ? Close order | DONG: Bat ky dieu kien sai ? Dong lenh
+            CloseOrderSafely(ticket, "RESTORE_INVALID");
+            closed_count++;
+
+            // CRITICAL: Reset flag if this was a known magic | QUAN TRONG: Reset co neu la magic da biet
+            // Prevents stoploss function from miscalculating | Tranh ham stoploss tinh sai
+            for(int tf_check = 0; tf_check < 7; tf_check++) {
+                for(int s_check = 0; s_check < 3; s_check++) {
+                    if(magic == g_ea.magic_numbers[tf_check][s_check]) {
+                        g_ea.position_flags[tf_check][s_check] = 0;  // Ensure flag = 0 | Dam bao co = 0
+                        break;
+                    }
+                }
+            }
+
+            DebugPrint("[RESTORE_CLOSE] #" + IntegerToString(ticket) +
+                      " Magic:" + IntegerToString(magic) +
+                      " Signal:" + IntegerToString(order_signal) + " | INVALID");
+        }
+    }
+
+    // Step 5: Final summary report (1 line) | Buoc 5: Bao cao tom tat cuoi cung (1 dong)
+    Print(g_ea.init_summary, " | RESTORE: KEPT=", kept_count, " CLOSED=", closed_count);
+
+    // Debug: Print restored flags (optional) | In co da khoi phuc (tuy chon)
+    if(DebugMode && kept_count > 0) {
+        for(int tf = 0; tf < 7; tf++) {
+            bool has_flag = false;
+            for(int s = 0; s < 3; s++) {
+                if(g_ea.position_flags[tf][s] == 1) {
+                    has_flag = true;
+                    break;
+                }
+            }
+            if(has_flag) {
+                Print("[RESTORE_FLAGS] ", G_TF_NAMES[tf], ": S1=", g_ea.position_flags[tf][0],
+                      " S2=", g_ea.position_flags[tf][1], " S3=", g_ea.position_flags[tf][2]);
+            }
+        }
+    }
+
+    return true;
+}
+
+// Close all strategies for specific TF only | Dong tat ca chien luoc cho 1 khung cu the
+void CloseAllStrategiesByMagicForTF(int tf) {
+    int signal_old = g_ea.signal_old[tf];
+    int signal_new = g_ea.csdl_rows[tf].signal;
+    datetime timestamp_new = (datetime)g_ea.csdl_rows[tf].timestamp;
+
+    for(int i = OrdersTotal() - 1; i >= 0; i--) {
+        if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) continue;
+        if(OrderSymbol() != Symbol()) continue;
+
+        int magic = OrderMagicNumber();
+        int ticket = OrderTicket();
+        int order_type = OrderType();
+        double order_lot = OrderLots();
+        double order_profit = OrderProfit() + OrderSwap() + OrderCommission();
+
+        // Check if magic belongs to any of 3 strategies in this TF | Kiem tra magic thuoc 1 trong 3 chien luoc cua TF nay
+        int strategy_index = -1;
+        for(int s = 0; s < 3; s++) {
+            if(magic == g_ea.magic_numbers[tf][s]) {
+                strategy_index = s;
+                break;
+            }
+        }
+
+        if(strategy_index >= 0) {
+            string order_type_str = (order_type == OP_BUY) ? "BUY" : "SELL";
+            Print(">> [CLOSE] SIGNAL_CHG TF=", G_TF_NAMES[tf], " S=", (strategy_index+1),
+                  " | #", ticket, " ", order_type_str, " ", DoubleToStr(order_lot, 2),
+                  " | Profit=$", DoubleToStr(order_profit, 2),
+                  " | Old:", signal_old, " New:", signal_new,
+                  " | Timestamp:", IntegerToString(timestamp_new), " <<");
+
+            CloseOrderSafely(ticket, "SIGNAL_CHANGE");
+        }
+    }
+
+    // Reset all 3 flags for this TF | Dat lai 3 co cua TF nay
+    for(int s = 0; s < 3; s++) {
+        g_ea.position_flags[tf][s] = 0;
+    }
+}
+
+// Close ALL BONUS orders across ALL 7 TF when M1 signal changes | Dong TAT CA lenh BONUS qua 7 khung khi tin hieu M1 thay doi
+// TRIGGER: M1 signal change (HasValidS2BaseCondition(0)) | KICH HOAT: Tin hieu M1 thay doi
+// ACTION: Close magic[tf][2] for ALL 7 TF | HANH DONG: Dong magic[tf][2] cho TAT CA 7 khung
+void CloseAllBonusOrders() {
+    // Scan all 7 TF magic numbers | Quet 7 khung magic
+    for(int tf = 0; tf < 7; tf++) {
+        if(!IsTFEnabled(tf)) continue;
+
+        int target_magic = g_ea.magic_numbers[tf][2];  // S3_BONUS magic
+        int closed_count = 0;
+        int total_count = 0;
+        double total_profit = 0;
+        double total_lot = 0;
+
+        // Scan all orders on MT4 | Quet tat ca lenh tren MT4
+        for(int i = OrdersTotal() - 1; i >= 0; i--) {
+            if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) continue;
+            if(OrderSymbol() != Symbol()) continue;
+
+            // If magic matches, close it | Neu magic trung, dong no
+            if(OrderMagicNumber() == target_magic) {
+                total_count++;
+                double order_profit = OrderProfit() + OrderSwap() + OrderCommission();
+                double order_lot = OrderLots();
+
+                if(CloseOrderSafely(OrderTicket(), "BONUS_M1_CLOSE")) {
+                    closed_count++;
+                    total_profit += order_profit;
+                    total_lot += order_lot;
+                }
+            }
+        }
+
+        // Consolidated log | Log tong hop
+        if(total_count > 0) {
+            Print(">> [CLOSE] BONUS_M1 TF=", G_TF_NAMES[tf],
+                  " | ", total_count, " orders Total:", DoubleToStr(total_lot, 2),
+                  " | Profit=$", DoubleToStr(total_profit, 2),
+                  " | Closed:", closed_count, "/", total_count, " <<");
+        }
+
+        g_ea.position_flags[tf][2] = 0;  // Reset BONUS flag
+    }
+}
+
+//=============================================================================
+//  PART 13: BASE CONDITION CHECK (1 function) | KIEM TRA DIEU KIEN GOC
+//=============================================================================
+
+// Check if signal changed and new signal valid | Kiem tra tin hieu co thay doi va tin hieu moi hop le
+// OPTIMIZED: Read signal/timestamp directly from csdl_rows | TOI UU: Doc tin hieu/thoi gian truc tiep tu csdl_rows
+bool HasValidS2BaseCondition(int tf) {
+    int signal_old = g_ea.signal_old[tf];
+    int signal_new = g_ea.csdl_rows[tf].signal;
+    datetime timestamp_old = g_ea.timestamp_old[tf];
+    datetime timestamp_new = (datetime)g_ea.csdl_rows[tf].timestamp;
+
+    return (signal_old != signal_new && signal_new != 0 && timestamp_old < timestamp_new);
+}
+
+//=============================================================================
+//  PART 14: STRATEGY PROCESSING (4 functions) | XU LY CHIEN LUOC
+//=============================================================================
+
+// S1 Core: Open order (DRY - shared logic for BASIC and NEWS strategies)
+void OpenS1Order(int tf, int signal, string mode) {
+    datetime timestamp = (datetime)g_ea.csdl_rows[tf].timestamp;
+    int tf_news = g_ea.csdl_rows[tf].news;
+
+    RefreshRates();
+
+    int cmd = (signal == 1) ? OP_BUY : OP_SELL;
+    double price = (signal == 1) ? Ask : Bid;
+    color clr = (signal == 1) ? clrBlue : clrRed;
+    string type_str = (signal == 1) ? "BUY" : "SELL";
+
+    int ticket = OrderSendSafe(tf, Symbol(), cmd, g_ea.lot_sizes[tf][0],
+                               price, 3,
+                               "S1_" + G_TF_NAMES[tf], g_ea.magic_numbers[tf][0], clr);
+
+    if(ticket > 0) {
+        g_ea.position_flags[tf][0] = 1;
+
+        string log_msg = ">>> [OPEN] S1_" + mode + " TF=" + G_TF_NAMES[tf] +
+                         " | #" + IntegerToString(ticket) + " " + type_str + " " +
+                         DoubleToStr(g_ea.lot_sizes[tf][0], 2) + " @" + DoubleToStr(price, Digits) +
+                         " | Sig=" + IntegerToString(signal);
+
+        if(mode == "NEWS") {
+            string arrow = (tf_news > 0) ? "↑" : "↓";
+            log_msg += " News=" + (tf_news > 0 ? "+" : "") + IntegerToString(tf_news) + arrow;
+            log_msg += " Filter:" + (S1_UseNewsFilter ? "ON" : "OFF");
+            log_msg += " Dir:" + (S1_RequireNewsDirection ? "REQ" : "ANY");
+        }
+
+        log_msg += " | Timestamp:" + IntegerToString(timestamp) + " <<<";
+        Print(log_msg);
+    } else {
+        g_ea.position_flags[tf][0] = 0;
+        Print("[S1_", mode, "_", G_TF_NAMES[tf], "] Failed: ", GetLastError());
+    }
+}
+
+// S1 BASIC: No NEWS check
+void ProcessS1BasicStrategy(int tf) {
+    int current_signal = g_ea.csdl_rows[tf].signal;
+    if(current_signal == 1 || current_signal == -1) {
+        OpenS1Order(tf, current_signal, "BASIC");
+    }
+}
+
+// S1 NEWS Filter: Check NEWS before opening order
+void ProcessS1NewsFilterStrategy(int tf) {
+    int current_signal = g_ea.csdl_rows[tf].signal;
+    int tf_news = g_ea.csdl_rows[tf].news;
+    int news_abs = MathAbs(tf_news);
+
+    // Condition 1: Check NEWS level >= MinNewsLevelS1
+    if(news_abs < MinNewsLevelS1) {
+        DebugPrint("S1_NEWS: " + G_TF_NAMES[tf] + " NEWS=" + IntegerToString(news_abs) +
+                   " < Min=" + IntegerToString(MinNewsLevelS1) + ", SKIP");
         return;
     }
 
-    Print("-------------------------------------------------------");
-    Print("   MONTHLY STATS - Calculating ", g_target_symbol, " ",
-          target_year, "-", StringFormat("%02d", target_month));
-    Print("-------------------------------------------------------");
-
-    // Calculate statistics
-    MonthlyStats stats = CalculateMonthlyStats(g_target_symbol, target_year, target_month);
-
-    // Write to file
-    WriteMonthlyStatsToFile(stats);
-
-    // Print summary
-    Print("Total Trades: ", stats.total_trades,
-          " | Win: ", stats.winning_trades,
-          " | Loss: ", stats.losing_trades);
-    Print("Net Profit: $", DoubleToString(stats.net_profit, 2),
-          " | Win Rate: ", DoubleToString(stats.win_rate, 2), "%");
-    Print("-------------------------------------------------------");
-}
-
-//==============================================================================
-//  SECTION 13: MAIN SYSTEM FUNCTIONS (7 functions) | PHAN 13: HAM HE THONG CHINH
-//==============================================================================
-
-// System initialization function | Ham khoi tao he thong
-int OnInit() {
-    // ============================================================
-    // REFACTORED OnInit() - T?O FILE R?NG TR??C KHI CÓ TÍN HI?U
-    // ============================================================
-
-    // Step 1: Discover symbol from chart
-    g_target_symbol = DiscoverSymbolFromChart();
-
-    // Step 2: Initialize symbol data
-    InitSymbolData(g_target_symbol);
-
-    // Step 3: T?O 3 TH? M?C (n?u ch?a có)
-    CreateFolderStructure();
-
-    // Step 4: TẠO FILE CSDL1 A RỖNG (nếu chưa có) - TRƯỚC KHI CÓ TÍN HIỆU
-    CreateEmptyCSDL1File();
-
-    // Step 5: COPY FILE CSDL1 C từ A (nếu chưa có) - 1 LẦN DUY NHẤT
-    CreateEmptyCSDL1FileC();
-
-    // Step 6: TẠO FILE CSDL2 A, B, C RỖNG (nếu chưa có) - TRƯỚC KHI CÓ TÍN HIỆU
-    CreateEmptyCSDL2Files();
-
-    // Step 7: Load CSDL1 vào memory (file đã tồn tại rồi, có thể rỗng hoặc có data)
-    LoadCSDL1FileIntoArray();
-
-    // Step 7.1: Print history counts after loading
-    Print("History Loaded: M1=", g_symbol_data.m1_count, " M5=", g_symbol_data.m5_count,
-          " M15=", g_symbol_data.m15_count, " M30=", g_symbol_data.m30_count,
-          " H1=", g_symbol_data.h1_count, " H4=", g_symbol_data.h4_count,
-          " D1=", g_symbol_data.d1_count);
-
-    // Step 7.2: Run monthly statistics (if 1st day of month)
-    RunMonthlyStatsOnStartup();
-
-    // Step 8: Set timer
-    EventSetTimer(Timer);
-
-    // Calculate pip and point values for display
-    double pip_value = GetPipValue(g_target_symbol);
-    double point_value = MarketInfo(g_target_symbol, MODE_POINT);
-    if(point_value <= 0) point_value = Point;
-    double usd_test = GetUSDValue(g_target_symbol, 1.0);
-
-    // Single line professional initialization message
-    Print("? [", g_target_symbol, "] SPY Init | CSDL1: OK | CSDL2: OK | 3 Folders: OK | USD:", DoubleToString(usd_test, 2), " pip:", DoubleToString(pip_value, 5), " pt:", DoubleToString(point_value, 5));
-
-    // Dashboard will be shown by OnTimer() every second (không c?n g?i ? OnInit)
-
-    // Mark system as initialized
-    g_system_initialized = true;
-
-    return INIT_SUCCEEDED;
-}
-
-// Timer event handler for periodic signal processing | Ham xu ly su kien timer cho xu ly tin hieu dinh ky
-// ============================================================
-// SECONDARY FUNCTIONS | CAC HAM PHU
-// ============================================================
-
-// Startup Reset: 1 minute after MT4 starts (1 TIME ONLY per MT4 session)
-// GlobalVariable lost when MT4 closes, survives indicator reload
-void RunStartupReset() {
-    if(!EnableStartupReset) return;
-
-    string gv_done = g_target_symbol + "_StartupResetDone";
-    string gv_time = g_target_symbol + "_StartupInitTime";
-
-    // Create init time if not exists
-    if(!GlobalVariableCheck(gv_time)) {
-        GlobalVariableSet(gv_time, TimeCurrent());
-    }
-
-    // If not done (!=1) AND elapsed >= 60s -> Reset and mark done
-    if((!GlobalVariableCheck(gv_done) || GlobalVariableGet(gv_done) != 1) &&
-       (TimeCurrent() - GlobalVariableGet(gv_time) >= 60)) {
-        Print("StartupReset: ", g_target_symbol, " | 1 min after MT4 start");
-        SmartTFReset();
-        GlobalVariableSet(gv_done, 1);
-    }
-}
-
-// Midnight Reset & Health Check
-void RunMidnightAndHealthCheck() {
-    int current_hour = TimeHour(TimeCurrent());
-    static int last_check_hour = -2;  // Init != -1 to allow first check
-
-    // Midnight Reset: Only at 0h daily
-    if(EnableMidnightReset && current_hour == 0 && current_hour != last_check_hour) {
-        MidnightReset();
-        last_check_hour = current_hour;
-    }
-
-    // Health Check: Only at 8h and 16h
-    if(EnableHealthCheck &&
-       (current_hour == 8 || current_hour == 16) &&
-       current_hour != last_check_hour) {
-        HealthCheck();
-        last_check_hour = current_hour;
-    }
-}
-
-// Dashboard Update
-void RunDashboardUpdate() {
-    // Dashboard updates every even second (no additional cycle check needed)
-    // Giây chẵn đã đủ để cập nhật dashboard mượt mà
-    PrintDashboard();
-}
-
-// Process All Signals (7 TF)
-void ProcessAllSignals() {
-    int timeframes[7] = {1, 5, 15, 30, 60, 240, 1440};
-    string tf_names[7] = {"M1", "M5", "M15", "M30", "H1", "H4", "D1"};
-
-    for(int i = 0; i < 7; i++) {
-        // Check GlobalVariable from WallStreet
-        string signal_var = g_target_symbol + "_" + tf_names[i] + "_SignalType1";
-        string time_var = g_target_symbol + "_" + tf_names[i] + "_LastSignalTime";
-
-        if(!GlobalVariableCheck(signal_var) || !GlobalVariableCheck(time_var)) continue;
-
-        int current_signal = (int)GlobalVariableGet(signal_var);
-        long current_signal_time = (long)GlobalVariableGet(time_var);
-
-        // KIEM TRA: signal MOI != 0 && signal MOI != signal CU && time MOI > time CU -> TẮT: current_signal != g_symbol_data.signals[i]
-        if(current_signal != 0 &&
-//           current_signal != g_symbol_data.signals[i] &&
-           current_signal_time > g_symbol_data.processed_timestamps[i]) {
-            ProcessSignalForTF(i, current_signal, current_signal_time);
+    // Condition 2: Check NEWS direction matches signal (if required)
+    if(S1_RequireNewsDirection) {
+        int news_direction = (tf_news > 0) ? 1 : -1;
+        if(current_signal != news_direction) {
+            DebugPrint("S1_NEWS: " + G_TF_NAMES[tf] + " Signal=" + IntegerToString(current_signal) +
+                       " != NewsDir=" + IntegerToString(news_direction) + ", SKIP");
+            return;
         }
     }
+
+    // PASS all conditions → Open order
+    if(current_signal == 1 || current_signal == -1) {
+        OpenS1Order(tf, current_signal, "NEWS");
+    }
 }
 
-// ============================================================
-// MAIN TIMER FUNCTION | HAM TIMER CHINH
-// ============================================================
-
-void OnTimer() {
-    if(!g_system_initialized) return;
-
-    int current_second = TimeSeconds(TimeCurrent());
-
-    // ========================================
-    // CHUC NANG CHINH: XU LY TIN HIEU 7 TF
-    // ========================================
-    if(ProcessSignalOnOddSecond) {
-        // MODE: Xu ly GIAY LE (1, 3, 5, 7, 9...)
-        if(current_second % 2 == 1) {
-            ProcessAllSignals();  // Ghi CSDL1 (A,C) + CSDL2 (A,B,C)
-        }
+// S1 Strategy Router: Call appropriate function based on filter setting | Bo dinh tuyen S1: Goi ham tuong ung theo cai dat
+void ProcessS1Strategy(int tf) {
+    if(S1_UseNewsFilter) {
+        ProcessS1NewsFilterStrategy(tf);
     } else {
-        // MODE: Xu ly MOI GIAY (0, 1, 2, 3, 4...)
-        ProcessAllSignals();  // Ghi CSDL1 (A,C) + CSDL2 (A,B,C)
-    }
-
-    // ========================================
-    // CHUC NANG PHU: LUON CHAY GIAY CHAN
-    // (KHONG LIEN QUAN MODE CHINH)
-    // ========================================
-    if(current_second % 2 == 0) {  // Giay chan (0, 2, 4, 6, 8...)
-        UpdateLiveNEWS();            // Update NEWS LIVE (cot 9) - doc lap signal WT
-        RunStartupReset();
-        RunMidnightAndHealthCheck();
-        RunDashboardUpdate();
+        ProcessS1BasicStrategy(tf);
     }
 }
 
-// Check if chart window exists with specific symbol and timeframe | Kiem tra cua so bieu do ton tai voi symbol va khung thoi gian cu the
-bool IsChartOpenWithSymbolAndTimeframe(string target_symbol, int target_timeframe) {
-    long chart_id = ChartFirst();
+// Process S2 (Trend Following) strategy for TF | Xu ly chien luoc S2 (Theo xu huong)
+// OPTIMIZED: Uses single g_trend_d1 + pre-calculated lot + reads signal from CSDL | TOI UU: Dung g_trend_d1 don + lot da tinh + doc tin hieu tu CSDL
+// ENHANCED: Support 3 modes (auto D1 / force BUY / force SELL) | CAI TIEN: Ho tro 3 che do (tu dong D1 / chi BUY / chi SELL)
+void ProcessS2Strategy(int tf) {
+    int current_signal = g_ea.csdl_rows[tf].signal;
+    datetime timestamp = (datetime)g_ea.csdl_rows[tf].timestamp;
 
-    while(chart_id >= 0) {
-        string chart_symbol = ChartSymbol(chart_id);
-        int chart_period = ChartPeriod(chart_id);
+    // NEW: Determine trend based on mode | Xac dinh xu huong theo che do
+    int trend_to_follow = 0;
 
-        bool timeframe_match = false;
+    if(S2_TrendMode == S2_FOLLOW_D1) {
+        trend_to_follow = g_ea.trend_d1;  // Follow D1 trend (auto) | Theo xu huong D1 (tu dong)
+    }
+    else if(S2_TrendMode == S2_FORCE_BUY) {
+        trend_to_follow = 1;  // Force BUY only | Chi danh BUY
+    }
+    else if(S2_TrendMode == S2_FORCE_SELL) {
+        trend_to_follow = -1;  // Force SELL only | Chi danh SELL
+    }
 
-        if(target_timeframe == 240) {
-            if(chart_period >= 240) {
-                timeframe_match = true;
-            }
+    // Check signal matches trend | Kiem tra tin hieu khop voi xu huong
+    if(current_signal != trend_to_follow) {
+        DebugPrint("S2_TREND: Signal=" + IntegerToString(current_signal) +
+                   " != Trend=" + IntegerToString(trend_to_follow) + ", skip");
+        return;
+    }
+
+    RefreshRates();
+
+    
+
+    if(current_signal == 1) {
+        int ticket = OrderSendSafe(tf, Symbol(), OP_BUY, g_ea.lot_sizes[tf][1],
+                                   Ask, 3,
+                                   "S2_" + G_TF_NAMES[tf], g_ea.magic_numbers[tf][1], clrBlue);
+        if(ticket > 0) {
+            g_ea.position_flags[tf][1] = 1;
+            string trend_str = trend_to_follow == 1 ? "UP" : "DOWN";
+            string mode_str = (S2_TrendMode == 0) ? "AUTO" : (S2_TrendMode == 1) ? "FBUY" : "FSELL";
+            Print(">>> [OPEN] S2_TREND TF=", G_TF_NAMES[tf], " | #", ticket, " BUY ",
+                  DoubleToStr(g_ea.lot_sizes[tf][1], 2), " @", DoubleToStr(Ask, Digits),
+                  " | Sig=+1 Trend:", trend_str, " Mode:", mode_str, " | Timestamp:", IntegerToString(timestamp), " <<<");
         } else {
-            if(chart_period == target_timeframe) {
-                timeframe_match = true;
+            g_ea.position_flags[tf][1] = 0;
+            Print("[S2_", G_TF_NAMES[tf], "] Failed: ", GetLastError());
+        }
+    }
+    else if(current_signal == -1) {
+        int ticket = OrderSendSafe(tf, Symbol(), OP_SELL, g_ea.lot_sizes[tf][1],
+                                   Bid, 3,
+                                   "S2_" + G_TF_NAMES[tf], g_ea.magic_numbers[tf][1], clrRed);
+        if(ticket > 0) {
+            g_ea.position_flags[tf][1] = 1;
+            string trend_str = trend_to_follow == -1 ? "DOWN" : "UP";
+            string mode_str = (S2_TrendMode == 0) ? "AUTO" : (S2_TrendMode == 1) ? "FBUY" : "FSELL";
+            Print(">>> [OPEN] S2_TREND TF=", G_TF_NAMES[tf], " | #", ticket, " SELL ",
+                  DoubleToStr(g_ea.lot_sizes[tf][1], 2), " @", DoubleToStr(Bid, Digits),
+                  " | Sig=-1 Trend:", trend_str, " Mode:", mode_str, " | Timestamp:", IntegerToString(timestamp), " <<<");
+        } else {
+            g_ea.position_flags[tf][1] = 0;
+            Print("[S2_", G_TF_NAMES[tf], "] Failed: ", GetLastError());
+        }
+    }
+}
+
+// Process S3 (News Alignment) strategy for TF | Xu ly chien luoc S3 (Theo tin tuc)
+// OPTIMIZED: Uses per-TF NEWS + pre-calculated lot + reads signal from CSDL | TOI UU: Dung NEWS theo TF + lot da tinh + doc tin hieu tu CSDL
+void ProcessS3Strategy(int tf) {
+    // Read NEWS for this TF | Doc NEWS cua TF nay
+    int tf_news = g_ea.csdl_rows[tf].news;
+    int news_abs = MathAbs(tf_news);
+    datetime timestamp = (datetime)g_ea.csdl_rows[tf].timestamp;
+
+    // Check NEWS level >= MinNewsLevelS3 | Kiem tra muc NEWS >= nguong
+    if(news_abs < MinNewsLevelS3) {
+        DebugPrint("S3_NEWS: TF" + IntegerToString(tf) + " NEWS=" + IntegerToString(news_abs) + " < " + IntegerToString(MinNewsLevelS3) + ", skip");
+        return;
+    }
+
+    // Check NEWS direction matches signal | Kiem tra huong NEWS khop signal
+    int news_direction = (tf_news > 0) ? 1 : -1;
+    int current_signal = g_ea.csdl_rows[tf].signal;
+
+    if(current_signal != news_direction) {
+        DebugPrint("S3_NEWS: Signal=" + IntegerToString(current_signal) + " != NewsDir=" + IntegerToString(news_direction) + ", skip");
+        return;
+    }
+
+    RefreshRates();
+
+    
+
+    if(current_signal == 1) {
+        int ticket = OrderSendSafe(tf, Symbol(), OP_BUY, g_ea.lot_sizes[tf][2],
+                                   Ask, 3,
+                                   "S3_" + G_TF_NAMES[tf], g_ea.magic_numbers[tf][2], clrBlue);
+        if(ticket > 0) {
+            g_ea.position_flags[tf][2] = 1;
+            string arrow = (tf_news > 0) ? "↑" : "↓";
+            Print(">>> [OPEN] S3_NEWS TF=", G_TF_NAMES[tf], " | #", ticket, " BUY ",
+                  DoubleToStr(g_ea.lot_sizes[tf][2], 2), " @", DoubleToStr(Ask, Digits),
+                  " | Sig=+1 News=", tf_news > 0 ? "+" : "", tf_news, arrow, " | Timestamp:", IntegerToString(timestamp), " <<<");
+        } else {
+            g_ea.position_flags[tf][2] = 0;
+            Print("[S3_", G_TF_NAMES[tf], "] Failed: ", GetLastError());
+        }
+    }
+    else if(current_signal == -1) {
+        int ticket = OrderSendSafe(tf, Symbol(), OP_SELL, g_ea.lot_sizes[tf][2],
+                                   Bid, 3,
+                                   "S3_" + G_TF_NAMES[tf], g_ea.magic_numbers[tf][2], clrRed);
+        if(ticket > 0) {
+            g_ea.position_flags[tf][2] = 1;
+            string arrow = (tf_news > 0) ? "↑" : "↓";
+            Print(">>> [OPEN] S3_NEWS TF=", G_TF_NAMES[tf], " | #", ticket, " SELL ",
+                  DoubleToStr(g_ea.lot_sizes[tf][2], 2), " @", DoubleToStr(Bid, Digits),
+                  " | Sig=-1 News=", tf_news > 0 ? "+" : "", tf_news, arrow, " | Timestamp:", IntegerToString(timestamp), " <<<");
+        } else {
+            g_ea.position_flags[tf][2] = 0;
+            Print("[S3_", G_TF_NAMES[tf], "] Failed: ", GetLastError());
+        }
+    }
+}
+
+// Process Bonus NEWS - Scan all 7 TF and open multiple orders if NEWS detected
+// Xu ly tin tuc Bonus - Quet 7 TF va mo nhieu lenh neu phat hien tin tuc
+void ProcessBonusNews() {
+    if(!EnableBonusNews) return;
+
+    
+
+    // Scan all 7 TF | Quet tat ca 7 TF
+    for(int tf = 0; tf < 7; tf++) {
+        // BUGFIX: Skip if TF disabled | Bo qua neu TF bi tat
+        if(!IsTFEnabled(tf)) continue;
+
+        int tf_news = g_ea.csdl_rows[tf].news;
+        int news_abs = MathAbs(tf_news);
+
+        // Skip if NEWS below threshold | Bo qua neu NEWS duoi nguong
+        if(news_abs < MinNewsLevelBonus) continue;
+
+        // Determine direction | Xac dinh huong
+        int news_direction = (tf_news > 0) ? 1 : -1;
+
+        // Calculate BONUS lot (S3 lot × multiplier) | Tinh lot BONUS (lot S3 × he so nhan)
+        double bonus_lot = g_ea.lot_sizes[tf][2] * BonusLotMultiplier;
+
+        RefreshRates();
+
+        // Open BonusOrderCount orders | Mo so luong lenh Bonus
+        int opened_count = 0;
+        string ticket_list = "";
+        double entry_price = 0;
+
+        for(int count = 0; count < BonusOrderCount; count++) {
+            if(news_direction == 1) {
+                int ticket = OrderSendSafe(tf, Symbol(), OP_BUY, bonus_lot,
+                                           Ask, 3,
+                                           "BONUS_" + G_TF_NAMES[tf], g_ea.magic_numbers[tf][2], clrGold);
+                if(ticket > 0) {
+                    opened_count++;
+                    if(ticket_list != "") ticket_list = ticket_list + ",";
+                    ticket_list = ticket_list + IntegerToString(ticket);
+                    if(entry_price == 0) entry_price = Ask;
+                }
+            } else {
+                int ticket = OrderSendSafe(tf, Symbol(), OP_SELL, bonus_lot,
+                                           Bid, 3,
+                                           "BONUS_" + G_TF_NAMES[tf], g_ea.magic_numbers[tf][2], clrOrange);
+                if(ticket > 0) {
+                    opened_count++;
+                    if(ticket_list != "") ticket_list = ticket_list + ",";
+                    ticket_list = ticket_list + IntegerToString(ticket);
+                    if(entry_price == 0) entry_price = Bid;
+                }
             }
         }
 
-        if(chart_symbol == target_symbol && timeframe_match) {
-            return true;
+        // Consolidated log after loop | Log tong ket sau vong lap
+        if(opened_count > 0) {
+            string arrow = (tf_news > 0) ? "↑" : "↓";
+            double total_lot = opened_count * bonus_lot;
+            Print(">>> [OPEN] BONUS TF=", G_TF_NAMES[tf], " | ", opened_count, "×",
+                  news_direction == 1 ? "BUY" : "SELL", " @", DoubleToStr(bonus_lot, 2),
+                  " Total:", DoubleToStr(total_lot, 2), " @", DoubleToStr(entry_price, Digits),
+                  " | News=", tf_news > 0 ? "+" : "", tf_news, arrow,
+                  " | Multiplier:", DoubleToStr(BonusLotMultiplier, 1), "x",
+                  " Tickets:", ticket_list, " <<<");
         }
-
-        chart_id = ChartNext(chart_id);
-    }
-
-    return false;
-}
-
-// Convert period constant to timeframe string name | Chuyen hang so chu ky thanh ten chuoi khung thoi gian
-string PeriodToString(int period) {
-    switch(period) {
-        case PERIOD_M1:  return "M1";
-        case PERIOD_M5:  return "M5";
-        case PERIOD_M15: return "M15";
-        case PERIOD_M30: return "M30";
-        case PERIOD_H1:  return "H1";
-        case PERIOD_H4:  return "H4";
-        case PERIOD_D1:  return "D1";
-        default: return "Unknown";
     }
 }
 
-// Smart timeframe reset for all charts of current symbol | Reset thong minh khung thoi gian cho tat ca bieu do symbol hien tai
+//=============================================================================
+//  PART 15: STOPLOSS CHECKS (2 functions) | KIEM TRA CAT LO
+//=============================================================================
+
+// Check stoploss & take profit for all 21 orders | Kiem tra cat lo & chot loi cho 21 lenh
+// Stoploss: 2 layers (LAYER1, LAYER2) | Cat lo: 2 tang
+// Take profit: 1 layer (based on max_loss × multiplier) | Chot loi: 1 tang (dua tren max_loss × he so)
+void CheckStoplossAndTakeProfit() {
+    if(OrdersTotal() == 0) return;
+
+    // Scan all orders once | Quet tat ca lenh 1 lan duy nhat
+    for(int i = OrdersTotal() - 1; i >= 0; i--) {
+        if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) continue;
+        if(OrderSymbol() != Symbol()) continue;
+
+        int magic = OrderMagicNumber();
+        int ticket = OrderTicket();
+        double profit = OrderProfit() + OrderSwap() + OrderCommission();
+
+        // Find TF + Strategy from magic | Tim TF + Chien luoc tu magic
+        bool found = false;
+        for(int tf = 0; tf < 7; tf++) {
+            for(int s = 0; s < 3; s++) {
+                if(magic == g_ea.magic_numbers[tf][s] &&
+                   g_ea.position_flags[tf][s] == 1) {
+
+                    
+                    
+                    bool order_closed = false;
+
+                    // ===== SECTION 1: STOPLOSS (2 layers) =====
+                    if(StoplossMode != NONE) {
+                        double sl_threshold = 0.0;
+                        string mode_name = "";
+
+                        if(StoplossMode == LAYER1_MAXLOSS) {
+                            // Layer1: Use pre-calculated threshold (max_loss × lot) | Dung nguong da tinh (max_loss × lot)
+                            sl_threshold = g_ea.layer1_thresholds[tf][s];
+                            mode_name = "LAYER1_SL";
+                        }
+                        else if(StoplossMode == LAYER2_MARGIN) {
+                            // Layer2: Calculate from margin (emergency) | Tinh tu margin (khan cap)
+                            double margin_usd = OrderLots() * MarketInfo(Symbol(), MODE_MARGINREQUIRED);
+                            sl_threshold = -(margin_usd / Layer2_Divisor);
+                            mode_name = "LAYER2_SL";
+                        }
+
+                        // Check and close if loss exceeds threshold | Kiem tra va dong neu lo vuot nguong
+                        if(profit <= sl_threshold) {
+                            string short_mode = (mode_name == "LAYER1_SL") ? "L1_SL" : "L2_SL";
+                            string order_type_str = (OrderType() == OP_BUY) ? "BUY" : "SELL";
+                            string margin_info = "";
+                            if(mode_name == "LAYER2_SL") {
+                                double margin_usd = OrderLots() * MarketInfo(Symbol(), MODE_MARGINREQUIRED);
+                                margin_info = " Margin=$" + DoubleToStr(margin_usd, 2);
+                            }
+                            Print(">> [CLOSE] ", short_mode, " TF=", G_TF_NAMES[tf], " S=", (s+1),
+                                  " | #", ticket, " ", order_type_str, " ", DoubleToStr(OrderLots(), 2),
+                                  " | Loss=$", DoubleToStr(profit, 2),
+                                  " | Threshold=$", DoubleToStr(sl_threshold, 2), margin_info, " <<");
+
+                            if(CloseOrderSafely(ticket, mode_name)) {
+                                g_ea.position_flags[tf][s] = 0;
+                                order_closed = true;
+                            }
+                        }
+                    }
+
+                    // ===== SECTION 2: TAKE PROFIT (1 layer) =====
+                    // Only check if order wasn't closed by stoploss | Chi kiem tra neu chua bi dong boi stoploss
+                    if(!order_closed && UseTakeProfit) {
+                        // Calculate TP threshold from max_loss | Tinh nguong TP tu max_loss
+                        double max_loss_per_lot = MathAbs(g_ea.csdl_rows[tf].max_loss);
+                        if(max_loss_per_lot < 1.0) {
+                            max_loss_per_lot = MathAbs(MaxLoss_Fallback);  // 1000
+                        }
+
+                        double tp_threshold = (max_loss_per_lot * g_ea.lot_sizes[tf][s]) * TakeProfit_Multiplier;
+
+                        // Check and close if profit exceeds threshold | Kiem tra va dong neu loi vuot nguong
+                        if(profit >= tp_threshold) {
+                            string order_type_str = (OrderType() == OP_BUY) ? "BUY" : "SELL";
+                            Print(">> [CLOSE] TP TF=", G_TF_NAMES[tf], " S=", (s+1),
+                                  " | #", ticket, " ", order_type_str, " ", DoubleToStr(OrderLots(), 2),
+                                  " | Profit=$", DoubleToStr(profit, 2),
+                                  " | Threshold=$", DoubleToStr(tp_threshold, 2),
+                                  " Mult=", DoubleToStr(TakeProfit_Multiplier, 2), " <<");
+
+                            if(CloseOrderSafely(ticket, "TAKE_PROFIT")) {
+                                g_ea.position_flags[tf][s] = 0;
+                            }
+                        }
+                    }
+
+                    found = true;
+                    break;
+                }
+            }
+            if(found) break;
+        }
+    }
+}
+
+//=============================================================================
+//  PART 16: EMERGENCY (1 function) | KIEM TRA KHAN CAP
+//=============================================================================
+
+// Check emergency conditions (drawdown) - log only | Kiem tra dieu kien khan cap - chi ghi nhan
+void CheckAllEmergencyConditions() {
+    double equity = AccountEquity();
+    double balance = AccountBalance();
+
+    if(balance > 0) {
+        double drawdown_percent = ((balance - equity) / balance) * 100;
+
+        if(drawdown_percent > 25.0) {
+            Print("[WARNING] Drawdown: ", DoubleToStr(drawdown_percent, 2), "%");
+        }
+    }
+}
+
+//=============================================================================
+//  PART 17: HEALTH CHECK & RESET (4 functions) | KIEM TRA SUC KHOE VA RESET
+//=============================================================================
+
+// Smart TF reset for all charts of current symbol (learned from SPY Bot) | Reset thong minh cho tat ca chart cung symbol (hoc tu SPY Bot)
+// Resets OTHER charts first, then CURRENT chart last (important for D1 SPY Bot recognition) | Reset cac chart KHAC truoc, chart HIEN TAI cuoi (quan trong cho SPY Bot nhan dien)
 void SmartTFReset() {
-    // Get current chart info | Lay thong tin chart hien tai
+    Print("=======================================================");
+    Print("[SMART_TF_RESET] Resetting all charts of ", g_ea.symbol_name, "...");
+    Print("=======================================================");
+
     string current_symbol = Symbol();
     int current_period = Period();
     long current_chart_id = ChartID();
 
-    // Step 1: Tim tat ca charts KHAC cua symbol nay (KHONG bao gom chart hien tai)
+    // Step 1: Find all OTHER charts of SAME symbol (not including current chart) | Tim tat ca chart KHAC cung symbol (khong bao gom chart hien tai)
     int total_charts = 0;
-    long chart_ids[];
-    ArrayResize(chart_ids, 10);
+    long chart_ids[10];
+    ArrayInitialize(chart_ids, 0);
 
     long temp_chart = ChartFirst();
     while(temp_chart >= 0) {
+        // ONLY reset charts with SAME symbol (important for multi-symbol setup!) | CHI reset chart CUNG symbol (quan trong cho nhieu symbol!)
         if(ChartSymbol(temp_chart) == current_symbol && temp_chart != current_chart_id) {
             chart_ids[total_charts] = temp_chart;
             total_charts++;
@@ -2821,96 +1400,651 @@ void SmartTFReset() {
         temp_chart = ChartNext(temp_chart);
     }
 
-    // Step 2: Reset 6 TF con lai TRUOC (W1 -> original TF, delay 2s)
+    // Step 2: Reset OTHER charts FIRST (6 charts: M1/M5/M15/M30/H1/H4 or M5/M15/M30/H1/H4/D1) | Reset cac chart KHAC TRUOC
     for(int i = 0; i < total_charts; i++) {
         int other_period = ChartPeriod(chart_ids[i]);
+        Print("[RESET] Step ", (i+1), "/", total_charts, ": Chart TF ", other_period, " (via W1)...");
+
         ChartSetSymbolPeriod(chart_ids[i], current_symbol, PERIOD_W1);
-        Sleep(2000);  // Delay 2s (slower for MT4 stability)
+        Sleep(1000);
         ChartSetSymbolPeriod(chart_ids[i], current_symbol, other_period);
-        Sleep(2000);  // Delay 2s (slower for MT4 stability)
+        Sleep(1000);
     }
 
-    // Step 3: Reset chart HIEN TAI CUOI CUNG (de nhan dien lai 6 TF con lai)
+    // Step 3: Reset CURRENT chart LAST (important: D1 chart with SPY Bot must be last!) | Reset chart HIEN TAI CUOI CUNG (quan trong: D1 co SPY Bot phai cuoi!)
+    Print("[RESET] Step ", (total_charts+1), "/", (total_charts+1), ": Current chart TF ", current_period, " (LAST - via W1)...");
     ChartSetSymbolPeriod(current_chart_id, current_symbol, PERIOD_W1);
-    Sleep(2000);  // Delay 2s (slower for MT4 stability)
+    Sleep(1000);
     ChartSetSymbolPeriod(current_chart_id, current_symbol, current_period);
-    Sleep(2000);  // Delay 2s (slower for MT4 stability)
+    Sleep(1000);
 
-    Print("SmartTFReset: ", current_symbol, " | ", (total_charts + 1), " charts reset");
+    Print("[SMART_TF_RESET] ? Completed! ", (total_charts + 1), " charts reset");
+    Print("=======================================================");
 }
 
-// Health check for CSDL1 file activity (called at 8h and 16h) | Kiem tra hoat dong file CSDL1 (goi luc 8h va 16h)
-void HealthCheck() {
-    // Check CSDL1 file modification time | Kiem tra thoi gian sua doi file CSDL1
-    string csdl1_file = DataFolder + g_target_symbol + ".json";
+// Weekend reset (Saturday 00:03) - Trigger SmartTFReset | Reset cuoi tuan - Goi SmartTFReset
+// ONLY M1 chart has permission to reset (master chart) | CHI chart M1 co quyen reset (chart master)
+// Time: 00:03 to AVOID conflict with SPY Bot reset at 00:00 | Gio: 00:03 de TRANH xung dot voi SPY Bot reset luc 00:00
+void CheckWeekendReset() {
+    // Check if feature is enabled by user | Kiem tra tinh nang co duoc bat boi user
+    if(!EnableWeekendReset) return;
 
-    int handle = FileOpen(csdl1_file, FILE_READ|FILE_TXT|FILE_SHARE_READ);
-    if(handle == INVALID_HANDLE) {
-        Print("HealthCheck: Cannot open CSDL1 file!");
-        return;
-    }
+    // ONLY M1 chart can trigger reset (to avoid conflict) | CHI chart M1 moi duoc trigger reset (tranh xung dot)
+    if(Period() != PERIOD_M1) return;
 
-    datetime current_modified = (datetime)FileGetInteger(handle, FILE_MODIFY_DATE);
-    FileClose(handle);
+    datetime current_time = TimeCurrent();
+    int day_of_week = TimeDayOfWeek(current_time);
+    int hour = TimeHour(current_time);
+    int minute = TimeMinute(current_time);
 
-    // First run - just save timestamp | Lan dau - chi luu timestamp
-    if(g_last_csdl1_modified == 0) {
-        g_last_csdl1_modified = current_modified;
-        return;
-    }
+    // Only on Saturday (6) at 0h:01 (minute 01 exactly) | Chi vao Thu 7 luc 0h:01 (phut 01 chinh xac)
+    // IMPORTANT: NOT 0h:00 to avoid conflict with SPY Bot! | QUAN TRONG: KHONG 0h:00 de tranh xung dot voi SPY Bot!
+    if(day_of_week != 6 || hour != 0 || minute != 3) return;
 
-    // Check if file unchanged (bot stuck) | Kiem tra file khong doi (bot treo)
-    if(current_modified == g_last_csdl1_modified) {
-        Print("HealthCheck: ", g_target_symbol, " STUCK | Auto-reset triggered");
-        Alert("Bot SPY stuck - Auto reset!");
-        SmartTFReset();
-        g_last_csdl1_modified = TimeCurrent();
+    // Prevent duplicate reset (once per day) | Tranh reset trung lap (1 lan moi ngay)
+    int current_day = TimeDay(current_time);
+    if(current_day == g_ea.weekend_last_day) return;  // Already reset today | Da reset hom nay roi
+
+    Print("[WEEKEND_RESET] Saturday 00:03 - M1 chart triggering weekly reset...");
+    Print("[WEEKEND_RESET] (Delayed 3 minute to avoid SPY Bot conflict at 00:00)");
+
+    SmartTFReset();  // Call smart reset for all charts | Goi reset thong minh cho tat ca charts
+
+    g_ea.weekend_last_day = current_day;
+    Print("[WEEKEND_RESET] ? Weekly reset completed!");
+}
+
+// Health check SPY Bot (8h/16h only, NOT 24h) | Kiem tra suc khoe SPY Bot (chi 8h va 16h, KHONG 24h)
+// ONLY M1 chart has permission to check and reset (master chart) | CHI chart M1 co quyen kiem tra va reset (chart master)
+void CheckSPYBotHealth() {
+    // Check if feature is enabled by user | Kiem tra tinh nang co duoc bat boi user
+    if(!EnableHealthCheck) return;
+
+    // ONLY M1 chart can check health (to avoid conflict) | CHI chart M1 moi duoc kiem tra (tranh xung dot)
+    if(Period() != PERIOD_M1) return;
+
+    datetime current_time = TimeCurrent();
+    int hour = TimeHour(current_time);
+
+    // Only check at 8h & 16h (NOT 24h - conflicts with weekend reset) | Chi kiem tra 8h va 16h (KHONG 24h - trung voi weekend reset)
+    if(hour != 8 && hour != 16) return;
+
+    // Prevent duplicate check (once per hour) | Tranh kiem tra trung lap (1 lan moi gio)
+    if(hour == g_ea.health_last_check_hour) return;
+    g_ea.health_last_check_hour = hour;
+
+    // Get M1 timestamp from CSDL (already available) | Lay timestamp M1 tu CSDL (da co san)
+    datetime m1_timestamp = g_ea.timestamp_old[0];
+
+    // Calculate time difference | Tinh chenh lech thoi gian
+    int diff_seconds = (int)(current_time - m1_timestamp);
+    int diff_hours = diff_seconds / 3600;
+    int diff_minutes = (diff_seconds % 3600) / 60;
+
+    Print("[HEALTH_CHECK] Time: ", hour, "h00 | CSDL last update: ", diff_hours, "h", diff_minutes, "m ago");
+
+    // If diff > 8 hours (28800 seconds) ? SPY Bot frozen! | Neu chenh lech > 8 gio ? SPY Bot treo!
+    if(diff_seconds > 28800) {
+        Print("[HEALTH_CHECK] ? SPY Bot FROZEN!");
+        Print("[HEALTH_CHECK] Server time: ", TimeToStr(current_time, TIME_DATE|TIME_SECONDS));
+        Print("[HEALTH_CHECK] Last CSDL update: ", TimeToStr(m1_timestamp, TIME_DATE|TIME_SECONDS));
+        Print("[HEALTH_CHECK] M1 chart triggering Smart TF Reset...");
+
+        Alert("?? SPY Bot frozen! Auto-reset all ", g_ea.symbol_name, " charts!");
+
+        SmartTFReset();  // Call smart reset for all charts | Goi reset thong minh cho tat ca charts
+
+        Print("[HEALTH_CHECK] ? Reset completed");
+
     } else {
-        g_last_csdl1_modified = current_modified;
+        Print("[HEALTH_CHECK] ? SPY Bot OK - Recent activity detected");
     }
 }
 
-// Midnight reset at 0h daily with smart TF reset | Reset luc nua dem 0h hang ngay voi reset TF thong minh
-void MidnightReset() {
-    if(!EnableMidnightReset) return;
+//=============================================================================
+//  PART 18: MAIN EA FUNCTIONS (3 functions) | HAM CHINH CUA EA
+//=============================================================================
 
-    static int last_day = 99;  // Init != -1 to prevent first-time trigger
-    int current_day = TimeDay(TimeCurrent());
+// EA initialization - setup all components | Khoi tao EA - cai dat tat ca thanh phan
+// OPTIMIZED V3.4: Struct-based data isolation for multi-symbol support | TOI UU: Cach ly du lieu theo struct cho da ky hieu
+int OnInit() {
+    // PART 1: Symbol recognition | Nhan dien ky hieu
+    if(!InitializeSymbolRecognition()) return(INIT_FAILED);
+    InitializeSymbolPrefix();
 
-    // Check if new day (0h crossed) | Kiem tra neu sang ngay moi (qua 0h)
-    if(current_day != last_day && TimeHour(TimeCurrent()) == 0) {
-        Print("MidnightReset: ", g_target_symbol, " | New day started");
-        SmartTFReset();
-        last_day = current_day;
+    // PART 2: Folder selection (only for local file mode) | Chon thu muc (chi cho che do file local)
+    if(CSDL_Source == FOLDER_1) g_ea.csdl_folder = "DataAutoOner\\";
+    else if(CSDL_Source == FOLDER_2) g_ea.csdl_folder = "DataAutoOner2\\";
+    else if(CSDL_Source == FOLDER_3) g_ea.csdl_folder = "DataAutoOner3\\";
+    else g_ea.csdl_folder = "DataAutoOner2\\";  // Fallback to FOLDER_2
+
+    // PART 3: Build filename & Read file | Xay dung ten file va doc file
+    BuildCSDLFilename();
+    ReadCSDLFile();
+
+    // PART 4: Generate magic numbers | Tao so hieu lenh
+    if(!GenerateMagicNumbers()) return(INIT_FAILED);
+
+    // PART 5: Pre-calculate all 21 lot sizes ONCE | Tinh truoc 21 khoi luong MOT LAN
+    InitializeLotSizes();
+
+    // PART 6: Initialize Layer1 thresholds (uses pre-calculated lots) | Khoi tao nguong cat lo (dung lot da tinh)
+    InitializeLayer1Thresholds();
+
+    // PART 7: Map CSDL variables (includes TREND/NEWS optimization) | Anh xa bien CSDL (bao gom toi uu TREND/NEWS)
+    MapCSDLToEAVariables();
+
+    // PART 7B: ?? CRITICAL FIX - Reset ALL auxiliary flags to prevent ZOMBIE variables | Dat lai TAT CA co phu tranh bien zombie
+    // MQL4 does NOT auto-reset global variables on EA restart | MQL4 KHONG tu dong reset bien toan cuc khi EA khoi dong lai
+    // If EA was killed (crash/user stop), old flag values may persist | Neu EA bi tat ngang, gia tri co cu co the con ton tai
+    // This causes ZOMBIE orders: flag=1 but order doesn't exist, or TF disabled but flag still set | Gay lenh zombie: co=1 nhung lenh khong ton tai, hoac TF tat nhung co van = 1
+    for(int tf = 0; tf < 7; tf++) {
+        for(int s = 0; s < 3; s++) {
+            g_ea.position_flags[tf][s] = 0;
+        }
     }
+
+    // Initialize global state vars (prevent multi-symbol conflicts) | Khoi tao bien trang thai (tranh xung dot da symbol)
+    g_ea.first_run_completed = false;
+    g_ea.weekend_last_day = -1;
+    g_ea.health_last_check_hour = -1;
+    g_ea.timer_last_run_time = 0;
+
+    DebugPrint("[RESET] All position flags (21) & state vars reset to 0");
+
+    // PART 8: Set BASELINE (only old) - FOR ALL 7 TF | Dat moc ban dau cho 7 khung
+    for(int tf = 0; tf < 7; tf++) {
+        g_ea.signal_old[tf] = g_ea.csdl_rows[tf].signal;
+        g_ea.timestamp_old[tf] = (datetime)g_ea.csdl_rows[tf].timestamp;
+    }
+
+    // PART 8B: Build compact startup summary BEFORE RESTORE | Tao tom tat khoi dong TRUOC KHI RESTORE
+    // This must be done BEFORE RestoreOrCleanupPositions() so it can print final summary | Phai lam TRUOC RestoreOrCleanupPositions() de in tom tat cuoi cung
+    string tf_status = "";
+    int tf_count = 0;
+    if(TF_M1) { tf_status += "M1,"; tf_count++; }
+    if(TF_M5) { tf_status += "M5,"; tf_count++; }
+    if(TF_M15) { tf_status += "M15,"; tf_count++; }
+    if(TF_M30) { tf_status += "M30,"; tf_count++; }
+    if(TF_H1) { tf_status += "H1,"; tf_count++; }
+    if(TF_H4) { tf_status += "H4,"; tf_count++; }
+    if(TF_D1) { tf_status += "D1,"; tf_count++; }
+    if(StringLen(tf_status) > 0) tf_status = StringSubstr(tf_status, 0, StringLen(tf_status) - 1);
+
+    string strat_status = "";
+    int strat_count = 0;
+    if(S1_HOME) { strat_status += "S1,"; strat_count++; }
+    if(S2_TREND) { strat_status += "S2,"; strat_count++; }
+    if(S3_NEWS) { strat_status += "S3,"; strat_count++; }
+    if(StringLen(strat_status) > 0) strat_status = StringSubstr(strat_status, 0, StringLen(strat_status) - 1);
+
+    string sl_mode = (StoplossMode == LAYER1_MAXLOSS) ? "L1" : ("L2/" + DoubleToStr(Layer2_Divisor, 0));
+    string master_mode = (Period()==PERIOD_M1) ? "M1" : "M5-D1";
+
+    // CSDL source name | Ten nguon CSDL
+    string folder_name = "";
+    if(CSDL_Source == FOLDER_1) folder_name = "DA1";
+    else if(CSDL_Source == FOLDER_2) folder_name = "DA2";
+    else if(CSDL_Source == FOLDER_3) folder_name = "DA3";
+
+    // Build init_summary with CSDL data (after MapCSDLToEAVariables) | Tao init_summary voi du lieu CSDL
+    string trend_str = SignalToString(g_ea.trend_d1);
+    string news_str = "Lv" + IntegerToString(g_ea.news_level) + "_" + SignalToString(g_ea.news_direction);
+
+    g_ea.init_summary = "[INIT] " + g_ea.symbol_name + " | SL:" + sl_mode +
+                        " News:STRONGEST(" + news_str + ") Trend:" + trend_str +
+                        " | Lot:" + DoubleToStr(g_ea.lot_sizes[0][0], 2) + "-" + DoubleToStr(g_ea.lot_sizes[6][2], 2) +
+                        " | TF:" + IntegerToString(tf_count) + " S:" + IntegerToString(strat_count) +
+                        " | Folder:" + folder_name + " Master:" + master_mode +
+                        " Magic:" + IntegerToString(g_ea.magic_numbers[0][0]) + "-" + IntegerToString(g_ea.magic_numbers[6][2]);
+
+    // PART 9: Restore positions (will print init_summary) | Khoi phuc lenh (se in init_summary)
+    RestoreOrCleanupPositions();
+
+    // PART 10: Start timer | Bat timer
+    if(!EventSetTimer(1)) return(INIT_FAILED);
+
+    g_ea.first_run_completed = true;
+
+    return(INIT_SUCCEEDED);
 }
 
-// Indicator calculation function (required but unused for this indicator) | Ham tinh toan chi bao (bat buoc nhung khong su dung cho chi bao nay)
-int OnCalculate(const int rates_total,
-                const int prev_calculated,
-                const datetime &time[],
-                const double &open[],
-                const double &high[],
-                const double &low[],
-                const double &close[],
-                const long &tick_volume[],
-                const long &volume[],
-                const int &spread[]) {
-    // This indicator doesn't use OnCalculate, all logic is in OnTimer
-    return rates_total;
-}
-
-// System cleanup function on indicator removal | Ham don dep he thong khi go bo chi bao
+// EA deinitialization - cleanup | Ket thuc EA - don dep
 void OnDeinit(const int reason) {
     EventKillTimer();
+    Comment("");  // Clear Comment | Xoa Comment
 
-    // Xóa dashboard objects khỏi chart
-    ObjectDelete(0, "SPY_Dashboard_Line1");
-    ObjectDelete(0, "SPY_Dashboard_Line2");
-    ObjectDelete(0, "SPY_Dashboard_Line3");
-    ObjectDelete(0, "SPY_Dashboard_Line4");
-    ObjectDelete(0, "SPY_Dashboard_Line5");
-    ObjectDelete(0, "SPY_Dashboard_NEWS");
+    // Delete all dashboard labels (16 labels: dash_0 to dash_15) | Xoa tat ca label dashboard
+    for(int i = 0; i <= 15; i++) {
+        ObjectDelete("dash_" + IntegerToString(i));
+    }
 
-    Print("✓ SUPER_Spy7TF_Oner V2 Deinitialized");
+    Print("[EA] Shutdown. Reason: ", reason);
+}
+
+//=============================================================================
+//  PART 19: DASHBOARD - OBJ_LABEL (4 functions) | BANG DIEU KHIEN OBJ_LABEL
+//=============================================================================
+// Leverages existing EA resources: g_ea struct, flags, lot sizes | Tan dung tai nguyen EA co san
+// Uses OBJ_LABEL with fixed-width spaces + alternating colors (Blue/White) | Dung OBJ_LABEL voi khoang cach co dinh + 2 mau xen ke
+
+// Scan all orders once for dashboard (reuse stoploss logic) | Quet lenh 1 lan cho dashboard (tai su dung logic stoploss)
+// NEW: Builds 2 separate summaries - S1 only (row 1), S2+S3 (row 2) | Xay dung 2 tom tat rieng - Chi S1 (hang 1), S2+S3 (hang 2)
+void ScanAllOrdersForDashboard(int &total_orders, double &total_profit, double &total_loss,
+                                string &s1_summary, string &s2s3_summary) {
+    total_orders = 0;
+    total_profit = 0;
+    total_loss = 0;
+    s1_summary = "";
+    s2s3_summary = "";
+
+    
+    int s1_count = 0;
+    int s2s3_count = 0;
+
+    for(int i = 0; i < OrdersTotal(); i++) {
+        if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) continue;
+        if(OrderSymbol() != Symbol()) continue;
+
+        int magic = OrderMagicNumber();
+        double profit = OrderProfit() + OrderSwap() + OrderCommission();
+        double margin_usd = OrderLots() * MarketInfo(Symbol(), MODE_MARGINREQUIRED);
+
+        // Check which strategy this order belongs to | Kiem tra lenh thuoc chien luoc nao
+        for(int tf = 0; tf < 7; tf++) {
+            // S1 orders (row 1) | Lenh S1 (hang 1)
+            if(magic == g_ea.magic_numbers[tf][0]) {
+                total_orders++;
+                if(profit > 0) total_profit += profit;
+                else total_loss += profit;
+
+                s1_count++;
+                if(s1_count <= 7) {  // Max 7 (all TF) | Toi da 7 (tat ca TF)
+                    if(s1_count > 1) s1_summary += ", ";
+                    s1_summary += "S1_" + G_TF_NAMES[tf] + "[$" + DoubleToStr(margin_usd, 0) + "]";
+                }
+                break;
+            }
+            // S2 + S3 orders (row 2) | Lenh S2 + S3 (hang 2)
+            else if(magic == g_ea.magic_numbers[tf][1] || magic == g_ea.magic_numbers[tf][2]) {
+                total_orders++;
+                if(profit > 0) total_profit += profit;
+                else total_loss += profit;
+
+                s2s3_count++;
+                if(s2s3_count <= 7) {  // Show first 7 | Chi hien 7 dau
+                    string strategy = (magic == g_ea.magic_numbers[tf][1]) ? "S2" : "S3";
+                    if(s2s3_count > 1) s2s3_summary += ", ";
+                    s2s3_summary += strategy + "_" + G_TF_NAMES[tf] + "[$" + DoubleToStr(margin_usd, 0) + "]";
+                }
+                break;
+            }
+        }
+    }
+
+    // Add "more" indicators | Them chi bao neu con nhieu
+    if(s1_count > 7) s1_summary += " +" + IntegerToString(s1_count - 7) + " more";
+    if(s2s3_count > 7) s2s3_summary += " +" + IntegerToString(s2s3_count - 7) + " more";
+}
+
+// Format age (time since signal) | Dinh dang tuoi (thoi gian tu tin hieu)
+string FormatAge(datetime timestamp) {
+    int diff = (int)(TimeCurrent() - timestamp);
+    if(diff < 60) return IntegerToString(diff) + "s";
+    if(diff < 3600) return IntegerToString(diff / 60) + "m";
+    if(diff < 86400) {
+        int h = diff / 3600;
+        int m = (diff % 3600) / 60;
+        return IntegerToString(h) + "h" + IntegerToString(m) + "m";
+    }
+    return IntegerToString(diff / 86400) + "d";
+}
+
+// Pad string to fixed width (right-pad with spaces) | Them khoang trang den do rong co dinh
+string PadRight(string text, int width) {
+    while(StringLen(text) < width) text += " ";
+    if(StringLen(text) > width) text = StringSubstr(text, 0, width);
+    return text;
+}
+
+// Calculate total P&L for specific TF (all strategies) | Tinh tong P&L cho TF cu the (tat ca chien luoc)
+double CalculateTFPnL(int tf) {
+    double total_pnl = 0;
+
+    // Loop through all 3 strategies for this TF | Lap qua 3 chien luoc cho TF nay
+    for(int s = 0; s < 3; s++) {
+        // Skip if no position open | Bo qua neu khong co vi the
+        if(g_ea.position_flags[tf][s] != 1) continue;
+
+        int target_magic = g_ea.magic_numbers[tf][s];
+
+        // Scan all orders to find matching magic | Quet tat ca lenh de tim magic khop
+        for(int i = 0; i < OrdersTotal(); i++) {
+            if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) continue;
+            if(OrderSymbol() != Symbol()) continue;
+            if(OrderMagicNumber() == target_magic) {
+                total_pnl += OrderProfit() + OrderSwap() + OrderCommission();
+            }
+        }
+    }
+
+    return total_pnl;
+}
+
+// Check if TF has BONUS orders | Kiem tra TF co lenh BONUS khong
+bool HasBonusOrders(int tf) {
+    int target_magic = g_ea.magic_numbers[tf][2]; // S3 magic for this TF | Magic S3 cho TF nay
+
+    for(int i = 0; i < OrdersTotal(); i++) {
+        if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) continue;
+        if(OrderSymbol() != Symbol()) continue;
+        if(OrderMagicNumber() == target_magic) {
+            // Check if comment contains "BONUS" | Kiem tra comment co chua "BONUS"
+            string comment = OrderComment();
+            if(StringFind(comment, "BONUS") >= 0) {
+                return true;
+            }
+        }
+    }
+
+    return false;
+}
+
+// Format BONUS status line for dashboard | Dinh dang dong trang thai BONUS cho dashboard
+string FormatBonusStatus() {
+    // Check if BONUS is enabled | Kiem tra BONUS co bat khong
+    if(!EnableBonusNews) return "BONUS: Disabled";
+
+    string bonus_list = "";
+    string status = "IDLE";
+    int bonus_tf_count = 0;
+
+    // First check: Are there any BONUS orders currently open? | Kiem tra dau tien: Co lenh BONUS dang mo khong?
+    for(int tf = 0; tf < 7; tf++) {
+        if(!IsTFEnabled(tf)) continue;
+
+        if(HasBonusOrders(tf)) {
+            status = "OPEN";
+            bonus_tf_count++;
+
+            int news = g_ea.csdl_rows[tf].news;
+            string arrow = (news > 0) ? "^" : "v";
+
+            if(bonus_list != "") bonus_list += " ";
+            bonus_list += G_TF_NAMES[tf] + "(" + IntegerToString(BonusOrderCount) + "x " +
+                         (news > 0 ? "+" : "") + IntegerToString(news) + arrow + ")";
+        }
+    }
+
+    // Second check: If no orders open, which TFs qualify for BONUS? | Kiem tra thu hai: Neu khong co lenh, TF nao du dieu kien BONUS?
+    if(status == "IDLE") {
+        for(int tf = 0; tf < 7; tf++) {
+            if(!IsTFEnabled(tf)) continue;
+
+            int news_abs = MathAbs(g_ea.csdl_rows[tf].news);
+            if(news_abs >= MinNewsLevelBonus) {
+                status = "WAIT";
+                bonus_tf_count++;
+
+                int news = g_ea.csdl_rows[tf].news;
+                string arrow = (news > 0) ? "^" : "v";
+
+                if(bonus_list != "") bonus_list += " ";
+                bonus_list += G_TF_NAMES[tf] + "(" + IntegerToString(BonusOrderCount) + "x " +
+                             (news > 0 ? "+" : "") + IntegerToString(news) + arrow + ")";
+            }
+        }
+    }
+
+    // If no qualifying TFs, show "None" | Neu khong co TF du dieu kien, hien "None"
+    if(bonus_list == "") bonus_list = "None";
+
+    // Format timestamp (last BONUS open time) | Dinh dang timestamp (lan cuoi mo BONUS)
+    string last_time = TimeToStr(TimeCurrent(), TIME_SECONDS);
+
+    // Build final status line | Xay dung dong trang thai cuoi cung
+    string result = "BONUS: " + bonus_list + " | " + status + " | Last:" + last_time;
+
+    return result;
+}
+
+// Main dashboard update with OBJ_LABEL (12 lines, optimized) | Cap nhat dashboard voi OBJ_LABEL (12 dong, toi uu)
+void UpdateDashboard() {
+    // Check if dashboard is enabled | Kiem tra dashboard co bat khong
+    if(!ShowDashboard) {
+        // Hide all labels if disabled | An tat ca label neu tat
+        for(int i = 0; i <= 15; i++) {
+            ObjectDelete("dash_" + IntegerToString(i));
+        }
+        return;
+    }
+
+
+    int y_start = 150;  // Start 150px from top | Bat dau tu 150px tu tren
+    int line_height = 14;  // Line spacing | Khoang cach dong
+    int y_pos = y_start;
+
+    // ===== LEVERAGE: Account info | Tai su dung: Thong tin tai khoan
+    double equity = AccountEquity();
+    double balance = AccountBalance();
+    double dd = (balance > 0) ? ((balance - equity) / balance) * 100 : 0;
+
+    // ===== LEVERAGE: Scan orders ONCE and count by strategy | Quet lenh MOT LAN va dem theo chien luoc
+    int total_orders = 0;
+    double total_profit = 0, total_loss = 0;
+    string s1_summary = "", s2s3_summary = "";
+    ScanAllOrdersForDashboard(total_orders, total_profit, total_loss, s1_summary, s2s3_summary);
+
+    // Count orders by strategy type for compact summary | Dem lenh theo loai chien luoc cho tom tat gon
+    int s1_count = 0, s2_count = 0, s3_count = 0;
+    double s1_pnl = 0, s2_pnl = 0, s3_pnl = 0;
+    for(int i = 0; i < OrdersTotal(); i++) {
+        if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) continue;
+        if(OrderSymbol() != Symbol()) continue;
+
+        double order_pnl = OrderProfit() + OrderSwap() + OrderCommission();
+        int magic = OrderMagicNumber();
+
+        // Check which strategy this order belongs to | Kiem tra lenh nay thuoc chien luoc nao
+        bool found = false;
+        for(int tf = 0; tf < 7; tf++) {
+            if(magic == g_ea.magic_numbers[tf][0]) { s1_count++; s1_pnl += order_pnl; found = true; break; }
+            if(magic == g_ea.magic_numbers[tf][1]) { s2_count++; s2_pnl += order_pnl; found = true; break; }
+            if(magic == g_ea.magic_numbers[tf][2]) { s3_count++; s3_pnl += order_pnl; found = true; break; }
+        }
+    }
+
+    // ===== LEVERAGE: g_ea variables | Tai su dung: Bien g_ea
+    string folder = "";
+    if(CSDL_Source == FOLDER_1) folder = "DA1";
+    else if(CSDL_Source == FOLDER_2) folder = "DA2";
+    else if(CSDL_Source == FOLDER_3) folder = "DA3";
+    string trend = (g_ea.trend_d1 == 1) ? "^" : (g_ea.trend_d1 == -1 ? "v" : "-");
+    string news_dir = (g_ea.news_direction == 1) ? "^" : (g_ea.news_direction == -1 ? "v" : "-");
+
+    // ===== LINE 0: HEADER (YELLOW) | TIEU DE (VANG)
+    string header = "[" + g_ea.symbol_name + "] " + folder + " | 7TFx3S | D1:" + trend +
+                    " | $" + DoubleToStr(equity, 0) + " DD:" + DoubleToStr(dd, 1) + "% | " +
+                    IntegerToString(total_orders) + "/21";
+    CreateOrUpdateLabel("dash_0", header, 10, y_pos, clrYellow, 9);
+    y_pos += line_height;
+
+    // ===== LINE 1: SEPARATOR (White) | DUONG GACH (Trang)
+    CreateOrUpdateLabel("dash_1", "---------------------------------------------", 10, y_pos, clrWhite, 9);
+    y_pos += line_height;
+
+    // ===== LINE 2: COLUMN HEADERS (White) | TEN COT (Trang)
+    string col_header = PadRight("TF", 5) + PadRight("Sig", 5) + PadRight("S1", 7) +
+                        PadRight("S2", 7) + PadRight("S3", 7) + PadRight("P&L", 9) + "News";
+    CreateOrUpdateLabel("dash_2", col_header, 10, y_pos, clrWhite, 9);
+    y_pos += line_height;
+
+    // ===== LINE 3: SEPARATOR (White) | DUONG GACH (Trang)
+    CreateOrUpdateLabel("dash_3", "---------------------------------------------", 10, y_pos, clrWhite, 9);
+    y_pos += line_height;
+
+    // ===== LINES 4-10: 7 TF ROWS - ALTERNATING COLORS + P&L | 7 HANG TF - 2 MAU XEN KE + LAI LO
+    for(int tf = 0; tf < 7; tf++) {
+        // Signal with ASCII arrows (^ up, v down, - none) | Tin hieu voi mui ten ASCII
+        int current_signal = g_ea.csdl_rows[tf].signal;
+        string sig = "";
+        if(current_signal == 1) sig = "^";         // UP arrow | Mui ten len
+        else if(current_signal == -1) sig = "v";   // DOWN arrow | Mui ten xuong
+        else sig = "-";                             // NONE | Khong co
+
+        // S1/S2/S3 positions | Vi the S1/S2/S3
+        string s1 = (g_ea.position_flags[tf][0] == 1) ? "*" + DoubleToStr(g_ea.lot_sizes[tf][0], 2) : "o";
+        string s2 = (g_ea.position_flags[tf][1] == 1) ? "*" + DoubleToStr(g_ea.lot_sizes[tf][1], 2) : "o";
+        string s3 = (g_ea.position_flags[tf][2] == 1) ? "*" + DoubleToStr(g_ea.lot_sizes[tf][2], 2) : "o";
+
+        // P&L for this TF (all strategies) | Lai lo cho TF nay (tat ca chien luoc)
+        double tf_pnl = CalculateTFPnL(tf);
+        string pnl_str = "";
+        if(tf_pnl > 0) pnl_str = "+" + DoubleToStr(tf_pnl, 2);
+        else if(tf_pnl < 0) pnl_str = DoubleToStr(tf_pnl, 2);
+        else pnl_str = "+0.00";
+
+        // News with sign | Tin tuc voi dau
+        string nw = IntegerToString(g_ea.csdl_rows[tf].news);
+        if(g_ea.csdl_rows[tf].news > 0) nw = "+" + nw;
+
+        // Build row with fixed-width columns | Xay dung dong voi cot co dinh
+        string row = PadRight(G_TF_NAMES[tf], 5) + PadRight(sig, 5) + PadRight(s1, 7) +
+                     PadRight(s2, 7) + PadRight(s3, 7) + PadRight(pnl_str, 9) + nw;
+
+        // Alternating colors: Blue (even rows), White (odd rows) | Mau xen ke: Xanh (dong chan), Trang (dong le)
+        color row_color = (tf % 2 == 0) ? clrDodgerBlue : clrWhite;
+        CreateOrUpdateLabel("dash_" + IntegerToString(4 + tf), row, 10, y_pos, row_color, 9);
+        y_pos += line_height;
+    }
+
+    // ===== LINE 11: SEPARATOR (White) | DUONG GACH (Trang)
+    CreateOrUpdateLabel("dash_11", "---------------------------------------------", 10, y_pos, clrWhite, 9);
+    y_pos += line_height;
+
+    // ===== LINE 12: BONUS STATUS (White) | TRANG THAI BONUS (Trang)
+    string bonus_status = FormatBonusStatus();
+    CreateOrUpdateLabel("dash_12", bonus_status, 10, y_pos, clrWhite, 9);
+    y_pos += line_height;
+
+    // ===== LINE 13: NET SUMMARY (Yellow) | TOM TAT NET (Vang)
+    double net = total_profit + total_loss;
+    string net_summary = "NET:$" + DoubleToStr(net, 2);
+
+    // Add strategy breakdown if there are orders | Them phan tich chien luoc neu co lenh
+    if(s1_count > 0) net_summary += " | S1:" + IntegerToString(s1_count) + "x$" + DoubleToStr(s1_pnl, 0);
+    if(s2_count > 0) net_summary += " | S2:" + IntegerToString(s2_count) + "x$" + DoubleToStr(s2_pnl, 0);
+    if(s3_count > 0) net_summary += " | S3:" + IntegerToString(s3_count) + "x$" + DoubleToStr(s3_pnl, 1);
+
+    net_summary += " | " + IntegerToString(total_orders) + "/21";
+
+    CreateOrUpdateLabel("dash_13", net_summary, 10, y_pos, clrYellow, 9);
+    y_pos += line_height;
+
+    // ===== LINE 14: BROKER INFO (Yellow) | THONG TIN SAN (Vang)
+    string broker = AccountCompany();
+    int leverage = AccountLeverage();
+    string broker_info = broker + " | Lev:1:" + IntegerToString(leverage) + " | 2s";
+    CreateOrUpdateLabel("dash_14", broker_info, 10, y_pos, clrYellow, 8);
+
+    // Clean up old unused label (line 15 from old layout) | Don dep nhan cu khong dung (dong 15 tu giao dien cu)
+    ObjectDelete("dash_15");
+}
+
+// Create or update OBJ_LABEL | Tao hoac cap nhat OBJ_LABEL
+void CreateOrUpdateLabel(string name, string text, int x, int y, color clr, int font_size) {
+    if(ObjectFind(name) < 0) {
+        ObjectCreate(name, OBJ_LABEL, 0, 0, 0);
+        ObjectSet(name, OBJPROP_CORNER, CORNER_LEFT_UPPER);
+        ObjectSet(name, OBJPROP_XDISTANCE, x);
+        ObjectSet(name, OBJPROP_YDISTANCE, y);
+    }
+    ObjectSetText(name, text, font_size, "Courier New", clr);
+}
+
+// Timer event - main trading loop (1 second) | Su kien timer - vong lap giao dich chinh (1 giay)
+// OPTIMIZED V4.0: Split into 2 groups (EVEN/ODD) for better performance | TOI UU: Chia 2 nhom (CHAN/LE) de tang hieu suat
+// GROUP 1 (EVEN): Trading core - Read CSDL + Process signals | Nhom 1 (CHAN): Giao dich chinh - Doc CSDL + Xu ly tin hieu
+// GROUP 2 (ODD): Auxiliary - Stoploss + Dashboard + Health checks | Nhom 2 (LE): Phu tro - Cat lo + Bang dieu khien + Kiem tra suc khoe
+void OnTimer() {
+    datetime current_time = TimeCurrent();
+    int current_second = TimeSeconds(current_time);
+
+    // Prevent duplicate execution in same second | Tranh chay trung trong cung 1 giay
+    if(current_time == g_ea.timer_last_run_time) return;
+    g_ea.timer_last_run_time = current_time;
+
+    //=============================================================================
+    // GROUP 1: EVEN SECONDS (0,2,4,6...) - TRADING CORE (HIGH PRIORITY)
+    // NHOM 1: GIAY CHAN - GIAO DICH CHINH (UU TIEN CAO)
+    //=============================================================================
+    // WHY EVEN: SPY Bot writes CSDL on ODD seconds ? EA reads on EVEN ? No file lock conflict
+    // TAI SAO CHAN: SPY Bot ghi CSDL giay LE ? EA doc giay CHAN ? Khong xung dot file
+    if(!UseEvenOddMode || (current_second % 2 == 0)) {
+
+        // STEP 1: Read CSDL file | Doc file CSDL
+        ReadCSDLFile();
+
+        // STEP 2: Map data for all 7 TF | Anh xa du lieu cho 7 khung
+        MapCSDLToEAVariables();
+
+        // STEP 3: Strategy processing loop for 7 TF | Vong lap xu ly chien luoc cho 7 khung
+        // IMPORTANT: CLOSE function runs on ALL 7 TF (no TF filter) | QUAN TRONG: Ham dong chay TAT CA 7 TF (khong loc TF)
+        // OPEN function respects TF/Strategy toggles | Ham mo tuan theo bat/tat TF/Chien luoc
+        for(int tf = 0; tf < 7; tf++) {
+            if(HasValidS2BaseCondition(tf)) {
+
+                // STEP 3.1: Close ALL BONUS orders when M1 signal changes | Dong TAT CA lenh BONUS khi M1 thay doi
+                // LOGIC: Check if current TF is M1 (tf==0), if yes close ALL 7 TF bonus orders
+                // LOGIC: Kiem tra neu TF hien tai la M1, neu dung dong TAT CA 7 khung lenh bonus
+                if(tf == 0 && EnableBonusNews) {
+                    CloseAllBonusOrders();  // Close magic[tf][2] for ALL 7 TF
+                }
+
+                // STEP 3.2: Close old orders for this TF (ALL 3 strategies) | Dong lenh cu cua TF (TAT CA 3 chien luoc)
+                CloseAllStrategiesByMagicForTF(tf);
+
+                // STEP 3.3: Open new orders (ONLY if TF enabled) | Mo lenh moi (CHI neu TF bat)
+                if(IsTFEnabled(tf)) {
+                    if(S1_HOME) ProcessS1Strategy(tf);
+                    if(S2_TREND) ProcessS2Strategy(tf);
+                    if(S3_NEWS) ProcessS3Strategy(tf);
+                }
+
+                // STEP 3.4: Process Bonus NEWS (scans ALL 7 TF, opens if NEWS >= threshold, must be before old=new) | Xu ly Bonus tin tuc (quet 7 TF, mo neu NEWS du, phai truoc gan old=new)
+                if(EnableBonusNews) {
+                    ProcessBonusNews();
+                }
+
+                // STEP 3.5: Update baseline from CSDL | Cap nhat moc tu CSDL
+                g_ea.signal_old[tf] = g_ea.csdl_rows[tf].signal;
+                g_ea.timestamp_old[tf] = (datetime)g_ea.csdl_rows[tf].timestamp;
+            }
+        }
+    }
+
+    //=============================================================================
+    // GROUP 2: ODD SECONDS (1,3,5,7...) - AUXILIARY (SUPPORT)
+    // NHOM 2: GIAY LE - PHU TRO (HO TRO)
+    //=============================================================================
+    // WHY ODD: These functions don't need fresh CSDL data ? Run independently ? Reduce load on EVEN seconds
+    // TAI SAO LE: Cac ham nay khong can CSDL moi ? Chay doc lap ? Giam tai cho giay CHAN
+    // NOTE: Respects UseEvenOddMode - if disabled, runs every second | Tuan theo UseEvenOddMode - neu tat, chay moi giay
+    if(!UseEvenOddMode || (current_second % 2 != 0)) {
+
+        // STEP 1: Check stoploss & take profit | Kiem tra cat lo & chot loi
+        CheckStoplossAndTakeProfit();
+
+        // STEP 2: Update dashboard | Cap nhat bang dieu khien
+        UpdateDashboard();
+
+        // STEP 3: Emergency check | Kiem tra khan cap
+        CheckAllEmergencyConditions();
+
+        // STEP 4: Weekend reset check (M1 only) | Kiem tra reset cuoi tuan (chi M1)
+        CheckWeekendReset();
+
+        // STEP 5: Health check at 8h/16h (M1 only) | Kiem tra suc khoe luc 8h/16h (chi M1)
+        CheckSPYBotHealth();
+    }
 }
