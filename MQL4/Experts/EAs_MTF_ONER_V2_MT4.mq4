@@ -570,8 +570,9 @@ void ReadCSDLFile() {
 
     // ========== FINAL CHECK ==========
     if(!success) {
-        // ALL FAILED: Keep old data, continue | Tat ca that bai: Giu du lieu cu, tiep tuc
-        Print("[WARNING] All read attempts failed. Using old data.");
+        // ALL FAILED: Keep old data, continue (no spam warning - only debug)
+        // Tat ca that bai: Giu du lieu cu, tiep tuc (khong spam warning - chi debug)
+        DebugPrint("[WARNING] All read attempts failed. Using old data.");
     }
 }
 

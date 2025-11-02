@@ -592,8 +592,8 @@ void ReadCSDLFile() {
 
     // ========== FINAL CHECK ==========
     if(!success) {
-        // ALL FAILED: Keep old data, continue
-        Print("[WARNING] All read attempts failed. Using old data.");
+        // ALL FAILED: Keep old data, continue (no spam warning - only debug)
+        DebugPrint("[WARNING] All read attempts failed. Using old data.");
     }
 }
 
