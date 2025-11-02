@@ -30,10 +30,10 @@ input bool   EnableMonthlyStats = true;                      // Monthly stats on
 input string DataFolder = "DataAutoOner\\";                  // Data Storage Folder | Thu muc luu tru du lieu
 
 //--- NEWS CASCADE Configuration | Cau hinh NEWS CASCADE
+input bool   EnableCategoryEA = true;                        // Enable Category 1 (EA Trading) | Bat Category 1 (EA danh)
 input double NewsBaseLiveDiff = 2.5;                         // L1 Base Live Diff threshold (USD) | Nguong Live Diff co ban L1
 input double NewsLiveDiffStep = 0.5;                         // Live Diff increment per level (USD) | Tang Live Diff moi cap
 input int    NewsBaseTimeMinutes = 2;                        // Category 2 Base Time (minutes) 2^level | Thoi gian co so Category 2
-input bool   EnableCategoryEA = true;                        // Enable Category 1 (EA Trading) | Bat Category 1 (EA danh)
 input bool   EnableCategoryUser = true;                      // Enable Category 2 (User Reference) | Bat Category 2 (tham khao)
 input double NewsCascadeMultiplier = 0.1;                    // Category 2 USD Threshold Base (0.1->0.7 for L1-L7) | He so nguong USD Category 2
 
@@ -2638,11 +2638,6 @@ int OnInit() {
 
     // Dashboard will be shown by OnTimer() every second (không c?n g?i ? OnInit)
 
-    // Set startup reset flag (if enabled)
-    if(EnableStartupReset) {
-        GlobalVariableSet(g_target_symbol + "_StartupInitTime", TimeCurrent());
-    }
-
     // Mark system as initialized
     g_system_initialized = true;
 
@@ -2655,21 +2650,24 @@ int OnInit() {
 // ============================================================
 
 // Startup Reset: 1 minute after MT4 starts (1 TIME ONLY per MT4 session)
-// Init time set in OnInit(), check here every 2 seconds
+// GlobalVariable lost when MT4 closes, survives indicator reload
 void RunStartupReset() {
     if(!EnableStartupReset) return;
 
-    string gv_time = g_target_symbol + "_StartupInitTime";
     string gv_done = g_target_symbol + "_StartupResetDone";
+    string gv_time = g_target_symbol + "_StartupInitTime";
 
-    // If init time exists AND not done yet AND elapsed >= 60s -> Reset
-    if(GlobalVariableCheck(gv_time) &&
-       GlobalVariableGet(gv_done) != 1 &&
-       TimeCurrent() - GlobalVariableGet(gv_time) >= 60) {
+    // Create init time if not exists
+    if(!GlobalVariableCheck(gv_time)) {
+        GlobalVariableSet(gv_time, TimeCurrent());
+    }
+
+    // If not done (!=1) AND elapsed >= 60s -> Reset and mark done
+    if((!GlobalVariableCheck(gv_done) || GlobalVariableGet(gv_done) != 1) &&
+       (TimeCurrent() - GlobalVariableGet(gv_time) >= 60)) {
         Print("StartupReset: ", g_target_symbol, " | 1 min after MT4 start");
         SmartTFReset();
         GlobalVariableSet(gv_done, 1);
-        GlobalVariableDel(gv_time);  // Cleanup
     }
 }
 
