@@ -2689,29 +2689,54 @@ int OnInit() {
 // _StartupInitTime set by OnInit() when MT4 starts (GlobalVariable lost when MT4 closes)
 // This function runs every even second to check if 60s elapsed
 void RunStartupReset() {
-    if(!EnableStartupReset) return;
+    if(!EnableStartupReset) {
+        // DEBUG: Show why disabled
+        static bool logged_disabled = false;
+        if(!logged_disabled) {
+            Print("DEBUG StartupReset: Disabled (EnableStartupReset = false)");
+            logged_disabled = true;
+        }
+        return;
+    }
 
     string gv_time = g_target_symbol + "_StartupInitTime";
     string gv_done = g_target_symbol + "_StartupResetDone";
 
+    // DEBUG: Show status every 10s (not every 2s to avoid spam)
+    static int debug_counter = 0;
+    bool show_debug = (debug_counter % 5 == 0);  // Every 10s (5 * 2s)
+    debug_counter++;
+
     // Check if init time exists (set by OnInit)
     if(!GlobalVariableCheck(gv_time)) {
+        if(show_debug) {
+            Print("DEBUG StartupReset: NO init time found | GV=", gv_time, " | OnInit not run yet?");
+        }
         return;  // No init time -> OnInit not called yet or disabled
     }
 
     // Check if already done
     if(GlobalVariableCheck(gv_done) && GlobalVariableGet(gv_done) == 1) {
+        if(show_debug) {
+            Print("DEBUG StartupReset: Already done this session | GV=", gv_done, " = 1");
+        }
         return;  // Already reset this session
     }
 
     // Check if 60s elapsed since MT4 start
     long init_time = (long)GlobalVariableGet(gv_time);
-    long elapsed = TimeCurrent() - init_time;
+    long current_time = TimeCurrent();
+    long elapsed = current_time - init_time;
+
+    if(show_debug) {
+        Print("DEBUG StartupReset: Waiting... | Elapsed: ", elapsed, "s / 60s | Init: ", TimeToString(init_time, TIME_DATE|TIME_SECONDS));
+    }
 
     if(elapsed >= 60) {
-        Print("StartupReset: ", g_target_symbol, " | ", elapsed, "s after MT4 start -> Resetting charts");
+        Print("✓ StartupReset: ", g_target_symbol, " | ", elapsed, "s after MT4 start -> RESETTING CHARTS NOW!");
         SmartTFReset();
         GlobalVariableSet(gv_done, 1);
+        Print("✓ StartupReset: COMPLETED | Marked as done");
     }
 }
 
