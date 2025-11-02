@@ -2658,13 +2658,12 @@ int OnInit() {
     // Set ONLY if not exists -> detects real MT4 restart (not indicator reload)
     if(EnableStartupReset) {
         string gv_time = g_target_symbol + "_StartupInitTime";
-        string gv_done = g_target_symbol + "_StartupResetDone";
 
         if(!GlobalVariableCheck(gv_time)) {
             // GlobalVariable not found = MT4 just restarted (or first run)
             GlobalVariableSet(gv_time, TimeCurrent());
-            GlobalVariableSet(gv_done, -1);  // -1 = chưa khởi tạo, chờ MidnightReset
-            Print("StartupReset: MT4 restart detected | Waiting for MidnightReset to init flag");
+            // KHÔNG tạo gv_done - để MidnightReset tạo và gán = 0
+            Print("StartupReset: MT4 restart detected | Init time saved");
         } else {
             // GlobalVariable exists = Indicator reload (not MT4 restart)
             long init_time = (long)GlobalVariableGet(gv_time);
