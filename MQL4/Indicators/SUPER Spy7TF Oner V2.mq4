@@ -35,6 +35,7 @@ input double NewsLiveDiffStep = 0.5;                         // Live Diff increm
 input int    NewsBaseTimeMinutes = 2;                        // Category 2 Base Time (minutes) 2^level | Thoi gian co so Category 2
 input bool   EnableCategoryEA = true;                        // Enable Category 1 (EA Trading) | Bat Category 1 (EA danh)
 input bool   EnableCategoryUser = true;                      // Enable Category 2 (User Reference) | Bat Category 2 (tham khao)
+input double NewsCascadeMultiplier = 0.1;                    // Category 2 USD Threshold Base (0.1->0.7 for L1-L7) | He so nguong USD Category 2
 
 //==============================================================================
 //  SECTION 2: DATA STRUCTURES (3 structs) | PHAN 2: CAU TRUC DU LIEU
