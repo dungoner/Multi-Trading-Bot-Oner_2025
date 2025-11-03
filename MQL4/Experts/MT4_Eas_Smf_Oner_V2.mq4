@@ -1755,8 +1755,8 @@ void OnDeinit(const int reason) {
     EventKillTimer();
     Comment("");  // Clear Comment | Xoa Comment
 
-    // Delete all dashboard labels (16 labels: dash_0 to dash_15) | Xoa tat ca label dashboard
-    for(int i = 0; i <= 16; i++) {
+    // Delete all dashboard labels (15 labels: dash_0 to dash_14) | Xoa tat ca label dashboard
+    for(int i = 0; i <= 14; i++) {
         ObjectDelete("dash_" + IntegerToString(i));
     }
 
@@ -1949,12 +1949,12 @@ string FormatBonusStatus() {
     return result;
 }
 
-// Main dashboard update with OBJ_LABEL (12 lines, optimized) | Cap nhat dashboard voi OBJ_LABEL (12 dong, toi uu)
+// Main dashboard update with OBJ_LABEL (15 lines, optimized) | Cap nhat dashboard voi OBJ_LABEL (15 dong, toi uu)
 void UpdateDashboard() {
     // Check if dashboard is enabled | Kiem tra dashboard co bat khong
     if(!ShowDashboard) {
         // Hide all labels if disabled | An tat ca label neu tat
-        for(int i = 0; i <= 16; i++) {
+        for(int i = 0; i <= 14; i++) {
             ObjectDelete("dash_" + IntegerToString(i));
         }
         return;
@@ -2095,27 +2095,16 @@ void UpdateDashboard() {
         y_pos += line_height;
     }
 
-    // ===== LINE 11: NEWS ROW (Yellow - Realtime visibility) | HANG NEWS (Vang - Theo doi truc tiep)
-    string news_row = "NEWS: ";
-    for(int news_tf = 0; news_tf < 7; news_tf++) {
-        string news_val = IntegerToString(g_ea.csdl_rows[news_tf].news);
-        if(g_ea.csdl_rows[news_tf].news > 0) news_val = "+" + news_val;
-        news_row += G_TF_NAMES[news_tf] + ":" + news_val;
-        if(news_tf < 6) news_row += " | ";
-    }
-    CreateOrUpdateLabel("dash_11", news_row, 10, y_pos, clrYellow, 9);
+    // ===== LINE 11: SEPARATOR (White) | DUONG GACH (Trang)
+    CreateOrUpdateLabel("dash_11", "---------------------------------------------", 10, y_pos, clrWhite, 9);
     y_pos += line_height;
 
-    // ===== LINE 12: SEPARATOR (White) | DUONG GACH (Trang)
-    CreateOrUpdateLabel("dash_12", "---------------------------------------------", 10, y_pos, clrWhite, 9);
-    y_pos += line_height;
-
-    // ===== LINE 13: BONUS STATUS (White) | TRANG THAI BONUS (Trang)
+    // ===== LINE 12: BONUS STATUS (White) | TRANG THAI BONUS (Trang)
     string bonus_status = FormatBonusStatus();
-    CreateOrUpdateLabel("dash_13", bonus_status, 10, y_pos, clrWhite, 9);
+    CreateOrUpdateLabel("dash_12", bonus_status, 10, y_pos, clrWhite, 9);
     y_pos += line_height;
 
-    // ===== LINE 14: NET SUMMARY (Yellow) | TOM TAT NET (Vang)
+    // ===== LINE 13: NET SUMMARY (Yellow) | TOM TAT NET (Vang)
     double net = total_profit + total_loss;
     string net_summary = "NET:$" + DoubleToStr(net, 2);
 
@@ -2126,16 +2115,17 @@ void UpdateDashboard() {
 
     net_summary += " | " + IntegerToString(total_orders) + "/21";
 
-    CreateOrUpdateLabel("dash_14", net_summary, 10, y_pos, clrYellow, 9);
+    CreateOrUpdateLabel("dash_13", net_summary, 10, y_pos, clrYellow, 9);
     y_pos += line_height;
 
-    // ===== LINE 15: BROKER INFO (Yellow) | THONG TIN SAN (Vang)
+    // ===== LINE 14: BROKER INFO (Yellow) | THONG TIN SAN (Vang)
     string broker = AccountCompany();
     int leverage = AccountLeverage();
     string broker_info = broker + " | Lev:1:" + IntegerToString(leverage) + " | 2s";
-    CreateOrUpdateLabel("dash_15", broker_info, 10, y_pos, clrYellow, 8);
+    CreateOrUpdateLabel("dash_14", broker_info, 10, y_pos, clrYellow, 8);
 
     // Clean up old unused labels | Don dep nhan cu khong dung
+    ObjectDelete("dash_15");
     ObjectDelete("dash_16");
 }
 
