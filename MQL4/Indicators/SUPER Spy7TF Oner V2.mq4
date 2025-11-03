@@ -1,5 +1,5 @@
 //+-----------------------------------------------------------------------------------+
-//  SUPER SPY BOT ONER V2 - Multi-Timeframe Signal Monitor | BOT GIAM SAT TIN HIEU NHIEU KHUNG THOI GIAN V2
+//  SUPER SPY BOT V2 - Multi-Timeframe Signal Monitor | BOT GIAM SAT TIN HIEU NHIEU KHUNG THOI GIAN V2
 //+-----------------------------------------------------------------------------------+
 #property copyright "SUPER_Spy7TF_Oner V2 - Multi-Timeframe Signal Spy with NEWS CASCADE Analysis"
 
@@ -30,11 +30,11 @@ input string DataFolder = "DataAutoOner\\";                  // Data Storage Fol
 
 //--- NEWS CASCADE Configuration | Cau hinh NEWS CASCADE
 input bool   EnableCategoryEA = true;                        // Enable Category 1 (EA Trading) | Bat Category 1 (EA danh)
-input double NewsBaseLiveDiff = 2.5;                         // L1 Base Live Diff threshold (USD) | Nguong Live Diff co ban L1
+input double NewsBaseLiveDiff = 1.5;                         // L1 Base Live Diff threshold (USD) | Nguong Live Diff co ban L1
 input double NewsLiveDiffStep = 0.5;                         // Live Diff increment per level (USD) | Tang Live Diff moi cap
 input int    NewsBaseTimeMinutes = 2;                        // Category 2 Base Time (minutes) 2^level | Thoi gian co so Category 2
 input bool   EnableCategoryUser = true;                      // Enable Category 2 (User Reference) | Bat Category 2 (tham khao)
-input double NewsCascadeMultiplier = 0.1;                    // Category 2 USD Threshold Base (0.1->0.7 for L1-L7) | He so nguong USD Category 2
+input double NewsCascadeMultiplier = 0.3;                    // Category 2 USD Threshold Base (0.1->0.7 for L1-L7) | He so nguong USD Category 2
 
 //==============================================================================
 //  SECTION 2: DATA STRUCTURES (3 structs) | PHAN 2: CAU TRUC DU LIEU
