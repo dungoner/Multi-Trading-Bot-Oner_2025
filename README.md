@@ -3,12 +3,13 @@
 ## 📋 MỤC LỤC
 
 1. [Tổng quan hệ thống](#1-tổng-quan-hệ-thống)
-2. [Luồng hoạt động chính](#2-luồng-hoạt-động-chính)
-3. [BOT SPY - Thu thập & Phân tích](#3-bot-spy---thu-thập--phân-tích)
-4. [BOT EA AUTO - Giao dịch tự động](#4-bot-ea-auto---giao-dịch-tự-động)
-5. [Cấu trúc dữ liệu CSDL](#5-cấu-trúc-dữ-liệu-csdl)
-6. [Reset & HealthCheck](#6-reset--healthcheck)
-7. [Timeline hoạt động](#7-timeline-hoạt-động)
+   - 1.1 [Kiến trúc 2-Bot System](#11-kiến-trúc-2-bot-system)
+   - 1.2 [LUỒNG HOẠT ĐỘNG CHÍNH](#12-luồng-hoạt-động-chính)
+2. [BOT SPY - Thu thập & Phân tích](#2-bot-spy---thu-thập--phân-tích)
+3. [BOT EA AUTO - Giao dịch tự động](#3-bot-ea-auto---giao-dịch-tự-động)
+4. [Cấu trúc dữ liệu CSDL](#4-cấu-trúc-dữ-liệu-csdl)
+5. [Reset & HealthCheck](#5-reset--healthcheck)
+6. [Timeline hoạt động](#6-timeline-hoạt-động)
 
 ---
 
@@ -48,20 +49,9 @@
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-### 1.2 Vai trò từng thành phần
+### 1.2 LUỒNG HOẠT ĐỘNG CHÍNH
 
-| Thành phần | Loại | Vai trò | Số lượng |
-|------------|------|---------|----------|
-| **WallStreet EA** | Expert Advisor | Phân tích kỹ thuật → Gửi tín hiệu qua GlobalVariable | 7 EA (7 TF) |
-| **BOT SPY V2** | Indicator | Thu thập GlobalVariable → Phân tích → Ghi JSON | 1 Bot (monitor 7 TF) |
-| **CSDL Files** | JSON | Lưu trữ 10 cột × 7 TF (signal gốc + NEWS) | 4 files/symbol |
-| **BOT EA AUTO** | Expert Advisor | Đọc CSDL → Giao dịch 3 strategies | 7 EA (7 TF) |
-
----
-
-## 2. LUỒNG HOẠT ĐỘNG CHÍNH
-
-### 2.1 Sơ đồ luồng tổng quan
+#### Sơ đồ luồng tổng quan
 
 ```
 STEP 1: WALLSTREET EA → GlobalVariable (Tín hiệu gốc)
@@ -93,9 +83,9 @@ STEP 4: BOT EA AUTO → Đọc CSDL Files
 STEP 5: Gửi lệnh BUY/SELL → BROKER
 ```
 
-### 2.2 Chi tiết 2 phần xử lý
+#### Chi tiết 2 phần xử lý
 
-#### **BOT SPY - Chia 2 phần:**
+**BOT SPY - Chia 2 phần:**
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -138,7 +128,7 @@ STEP 5: Gửi lệnh BUY/SELL → BROKER
 └─────────────────────────────────────────────────────────────┘
 ```
 
-#### **BOT EA AUTO - Chia 2 phần:**
+**BOT EA AUTO - Chia 2 phần:**
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
@@ -174,15 +164,15 @@ STEP 5: Gửi lệnh BUY/SELL → BROKER
 
 ---
 
-## 3. BOT SPY - Thu thập & Phân tích
+## 2. BOT SPY - Thu thập & Phân tích
 
-### 3.1 Thông tin cơ bản
+### 2.1 Thông tin cơ bản
 
 **File:** `MQL4/Indicators/Super_Spy7TF_V2.mq4`
 **Loại:** Indicator (chạy trên 1 chart, monitor 7 TF)
 **Chức năng:** Thu thập GlobalVariable → Phân tích → Ghi CSDL files
 
-### 3.2 Cấu trúc dữ liệu chính
+### 2.2 Cấu trúc dữ liệu chính
 
 ```cpp
 struct SymbolCSDL1Data {
@@ -213,7 +203,7 @@ struct SymbolCSDL1Data {
 SymbolCSDL1Data g_symbol_data;  // GLOBAL STRUCT DUY NHẤT
 ```
 
-### 3.3 OnInit - Khởi động
+### 2.3 OnInit - Khởi động
 
 ```cpp
 int OnInit() {
@@ -228,7 +218,7 @@ int OnInit() {
 }
 ```
 
-### 3.4 OnTimer - Xử lý mỗi giây
+### 2.4 OnTimer - Xử lý mỗi giây
 
 ```cpp
 void OnTimer() {
@@ -256,7 +246,7 @@ void OnTimer() {
 }
 ```
 
-### 3.5 ProcessAllSignals - Vòng lặp 7 TF
+### 2.5 ProcessAllSignals - Vòng lặp 7 TF
 
 ```cpp
 void ProcessAllSignals() {
@@ -278,7 +268,7 @@ void ProcessAllSignals() {
 }
 ```
 
-### 3.6 ProcessSignalForTF - Xử lý 1 TF
+### 2.6 ProcessSignalForTF - Xử lý 1 TF
 
 ```cpp
 bool ProcessSignalForTF(int tf_idx, int signal, long signal_time) {
@@ -317,7 +307,7 @@ bool ProcessSignalForTF(int tf_idx, int signal, long signal_time) {
 }
 ```
 
-### 3.7 GlobalVariable Format
+### 2.7 GlobalVariable Format
 
 **WallStreet EA gửi 14 biến/symbol:**
 
@@ -336,15 +326,15 @@ LTCUSD_M5_LastSignalTime    = 1760340800
 
 ---
 
-## 4. BOT EA AUTO - Giao dịch tự động
+## 3. BOT EA AUTO - Giao dịch tự động
 
-### 4.1 Thông tin cơ bản
+### 3.1 Thông tin cơ bản
 
 **File:** `MQL4/Experts/Eas_Smf_Oner_V2.mq4`
 **Loại:** Expert Advisor (mỗi EA chạy trên 1 TF)
 **Chức năng:** Đọc CSDL → Mở/đóng lệnh theo 3 strategies
 
-### 4.2 Input Parameters
+### 3.2 Input Parameters
 
 ```cpp
 // A. CORE SETTINGS
@@ -380,7 +370,7 @@ input bool EnableHealthCheck = true;
 input bool ShowDashboard = true;
 ```
 
-### 4.3 Cấu trúc dữ liệu EA
+### 3.3 Cấu trúc dữ liệu EA
 
 ```cpp
 struct EASymbolData {
@@ -415,7 +405,7 @@ struct EASymbolData {
 EASymbolData g_ea;  // GLOBAL STRUCT DUY NHẤT
 ```
 
-### 4.4 OnTimer - Vòng lặp chính
+### 3.4 OnTimer - Vòng lặp chính
 
 ```cpp
 void OnTimer() {
@@ -456,7 +446,7 @@ void OnTimer() {
 }
 ```
 
-### 4.5 ProcessS1Strategy - Binary Signal
+### 3.5 ProcessS1Strategy - Binary Signal
 
 ```cpp
 void ProcessS1Strategy(int tf) {
@@ -490,7 +480,7 @@ void ProcessS1Strategy(int tf) {
 }
 ```
 
-### 4.6 ProcessS2Strategy - Follow Trend
+### 3.6 ProcessS2Strategy - Follow Trend
 
 ```cpp
 void ProcessS2Strategy(int tf) {
@@ -519,7 +509,7 @@ void ProcessS2Strategy(int tf) {
 }
 ```
 
-### 4.7 ProcessS3Strategy - News Trading
+### 3.7 ProcessS3Strategy - News Trading
 
 ```cpp
 void ProcessS3Strategy(int tf) {
@@ -549,7 +539,7 @@ void ProcessS3Strategy(int tf) {
 }
 ```
 
-### 4.8 Bonus NEWS - Quét 7 TF
+### 3.8 Bonus NEWS - Quét 7 TF
 
 ```cpp
 void ProcessBonusNews() {
@@ -579,9 +569,9 @@ void ProcessBonusNews() {
 
 ---
 
-## 5. CẤU TRÚC DỮ LIỆU CSDL
+## 4. CẤU TRÚC DỮ LIỆU CSDL
 
-### 5.1 CSDL1 File - SYMBOL.json (10 cột + History)
+### 4.1 CSDL1 File - SYMBOL.json (10 cột + History)
 
 **Path:** `MQL4/Files/DataAutoOner/LTCUSD.json`
 
@@ -644,7 +634,7 @@ void ProcessBonusNews() {
 | **8** | **NEWS** | int | **±11~±16 (L1-L7) hoặc 0** | **PHẦN 2: TÍN HIỆU NEWS** |
 | 9 | MaxLoss | double | Lỗ tối đa (âm) | - |
 
-### 5.2 CSDL2 Files - SYMBOL_LIVE.json (6 cột, 3 files)
+### 4.2 CSDL2 Files - SYMBOL_LIVE.json (6 cột, 3 files)
 
 **EA đọc file này (đơn giản hơn CSDL1):**
 
@@ -669,7 +659,7 @@ void ProcessBonusNews() {
 ]
 ```
 
-### 5.3 NEWS CASCADE Levels
+### 4.3 NEWS CASCADE Levels
 
 **Category 1 (EA Trading) - LiveDiff threshold:**
 
@@ -703,9 +693,9 @@ void ProcessBonusNews() {
 
 ---
 
-## 6. RESET & HEALTHCHECK
+## 5. RESET & HEALTHCHECK
 
-### 6.1 MidnightReset - Reset lúc 0h:0m mỗi ngày
+### 5.1 MidnightReset - Reset lúc 0h:0m mỗi ngày
 
 **File:** `Super_Spy7TF_V2.mq4` (BOT SPY)
 
@@ -759,7 +749,7 @@ void MidnightReset() {
 - `ChartSetSymbolPeriod()` → OnInit() → static reset → Infinite loop
 - GlobalVariable persistent trong session MT4 → Không bị reset
 
-### 6.2 HealthCheck - Kiểm tra 4 lần/ngày
+### 5.2 HealthCheck - Kiểm tra 4 lần/ngày
 
 **Mục đích:** Phát hiện WallStreet EA bị treo → Auto reset
 
@@ -803,7 +793,7 @@ void HealthCheck() {
 - File không update trong 5 giờ → WallStreet EA bị lỗi
 - Auto reset → EA khởi động lại → Gửi signal tiếp
 
-### 6.3 RunMidnightAndHealthCheck - Điều phối
+### 5.3 RunMidnightAndHealthCheck - Điều phối
 
 ```cpp
 void RunMidnightAndHealthCheck() {
@@ -838,7 +828,7 @@ void RunMidnightAndHealthCheck() {
 - `current_minute == 0` đảm bảo chỉ chạy ở phút thứ 0 (0h:0m, 5h:0m...)
 - `last_check_hour != current_hour` tránh duplicate trong cùng giờ
 
-### 6.4 Removed Feature - StartupReset
+### 5.4 Removed Feature - StartupReset
 
 **Lý do bỏ:**
 - StartupReset chạy 60s sau khi MT4 khởi động
@@ -861,9 +851,9 @@ void RunStartupReset() {
 
 ---
 
-## 7. TIMELINE HOẠT ĐỘNG
+## 6. TIMELINE HOẠT ĐỘNG
 
-### 7.1 Timeline trong 1 ngày
+### 6.1 Timeline trong 1 ngày
 
 ```
 00:00:00 → ✅ MidnightReset (reset 7 charts)
@@ -877,7 +867,7 @@ void RunStartupReset() {
 Mỗi giây → ProcessAllSignals() (nếu có tín hiệu mới)
 ```
 
-### 7.2 Khi có tín hiệu mới (VD: M5 SELL)
+### 6.2 Khi có tín hiệu mới (VD: M5 SELL)
 
 ```
 Timeline - PHẦN 1 & 2 xử lý đồng thời:
@@ -931,7 +921,7 @@ T+1130ms: ┌──────────────────────�
 T+1200ms: Lệnh SELL gửi đến Broker
 ```
 
-### 7.3 Khi NEWS CASCADE xảy ra (VD: M1 BUY L2)
+### 6.3 Khi NEWS CASCADE xảy ra (VD: M1 BUY L2)
 
 ```
 Timeline - NEWS CASCADE L2:
@@ -983,7 +973,7 @@ T+1200ms: Tổng 5 lệnh BUY gửi Broker:
           - 2 × Bonus (NEWS L2)
 ```
 
-### 7.4 Khi bot bị treo (Detected by HealthCheck)
+### 6.4 Khi bot bị treo (Detected by HealthCheck)
 
 ```
 10:00:00 → HealthCheck() chạy
