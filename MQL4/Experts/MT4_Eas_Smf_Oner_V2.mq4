@@ -137,10 +137,10 @@ struct EASymbolData {
     // Lot sizes (21 vars - pre-calculated) | Khoi luong tinh truoc
     double lot_sizes[7][3];      // [TF][Strategy]: [0]=S1, [1]=S2, [2]=S3
 
-    // Strategy conditions (3 vars) | Dieu kien chien luoc
+    // Strategy conditions (15 vars = 1 + 7 + 7) | Dieu kien chien luoc
     int trend_d1;                // S2: D1 trend (1=BUY,-1=SELL,0=NONE) | Xu huong D1
-    int news_level;              // S3: News level (abs value) | Muc do tin tuc
-    int news_direction;          // S3: News direction (-1/0/1) | Huong tin tuc
+    int news_level[7];           // S3: News level per TF (abs value) | Muc do tin tuc theo TF
+    int news_direction[7];       // S3: News direction per TF (-1/0/1) | Huong tin tuc theo TF
 
     // Stoploss thresholds (21 vars) | Nguong cat lo
     double layer1_thresholds[7][3];  // [TF][Strategy]: [0]=S1, [1]=S2, [2]=S3
@@ -715,22 +715,47 @@ void MapCSDLToEAVariables() {
     // S2: TREND - Always use D1 (row 6) for all TF | Luon dung D1 cho tat ca TF
     g_ea.trend_d1 = g_ea.csdl_rows[6].signal;
 
-    // S3: NEWS - Use STRONGEST NEWS from all 7 TF | Dung TIN TUC MANH NHAT tu 7 khung
-    // Find strongest NEWS across all 7 TF as single decision point
-    // Tim tin tuc manh nhat trong 7 khung lam diem quyet dinh duy nhat
-    int strongest_news = g_ea.csdl_rows[0].news;
-    for(int tf = 1; tf < 7; tf++) {
-        if(MathAbs(g_ea.csdl_rows[tf].news) > MathAbs(strongest_news)) {
-            strongest_news = g_ea.csdl_rows[tf].news;
-        }
-    }
-    g_ea.news_level = MathAbs(strongest_news);
-    g_ea.news_direction = (strongest_news > 0) ? 1 :
-                       (strongest_news < 0) ? -1 : 0;
+    // S3: NEWS - Map 7 NEWS values to 14 variables (7 level + 7 direction)
+    // Tach 7 gia tri NEWS thanh 14 bien (7 muc do + 7 huong)
+    // IMPORTANT: Each TF has its own NEWS level and direction for adaptive trading
+    // QUAN TRONG: Moi TF co muc do va huong NEWS rieng de giao dich thich ung
+    MapNewsTo14Variables();
 
     DebugPrint("Mapped 7 TF | signal[0]=" + IntegerToString(g_ea.csdl_rows[0].signal) +
                " trend_d1=" + IntegerToString(g_ea.trend_d1) +
-               " news_lv=" + IntegerToString(g_ea.news_level) + " (STRONGEST)");
+               " news[M1]=" + IntegerToString(g_ea.csdl_rows[0].news) +
+               " (split to 14 vars: 7 level + 7 dir)");
+}
+
+// Map 7 NEWS values (with ± sign) to 14 variables (7 level + 7 direction)
+// Tach 7 gia tri NEWS (co dau ±) thanh 14 bien (7 muc do + 7 huong)
+// CRITICAL: NEWS has 2 components: LEVEL (abs) and DIRECTION (sign)
+// QUAN TRONG: NEWS co 2 thanh phan: MUC DO (gia tri tuyet doi) va HUONG (dau)
+// Example: news = +30 → level[tf] = 30, direction[tf] = +1 (BUY)
+//          news = -20 → level[tf] = 20, direction[tf] = -1 (SELL)
+void MapNewsTo14Variables() {
+    for(int tf = 0; tf < 7; tf++) {
+        int tf_news = g_ea.csdl_rows[tf].news;
+
+        // Split into LEVEL (absolute value) and DIRECTION (sign)
+        // Tach thanh MUC DO (gia tri tuyet doi) va HUONG (dau)
+        g_ea.news_level[tf] = MathAbs(tf_news);
+
+        if(tf_news > 0) {
+            g_ea.news_direction[tf] = 1;   // Positive = BUY
+        } else if(tf_news < 0) {
+            g_ea.news_direction[tf] = -1;  // Negative = SELL
+        } else {
+            g_ea.news_direction[tf] = 0;   // Zero = NO NEWS
+        }
+    }
+
+    DebugPrint("NEWS 14 vars: M1[" + IntegerToString(g_ea.news_level[0]) + "/" +
+               IntegerToString(g_ea.news_direction[0]) + "] M5[" +
+               IntegerToString(g_ea.news_level[1]) + "/" +
+               IntegerToString(g_ea.news_direction[1]) + "] D1[" +
+               IntegerToString(g_ea.news_level[6]) + "/" +
+               IntegerToString(g_ea.news_direction[6]) + "]");
 }
 
 //=============================================================================
@@ -1023,7 +1048,10 @@ bool HasValidS2BaseCondition(int tf) {
 // S1 Core: Open order (DRY - shared logic for BASIC and NEWS strategies)
 void OpenS1Order(int tf, int signal, string mode) {
     datetime timestamp = (datetime)g_ea.csdl_rows[tf].timestamp;
-    int tf_news = g_ea.csdl_rows[tf].news;
+
+    // Use NEWS from 14 variables | Dung NEWS tu 14 bien
+    int news_level = g_ea.news_level[tf];
+    int news_direction = g_ea.news_direction[tf];
 
     RefreshRates();
 
@@ -1045,8 +1073,8 @@ void OpenS1Order(int tf, int signal, string mode) {
                          " | Sig=" + IntegerToString(signal);
 
         if(mode == "NEWS") {
-            string arrow = (tf_news > 0) ? "↑" : "↓";
-            log_msg += " News=" + (tf_news > 0 ? "+" : "") + IntegerToString(tf_news) + arrow;
+            string arrow = (news_direction > 0) ? "↑" : "↓";
+            log_msg += " News=" + (news_direction > 0 ? "+" : "") + IntegerToString(news_level) + arrow;
             log_msg += " Filter:" + (S1_UseNewsFilter ? "ON" : "OFF");
             log_msg += " Dir:" + (S1_RequireNewsDirection ? "REQ" : "ANY");
         }
@@ -1070,19 +1098,21 @@ void ProcessS1BasicStrategy(int tf) {
 // S1 NEWS Filter: Check NEWS before opening order
 void ProcessS1NewsFilterStrategy(int tf) {
     int current_signal = g_ea.csdl_rows[tf].signal;
-    int tf_news = g_ea.csdl_rows[tf].news;
-    int news_abs = MathAbs(tf_news);
+
+    // Use NEWS from 14 variables (7 level + 7 direction) per TF
+    // Dung NEWS tu 14 bien (7 muc do + 7 huong) theo tung TF
+    int news_level = g_ea.news_level[tf];           // Level for this TF
+    int news_direction = g_ea.news_direction[tf];   // Direction for this TF
 
     // Condition 1: Check NEWS level >= MinNewsLevelS1
-    if(news_abs < MinNewsLevelS1) {
-        DebugPrint("S1_NEWS: " + G_TF_NAMES[tf] + " NEWS=" + IntegerToString(news_abs) +
+    if(news_level < MinNewsLevelS1) {
+        DebugPrint("S1_NEWS: " + G_TF_NAMES[tf] + " NEWS=" + IntegerToString(news_level) +
                    " < Min=" + IntegerToString(MinNewsLevelS1) + ", SKIP");
         return;
     }
 
     // Condition 2: Check NEWS direction matches signal (if required)
     if(S1_RequireNewsDirection) {
-        int news_direction = (tf_news > 0) ? 1 : -1;
         if(current_signal != news_direction) {
             DebugPrint("S1_NEWS: " + G_TF_NAMES[tf] + " Signal=" + IntegerToString(current_signal) +
                        " != NewsDir=" + IntegerToString(news_direction) + ", SKIP");
@@ -1171,23 +1201,22 @@ void ProcessS2Strategy(int tf) {
 }
 
 // Process S3 (News Alignment) strategy for TF | Xu ly chien luoc S3 (Theo tin tuc)
-// OPTIMIZED: Uses per-TF NEWS + pre-calculated lot + reads signal from CSDL | TOI UU: Dung NEWS theo TF + lot da tinh + doc tin hieu tu CSDL
+// OPTIMIZED: Uses per-TF NEWS from 14 variables + pre-calculated lot | TOI UU: Dung NEWS theo TF tu 14 bien + lot da tinh
 void ProcessS3Strategy(int tf) {
-    // Read NEWS for this TF | Doc NEWS cua TF nay
-    int tf_news = g_ea.csdl_rows[tf].news;
-    int news_abs = MathAbs(tf_news);
+    // Use NEWS from 14 variables (7 level + 7 direction) per TF
+    // Dung NEWS tu 14 bien (7 muc do + 7 huong) theo tung TF
+    int news_level = g_ea.news_level[tf];           // Level for this TF
+    int news_direction = g_ea.news_direction[tf];   // Direction for this TF
+    int current_signal = g_ea.csdl_rows[tf].signal;
     datetime timestamp = (datetime)g_ea.csdl_rows[tf].timestamp;
 
     // Check NEWS level >= MinNewsLevelS3 | Kiem tra muc NEWS >= nguong
-    if(news_abs < MinNewsLevelS3) {
-        DebugPrint("S3_NEWS: TF" + IntegerToString(tf) + " NEWS=" + IntegerToString(news_abs) + " < " + IntegerToString(MinNewsLevelS3) + ", skip");
+    if(news_level < MinNewsLevelS3) {
+        DebugPrint("S3_NEWS: TF" + IntegerToString(tf) + " NEWS=" + IntegerToString(news_level) + " < " + IntegerToString(MinNewsLevelS3) + ", skip");
         return;
     }
 
     // Check NEWS direction matches signal | Kiem tra huong NEWS khop signal
-    int news_direction = (tf_news > 0) ? 1 : -1;
-    int current_signal = g_ea.csdl_rows[tf].signal;
-
     if(current_signal != news_direction) {
         DebugPrint("S3_NEWS: Signal=" + IntegerToString(current_signal) + " != NewsDir=" + IntegerToString(news_direction) + ", skip");
         return;
@@ -1203,10 +1232,11 @@ void ProcessS3Strategy(int tf) {
                                    "S3_" + G_TF_NAMES[tf], g_ea.magic_numbers[tf][2], clrBlue);
         if(ticket > 0) {
             g_ea.position_flags[tf][2] = 1;
-            string arrow = (tf_news > 0) ? "↑" : "↓";
+            string arrow = (news_direction > 0) ? "↑" : "↓";
             Print(">>> [OPEN] S3_NEWS TF=", G_TF_NAMES[tf], " | #", ticket, " BUY ",
                   DoubleToStr(g_ea.lot_sizes[tf][2], 2), " @", DoubleToStr(Ask, Digits),
-                  " | Sig=+1 News=", tf_news > 0 ? "+" : "", tf_news, arrow, " | Timestamp:", IntegerToString(timestamp), " <<<");
+                  " | Sig=+1 News=", news_direction > 0 ? "+" : "", IntegerToString(news_level), arrow,
+                  " | Timestamp:", IntegerToString(timestamp), " <<<");
         } else {
             g_ea.position_flags[tf][2] = 0;
             Print("[S3_", G_TF_NAMES[tf], "] Failed: ", GetLastError());
@@ -1218,10 +1248,11 @@ void ProcessS3Strategy(int tf) {
                                    "S3_" + G_TF_NAMES[tf], g_ea.magic_numbers[tf][2], clrRed);
         if(ticket > 0) {
             g_ea.position_flags[tf][2] = 1;
-            string arrow = (tf_news > 0) ? "↑" : "↓";
+            string arrow = (news_direction > 0) ? "↑" : "↓";
             Print(">>> [OPEN] S3_NEWS TF=", G_TF_NAMES[tf], " | #", ticket, " SELL ",
                   DoubleToStr(g_ea.lot_sizes[tf][2], 2), " @", DoubleToStr(Bid, Digits),
-                  " | Sig=-1 News=", tf_news > 0 ? "+" : "", tf_news, arrow, " | Timestamp:", IntegerToString(timestamp), " <<<");
+                  " | Sig=-1 News=", news_direction > 0 ? "+" : "", IntegerToString(news_level), arrow,
+                  " | Timestamp:", IntegerToString(timestamp), " <<<");
         } else {
             g_ea.position_flags[tf][2] = 0;
             Print("[S3_", G_TF_NAMES[tf], "] Failed: ", GetLastError());
@@ -1241,19 +1272,18 @@ void ProcessBonusNews() {
         // BUGFIX: Skip if TF disabled | Bo qua neu TF bi tat
         if(!IsTFEnabled(tf)) continue;
 
-        int tf_news = g_ea.csdl_rows[tf].news;
-        int news_abs = MathAbs(tf_news);
+        // Use NEWS from 14 variables (7 level + 7 direction) per TF
+        // Dung NEWS tu 14 bien (7 muc do + 7 huong) theo tung TF
+        int news_level = g_ea.news_level[tf];           // Level for this TF
+        int news_direction = g_ea.news_direction[tf];   // Direction for this TF
 
         // Skip if NEWS below threshold | Bo qua neu NEWS duoi nguong
-        if(news_abs < MinNewsLevelBonus) continue;
+        if(news_level < MinNewsLevelBonus) continue;
 
         // OPTIMIZED: Skip low-value NEWS (Category 2 L1 and Category 1 L1) | TOI UU: Bo qua tin tuc gia tri thap
         // Category 2 Level 1: ±1 (too weak for Bonus) | Cap 2 muc 1: ±1 (qua yeu cho Bonus)
         // Category 1 Level 1: ±10 (minimum level, prefer higher) | Cap 1 muc 1: ±10 (muc toi thieu, uu tien cao hon)
-        if(news_abs == 1 || news_abs == 10) continue;
-
-        // Determine direction | Xac dinh huong
-        int news_direction = (tf_news > 0) ? 1 : -1;
+        if(news_level == 1 || news_level == 10) continue;
 
         // Calculate BONUS lot (S3 lot × multiplier) | Tinh lot BONUS (lot S3 × he so nhan)
         double bonus_lot = g_ea.lot_sizes[tf][2] * BonusLotMultiplier;
@@ -1291,12 +1321,12 @@ void ProcessBonusNews() {
 
         // Consolidated log after loop | Log tong ket sau vong lap
         if(opened_count > 0) {
-            string arrow = (tf_news > 0) ? "↑" : "↓";
+            string arrow = (news_direction > 0) ? "↑" : "↓";
             double total_lot = opened_count * bonus_lot;
             Print(">>> [OPEN] BONUS TF=", G_TF_NAMES[tf], " | ", opened_count, "×",
                   news_direction == 1 ? "BUY" : "SELL", " @", DoubleToStr(bonus_lot, 2),
                   " Total:", DoubleToStr(total_lot, 2), " @", DoubleToStr(entry_price, Digits),
-                  " | News=", tf_news > 0 ? "+" : "", tf_news, arrow,
+                  " | News=", news_direction > 0 ? "+" : "", IntegerToString(news_level), arrow,
                   " | Multiplier:", DoubleToStr(BonusLotMultiplier, 1), "x",
                   " Tickets:", ticket_list, " <<<");
         }
@@ -1643,10 +1673,12 @@ int OnInit() {
 
     // Build init_summary with CSDL data (after MapCSDLToEAVariables) | Tao init_summary voi du lieu CSDL
     string trend_str = SignalToString(g_ea.trend_d1);
-    string news_str = "Lv" + IntegerToString(g_ea.news_level) + "_" + SignalToString(g_ea.news_direction);
+    // Show M1 NEWS as reference (adaptive per TF) | Hien thi NEWS cua M1 lam tham khao (thich ung theo tung TF)
+    string news_str = "M1:" + (g_ea.news_direction[0] > 0 ? "+" : "") +
+                      IntegerToString(g_ea.news_level[0]) + SignalToString(g_ea.news_direction[0]);
 
     g_ea.init_summary = "[INIT] " + g_ea.symbol_name + " | SL:" + sl_mode +
-                        " News:STRONGEST(" + news_str + ") Trend:" + trend_str +
+                        " News:7TF(" + news_str + ") Trend:" + trend_str +
                         " | Lot:" + DoubleToStr(g_ea.lot_sizes[0][0], 2) + "-" + DoubleToStr(g_ea.lot_sizes[6][2], 2) +
                         " | TF:" + IntegerToString(tf_count) + " S:" + IntegerToString(strat_count) +
                         " | Folder:" + folder_name + " Master:" + master_mode +
@@ -1930,7 +1962,6 @@ void UpdateDashboard() {
     else if(CSDL_Source == FOLDER_2) folder = "DA2";
     else if(CSDL_Source == FOLDER_3) folder = "DA3";
     string trend = (g_ea.trend_d1 == 1) ? "^" : (g_ea.trend_d1 == -1 ? "v" : "-");
-    string news_dir = (g_ea.news_direction == 1) ? "^" : (g_ea.news_direction == -1 ? "v" : "-");
 
     // ===== LINE 0: HEADER (YELLOW) | TIEU DE (VANG)
     string header = "[" + g_ea.symbol_name + "] " + folder + " | 7TFx3S | D1:" + trend +
