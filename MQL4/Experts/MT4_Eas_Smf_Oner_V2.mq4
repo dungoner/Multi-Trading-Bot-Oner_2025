@@ -436,6 +436,11 @@ void BuildCSDLFilename() {
 // ReadCSDLFile() - Local file reading only | Chi doc file local
 
 // Parse one row of CSDL data (6 columns) | Phan tich 1 hang du lieu CSDL (6 cot)
+// ⚠️ CRITICAL BUG FIXED (2025-01-03): NEWS column parse logic was BROKEN for months!
+//    OLD: end_pos = (comma>0 && comma<bracket) ? comma : bracket → If comma=-1, end_pos=-1 → NEVER PARSED!
+//    NEW: end_pos = StringLen(temp) as fallback → ALWAYS parses last column correctly
+//    BUG FOUND by comparing with SPY Bot code structure. Thank you for the hint!
+//    IMPACT: S3 and BONUS strategies never worked (NEWS always 0). Now FIXED.
 bool ParseLoveRow(string row_data, int row_index) {
     // Column 1: max_loss
     int maxloss_pos = StringFind(row_data, "\"max_loss\":");
