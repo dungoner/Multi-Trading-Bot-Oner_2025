@@ -487,24 +487,35 @@ bool ParseLoveRow(string row_data, int row_index) {
         }
     }
 
-    // Column 6: news (??i tên t? s1_news)
+    // Column 6: news (last column, may not have comma) | Cot 6: news (cot cuoi, co the khong co dau phay)
     int news_pos = StringFind(row_data, "\"news\":");
     if(news_pos >= 0) {
         string temp = StringSubstr(row_data, news_pos + 7);
+
+        // Find end position: comma or bracket (whichever comes first, or use string length)
+        // Tim vi tri ket thuc: dau phay hoac ngoac (cai nao den truoc, hoac dung do dai chuoi)
         int comma = StringFind(temp, ",");
         int bracket = StringFind(temp, "}");
-        int end_pos = (comma > 0 && comma < bracket) ? comma : bracket;
 
-        DebugPrint("[NEWS] TF" + IntegerToString(row_index) + " | temp=" + temp + " | comma=" + IntegerToString(comma) + " | bracket=" + IntegerToString(bracket) + " | end_pos=" + IntegerToString(end_pos));
+        int end_pos = StringLen(temp);  // Default to full string | Mac dinh la toan bo chuoi
+        if(comma > 0 && bracket > 0) {
+            end_pos = (comma < bracket) ? comma : bracket;  // Pick smaller position | Chon vi tri nho hon
+        } else if(comma > 0) {
+            end_pos = comma;
+        } else if(bracket > 0) {
+            end_pos = bracket;
+        }
 
-        if(end_pos > 0) {
+        DebugPrint("[NEWS] TF" + IntegerToString(row_index) + " | temp='" + temp + "' | comma=" + IntegerToString(comma) + " | bracket=" + IntegerToString(bracket) + " | end_pos=" + IntegerToString(end_pos));
+
+        if(end_pos > 0 && end_pos <= StringLen(temp)) {
             string news_str = StringTrim(StringSubstr(temp, 0, end_pos));
             g_ea.csdl_rows[row_index].news = (int)StringToInteger(news_str);
 
             // 🔍 DEBUG: Print parsed NEWS value
             DebugPrint("[NEWS] TF" + IntegerToString(row_index) + " | raw_str='" + news_str + "' | parsed=" + IntegerToString(g_ea.csdl_rows[row_index].news));
         } else {
-            DebugPrint("[NEWS] TF" + IntegerToString(row_index) + " | PARSE FAILED: end_pos=" + IntegerToString(end_pos));
+            DebugPrint("[NEWS] TF" + IntegerToString(row_index) + " | PARSE FAILED: end_pos=" + IntegerToString(end_pos) + " | temp_len=" + IntegerToString(StringLen(temp)));
         }
     } else {
         DebugPrint("[NEWS] TF" + IntegerToString(row_index) + " | KEY NOT FOUND in row_data");
