@@ -155,8 +155,8 @@ struct EASymbolData {
 
     // Strategy conditions (3 vars)
     int trend_d1;                // S2: D1 trend (1=BUY,-1=SELL,0=NONE)
-    int news_level;              // S3: News level (abs value)
-    int news_direction;          // S3: News direction (-1/0/1)
+    int news_level[7];           // S3: News level per TF (abs value)
+    int news_direction[7];       // S3: News direction per TF (-1/0/1)
 
     // Stoploss thresholds (21 vars)
     double layer1_thresholds[7][3];  // [TF][Strategy]: [0]=S1, [1]=S2, [2]=S3
@@ -794,28 +794,37 @@ void InitializeLayer1Thresholds() {
 //=============================================================================
 
 // Map CSDL data to EA variables for all 7 TF
-// OPTIMIZED: Single TREND variable + Smart NEWS mode selection
+// OPTIMIZED: Single TREND variable + Per-TF NEWS arrays
 // NOTE: signal_new/timestamp_new removed - use csdl_rows[tf] directly
 void MapCSDLToEAVariables() {
     // S2: TREND - Always use D1 (row 6) for all TF
     g_ea.trend_d1 = g_ea.csdl_rows[6].signal;
 
-    // S3: NEWS - Use STRONGEST NEWS from all 7 TF
-    // Find strongest NEWS across all 7 TF as single decision point
-    // Tim tin tuc manh nhat trong 7 khung lam diem quyet dinh duy nhat
-    int strongest_news = g_ea.csdl_rows[0].news;
-    for(int tf = 1; tf < 7; tf++) {
-        if(MathAbs(g_ea.csdl_rows[tf].news) > MathAbs(strongest_news)) {
-            strongest_news = g_ea.csdl_rows[tf].news;
-        }
-    }
-    g_ea.news_level = MathAbs(strongest_news);
-    g_ea.news_direction = (strongest_news > 0) ? 1 :
-                       (strongest_news < 0) ? -1 : 0;
+    // S3: NEWS - Map to 14 variables (7 TF × 2 vars)
+    MapNewsTo14Variables();
 
     DebugPrint("Mapped 7 TF | signal[0]=" + IntegerToString(g_ea.csdl_rows[0].signal) +
                " trend_d1=" + IntegerToString(g_ea.trend_d1) +
-               " news_lv=" + IntegerToString(g_ea.news_level) + " (STRONGEST)");
+               " news_M1=" + IntegerToString(g_ea.news_level[0]) + "/" + IntegerToString(g_ea.news_direction[0]));
+}
+
+// Map NEWS from CSDL to 14 variables (7 TF × 2 vars: level + direction)
+// Split CASCADE NEWS (±11-16) to separate level and direction per TF
+void MapNewsTo14Variables() {
+    for(int tf = 0; tf < 7; tf++) {
+        int tf_news = g_ea.csdl_rows[tf].news;
+        g_ea.news_level[tf] = MathAbs(tf_news);
+        if(tf_news > 0) {
+            g_ea.news_direction[tf] = 1;
+        } else if(tf_news < 0) {
+            g_ea.news_direction[tf] = -1;
+        } else {
+            g_ea.news_direction[tf] = 0;
+        }
+    }
+    Print("NEWS 14 vars: M1[", g_ea.news_level[0], "/", g_ea.news_direction[0],
+          "] M5[", g_ea.news_level[1], "/", g_ea.news_direction[1],
+          "] D1[", g_ea.news_level[6], "/", g_ea.news_direction[6], "]");
 }
 
 //=============================================================================
@@ -1755,10 +1764,10 @@ int OnInit() {
 
     // Build init_summary with CSDL data (after MapCSDLToEAVariables)
     string trend_str = SignalToString(g_ea.trend_d1);
-    string news_str = "Lv" + IntegerToString(g_ea.news_level) + "_" + SignalToString(g_ea.news_direction);
+    string news_str = "Lv" + IntegerToString(g_ea.news_level[0]) + "_" + SignalToString(g_ea.news_direction[0]);
 
     g_ea.init_summary = "[INIT] " + g_ea.symbol_name + " | SL:" + sl_mode +
-                        " News:STRONGEST(" + news_str + ") Trend:" + trend_str +
+                        " News:M1(" + news_str + ") Trend:" + trend_str +
                         " | Lot:" + DoubleToString(g_ea.lot_sizes[0][0], 2) + "-" + DoubleToString(g_ea.lot_sizes[6][2], 2) +
                         " | TF:" + IntegerToString(tf_count) + " S:" + IntegerToString(strat_count) +
                         " | Folder:" + folder_name + " Master:" + master_mode +
@@ -2047,7 +2056,6 @@ void UpdateDashboard() {
     else if(CSDL_Source == FOLDER_2) folder = "DA2";
     else if(CSDL_Source == FOLDER_3) folder = "DA3";
     string trend = (g_ea.trend_d1 == 1) ? "^" : (g_ea.trend_d1 == -1 ? "v" : "-");
-    string news_dir = (g_ea.news_direction == 1) ? "^" : (g_ea.news_direction == -1 ? "v" : "-");
 
     // ===== LINE 0: HEADER (YELLOW)
     string header = "[" + g_ea.symbol_name + "] " + folder + " | 7TFx3S | D1:" + trend +
