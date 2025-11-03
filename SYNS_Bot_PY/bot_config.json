@@ -1,0 +1,53 @@
+{
+  "mode": 1,
+  "quiet_mode": true,
+  "sender": {
+    "api_key": "",
+    "vps_ip": "147.189.173.121",
+    "api_port": 80,
+    "dashboard_port": 9070,
+    "server_ip": "0.0.0.0",
+    "csdl_folder": "E:/PRO_ONER/MQL4/Files/DataAutoOner3/",
+    "history_folder": "E:/PRO_ONER/MQL4/Files/DataAutoOner/HISTORY/",
+    "polling_interval": 1,
+    "log_history_limit": 50,
+    "stats_retention_days": 7,
+    "stats_save_interval": 3600,
+    "server_timezone_offset": 2,
+    "vietnam_timezone_offset": 7
+  },
+  "receiver": {
+    "bot1_url": "http://147.189.173.121:80",
+    "polling_interval": 1,
+    "output_folder": "C:/PRO_ONER/MQL4/Files/DataAutoOner3/",
+    "output_folder2": "C:/PRO_ONER/MQL4/Files/DataAutoOner2/",
+    "dashboard_port": 9070,
+    "http_timeout": 5
+  },
+  "symlink": {
+    "source_folders": {
+      "files": "E:/PRO_ONER/MQL4/Files",
+      "presets": "E:/PRO_ONER/MQL4/Presets",
+      "data_oner": "E:/PRO_ONER/MQL4/Data Oner"
+    },
+    "target_folders": [
+      "Files",
+      "Presets",
+      "Data Oner"
+    ],
+    "mt_platforms": []
+  },
+  "autostart": {
+    "bot_folder": "E:\\PRO_ONER\\SYNS_Bot_PY",
+    "start_script": "START_BOT.bat",
+    "task_name": "SYNS_Bot_AutoStart",
+    "mt_platforms": []
+  },
+  "server": {
+    "vps_ip": "147.189.173.121",
+    "csdl_folder": "E:/PRO_ONER/MQL4/Files/DataAutoOner3/",
+    "history_folder": "E:/PRO_ONER/MQL4/Files/DataAutoOner/HISTORY/",
+    "polling_interval": 1,
+    "vietnam_timezone_offset": 7
+  }
+}
