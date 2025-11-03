@@ -494,12 +494,20 @@ bool ParseLoveRow(string row_data, int row_index) {
         int comma = StringFind(temp, ",");
         int bracket = StringFind(temp, "}");
         int end_pos = (comma > 0 && comma < bracket) ? comma : bracket;
+
+        DebugPrint("[NEWS] TF" + IntegerToString(row_index) + " | temp=" + temp + " | comma=" + IntegerToString(comma) + " | bracket=" + IntegerToString(bracket) + " | end_pos=" + IntegerToString(end_pos));
+
         if(end_pos > 0) {
-            g_ea.csdl_rows[row_index].news = (int)StringToInteger(StringTrim(StringSubstr(temp, 0, end_pos)));
+            string news_str = StringTrim(StringSubstr(temp, 0, end_pos));
+            g_ea.csdl_rows[row_index].news = (int)StringToInteger(news_str);
 
             // 🔍 DEBUG: Print parsed NEWS value
-            DebugPrint("PARSE NEWS TF" + IntegerToString(row_index) + ": " + IntegerToString(g_ea.csdl_rows[row_index].news));
+            DebugPrint("[NEWS] TF" + IntegerToString(row_index) + " | raw_str='" + news_str + "' | parsed=" + IntegerToString(g_ea.csdl_rows[row_index].news));
+        } else {
+            DebugPrint("[NEWS] TF" + IntegerToString(row_index) + " | PARSE FAILED: end_pos=" + IntegerToString(end_pos));
         }
+    } else {
+        DebugPrint("[NEWS] TF" + IntegerToString(row_index) + " | KEY NOT FOUND in row_data");
     }
 
     return true;
@@ -534,18 +542,45 @@ bool ParseCSDLLoveJSON(string json_content) {
 }
 
 // Helper: Try to read and parse file | Ham phu: Thu doc va phan tich file
-bool TryReadFile(string filename) {
-    int handle = FileOpen(filename, FILE_READ | FILE_TXT | FILE_SHARE_READ | FILE_SHARE_WRITE);
-    if(handle == INVALID_HANDLE) return false;
+bool TryReadFile(string filename, bool use_share_flags = true) {
+    // TRY METHOD 1: With share flags (for locked files) | PP1: Voi co chia se (cho file bi khoa)
+    int flags = FILE_READ | FILE_TXT | FILE_ANSI;
+    if(use_share_flags) {
+        flags |= FILE_SHARE_READ | FILE_SHARE_WRITE;
+    }
+
+    int handle = FileOpen(filename, flags);
+    if(handle == INVALID_HANDLE) {
+        DebugPrint("[READ] Failed to open: " + filename + " | Error: " + IntegerToString(GetLastError()));
+        return false;
+    }
 
     string json_content = "";
     while(!FileIsEnding(handle)) {
-        json_content += FileReadString(handle);
+        string line = FileReadString(handle);
+        if(StringLen(line) > 0) {
+            json_content += line;
+        }
     }
     FileClose(handle);
 
-    if(StringLen(json_content) < 20) return false;
-    if(!ParseCSDLLoveJSON(json_content)) return false;
+    DebugPrint("[READ] File size: " + IntegerToString(StringLen(json_content)) + " chars");
+
+    if(StringLen(json_content) < 20) {
+        DebugPrint("[READ] Content too short: " + IntegerToString(StringLen(json_content)));
+        return false;
+    }
+
+    // DEBUG: Print first 200 chars to check format | DEBUG: In 200 ky tu dau de kiem tra dinh dang
+    if(StringLen(json_content) > 0) {
+        string preview = StringSubstr(json_content, 0, MathMin(200, StringLen(json_content)));
+        DebugPrint("[READ] Preview: " + preview);
+    }
+
+    if(!ParseCSDLLoveJSON(json_content)) {
+        DebugPrint("[READ] ParseCSDLLoveJSON failed");
+        return false;
+    }
 
     return true;  // SUCCESS | Thanh cong
 }
@@ -556,19 +591,25 @@ void ReadCSDLFile() {
     bool success = false;
 
     // ========== LOCAL FILE (FOLDER_1 / FOLDER_2 / FOLDER_3) ==========
-    // TRY 1: Read main local file | Lan 1: Doc file local chinh
-    success = TryReadFile(g_ea.csdl_filename);
+    // TRY 1: Read main local file WITH share flags | Lan 1: Doc file local chinh VOI co chia se
+    success = TryReadFile(g_ea.csdl_filename, true);
 
     if(!success) {
-        // TRY 2: Wait 100ms and retry | Lan 2: Cho 100ms va doc lai
+        // TRY 2: Wait 100ms and retry WITH share flags | Lan 2: Cho 100ms va doc lai VOI co chia se
         Sleep(100);
-        success = TryReadFile(g_ea.csdl_filename);
+        success = TryReadFile(g_ea.csdl_filename, true);
     }
 
     if(!success) {
-        // TRY 3: Read backup file in DataAutoOner (FOLDER_1) | Lan 3: Doc file du phong trong DataAutoOner
+        // TRY 3: Try WITHOUT share flags (unlock method) | Lan 3: Thu KHONG CO co chia se (pp mo khoa)
+        DebugPrint("[READ] Trying without share flags (unlock method)");
+        success = TryReadFile(g_ea.csdl_filename, false);
+    }
+
+    if(!success) {
+        // TRY 4: Read backup file in DataAutoOner (FOLDER_1) | Lan 4: Doc file du phong trong DataAutoOner
         string backup_file = "DataAutoOner\\" + g_ea.symbol_name + "_LIVE.json";
-        success = TryReadFile(backup_file);
+        success = TryReadFile(backup_file, true);
 
         if(success) {
             Print("[BACKUP] Using DataAutoOner (FOLDER_1) file");
@@ -579,7 +620,7 @@ void ReadCSDLFile() {
     if(!success) {
         // ALL FAILED: Keep old data, continue (no spam warning - only debug)
         // Tat ca that bai: Giu du lieu cu, tiep tuc (khong spam warning - chi debug)
-        DebugPrint("[WARNING] All read attempts failed. Using old data.");
+        DebugPrint("[WARNING] All 4 read attempts failed. Using old data.");
     }
 }
 
