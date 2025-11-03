@@ -1,51 +1,54 @@
 //+------------------------------------------------------------------+
-//| EAs_MTF_ONER_V2_MT4
+//| _MT4_EAs_MTF ONER_V2
 //| Multi Timeframe Expert Advisor for MT4 | EA nhieu khung thoi gian cho MT4
 //| 7 TF × 3 Strategies = 21 orders | 7 khung x 3 chien luoc = 21 lenh
 //| Version: 2.0 (MT4) | Phien ban: 2.0 (MT4)
 //+------------------------------------------------------------------+
-#property copyright "EAs_MTF_ONER_V2_MT4"
-#property version "2.00"
+#property copyright "_MT4_EAs_MTF ONER"
+#property version "2"
 #property strict
 
 //=============================================================================
 //  PART 1: USER INPUTS (30 inputs + 4 separators) | CAU HINH NGUOI DUNG
 //=============================================================================
 
-input string _________Menu_A___ = "___A. CORE SETTINGS _________";  //
+input string ___Menu_A___ = "___A. CORE SETTINGS __________";  //
 
 //--- A.1 Timeframe toggles (7) | Bat/tat khung thoi gian
-input bool TF_M1 = true;   // M1 (Signal Sym_M1 Time)
+input bool TF_M1 = false;  // M1 Signal(1,-1) vs Timestamp(Mt4server)
 input bool TF_M5 = true;   // M5 (Buy/Sell Symbol_M5)
-input bool TF_M15 = true;  // M15 (Signal Symbol_15)
+input bool TF_M15 = true;  // M15 (Signal Symbol_M15)
 input bool TF_M30 = true;  // M30 (Buy/Sell Symbol_M30)
-input bool TF_H1 = true;   // H1 (Signal Symbol_H1 )
-input bool TF_H4 = true;   // H4 (Buy/Sell Symbol_H4 )
-input bool TF_D1 = true;   // D1 (Signal Symbol_D1)
+input bool TF_H1 = true;   // H1 (Signal Symbol_H1)
+input bool TF_H4 = true;   // H4 (Buy/Sell Symbol_H4)
+input bool TF_D1 = false;   // D1 (Signal Symbol_D1)
 
 //--- A.2 Strategy toggles (3) | Bat/tat chien luoc
-input bool S1_HOME = true;   // S1: Binary (Home signal)
+input bool S1_HOME = true;   // S1: Binary (Home_7TF > B1:S1_NewsFilter=false)
 input bool S2_TREND = true;  // S2: Trend (Follow D1)
-input bool S3_NEWS = true;   // S3: News (High impact)
+input bool S3_NEWS = true;   // S3: News (High compact)
+//--- A.3 Close Mode Configuration (2) | Che do dong lenh
+input bool S1_CloseByM1 = false;   // S1: Close by M1 (TRUE=fast M1, FALSE=own TF)
+input bool S2_CloseByM1 = false;   // S2: Close by M1 (TRUE=fast M1, FALSE=own TF)
 
-//--- A.3 Risk management (2) | Quan ly rui ro
-input double FixedLotSize = 0.1;           // Lot size (0.01-1.0 recommended)
-input double MaxLoss_Fallback = -1000.0;   // Max loss fallback ($USD if CSDL fails)
+//--- A.4 Risk management (2) | Quan ly rui ro
+input double FixedLotSize = 0.01;          // Lot size (0.01-1.0 recommended)
+input double MaxLoss_Fallback = -1000.0;   // Maxloss fallback ($USD if CSDL fails)
 
-//--- A.4 Data source (1) | Nguon du lieu
+//--- A.5 Data source (1) | Nguon du lieu
 enum CSDL_SOURCE_ENUM {
-    FOLDER_1 = 0,  // DataAutoOner
-    FOLDER_2 = 1,  // DataAutoOner2 (Default)
-    FOLDER_3 = 2,  // DataAutoOner3
+    FOLDER_1 = 0,  // DataAutoOner (Botspy)
+    FOLDER_2 = 1,  // DataAutoOner2 (_Default_Ea)
+    FOLDER_3 = 2,  // DataAutoOner3 (_Sync/_Ea)
 };
 input CSDL_SOURCE_ENUM CSDL_Source = FOLDER_2;  // CSDL folder (signal source)
 
-input string _________Sep_B___ = "___B. STRATEGY CONFIG _________";  //
+input string ___Sep_B___ = "___B. STRATEGY CONFIG ________";  //
 
 //--- B.1 S1 NEWS Filter (3) | Loc tin tuc cho S1
-input bool S1_UseNewsFilter = true;            // S1: Use NEWS filter (TRUE=strict, FALSE=basic)
-input int MinNewsLevelS1 = 20;                 // S1: Min NEWS level (20-70, higher=stricter)
-input bool S1_RequireNewsDirection = true;     // S1: Match NEWS direction (signal==news!)
+input bool S1_UseNewsFilter = false;         // S1: Use NEWS filter (TRUE=strict, FALSE=basic)
+input int MinNewsLevelS1 = 2;                // S1: Min NEWS level (2-70, higher=stricter)
+input bool S1_RequireNewsDirection = true;   // S1: Match NEWS direction (signal==news!)
 
 //--- B.2 S2 TREND Mode (1) | Che do xu huong
 enum S2_TREND_MODE {
@@ -56,17 +59,13 @@ enum S2_TREND_MODE {
 input S2_TREND_MODE S2_TrendMode = S2_FOLLOW_D1;  // S2: Trend (D1 auto/manual)
 
 //--- B.3 S3 NEWS Configuration (4) | Cau hinh tin tuc
-input int MinNewsLevelS3 = 20;         // S3: Min NEWS level (20-70)
+input int MinNewsLevelS3 = 20;         // S3: Min NEWS level (2-70)
 input bool EnableBonusNews = true;     // S3: Enable Bonus (extra on high NEWS)
-input int BonusOrderCount = 2;         // S3: Bonus count (1-5 orders)
-input int MinNewsLevelBonus = 20;      // S3: Min NEWS for Bonus (threshold)
+input int BonusOrderCount = 1;         // S3: Bonus count (1-5 orders)
+input int MinNewsLevelBonus = 2;      // S3: Min NEWS for Bonus (threshold)
 input double BonusLotMultiplier = 1.0; // S3: Bonus lot multiplier (1.0-10.0)
 
-//--- B.4 Close Mode Configuration (2) | Che do dong lenh
-input bool S1_CloseByM1 = true;   // S1: Close by M1 signal (TRUE=fast M1, FALSE=own TF)
-input bool S2_CloseByM1 = true;   // S2: Close by M1 signal (TRUE=fast M1, FALSE=own TF)
-
-input string _________Sep_C___ = "___C. RISK PROTECTION _________";  //
+input string ___Sep_C___ = "___C. RISK PROTECTION _________";  //
 
 //--- C.1 Stoploss mode (3) | Che do cat lo
 enum STOPLOSS_MODE {
@@ -81,10 +80,10 @@ input double Layer2_Divisor = 5.0;  // Layer2 divisor (margin/-5 = threshold)
 input bool   UseTakeProfit = false;  // Enable take profit (FALSE=OFF, TRUE=ON)
 input double TakeProfit_Multiplier = 3;  // TP multiplier (0.5=5%, 1.0=10%, 5.0=50%)
 
-input string _________Sep_D___ = "___D. AUXILIARY SETTINGS _________";  //
+input string ___Sep_D___ = "___D. AUXILIARY SETTINGS ______";  //
 
 //--- D.1 Performance (1) | Hieu suat
-input bool UseEvenOddMode = false;  // Even/odd split mode (load balancing)
+input bool UseEvenOddMode = true;  // Even/odd split mode (load balancing)
 
 //--- D.2 Health check & reset (2) | Kiem tra suc khoe
 input bool EnableWeekendReset = true;   // Weekend reset (auto close Friday 23:50)
@@ -487,19 +486,38 @@ bool ParseLoveRow(string row_data, int row_index) {
         }
     }
 
-    // Column 6: news (??i tên t? s1_news)
+    // Column 6: news (last column, may not have comma) | Cot 6: news (cot cuoi, co the khong co dau phay)
     int news_pos = StringFind(row_data, "\"news\":");
     if(news_pos >= 0) {
         string temp = StringSubstr(row_data, news_pos + 7);
+
+        // Find end position: comma or bracket (whichever comes first, or use string length)
+        // Tim vi tri ket thuc: dau phay hoac ngoac (cai nao den truoc, hoac dung do dai chuoi)
         int comma = StringFind(temp, ",");
         int bracket = StringFind(temp, "}");
-        int end_pos = (comma > 0 && comma < bracket) ? comma : bracket;
-        if(end_pos > 0) {
-            g_ea.csdl_rows[row_index].news = (int)StringToInteger(StringTrim(StringSubstr(temp, 0, end_pos)));
+
+        int end_pos = StringLen(temp);  // Default to full string | Mac dinh la toan bo chuoi
+        if(comma > 0 && bracket > 0) {
+            end_pos = (comma < bracket) ? comma : bracket;  // Pick smaller position | Chon vi tri nho hon
+        } else if(comma > 0) {
+            end_pos = comma;
+        } else if(bracket > 0) {
+            end_pos = bracket;
+        }
+
+        DebugPrint("[NEWS] TF" + IntegerToString(row_index) + " | temp='" + temp + "' | comma=" + IntegerToString(comma) + " | bracket=" + IntegerToString(bracket) + " | end_pos=" + IntegerToString(end_pos));
+
+        if(end_pos > 0 && end_pos <= StringLen(temp)) {
+            string news_str = StringTrim(StringSubstr(temp, 0, end_pos));
+            g_ea.csdl_rows[row_index].news = (int)StringToInteger(news_str);
 
             // 🔍 DEBUG: Print parsed NEWS value
-            DebugPrint("PARSE NEWS TF" + IntegerToString(row_index) + ": " + IntegerToString(g_ea.csdl_rows[row_index].news));
+            DebugPrint("[NEWS] TF" + IntegerToString(row_index) + " | raw_str='" + news_str + "' | parsed=" + IntegerToString(g_ea.csdl_rows[row_index].news));
+        } else {
+            DebugPrint("[NEWS] TF" + IntegerToString(row_index) + " | PARSE FAILED: end_pos=" + IntegerToString(end_pos) + " | temp_len=" + IntegerToString(StringLen(temp)));
         }
+    } else {
+        DebugPrint("[NEWS] TF" + IntegerToString(row_index) + " | KEY NOT FOUND in row_data");
     }
 
     return true;
@@ -534,18 +552,45 @@ bool ParseCSDLLoveJSON(string json_content) {
 }
 
 // Helper: Try to read and parse file | Ham phu: Thu doc va phan tich file
-bool TryReadFile(string filename) {
-    int handle = FileOpen(filename, FILE_READ | FILE_TXT | FILE_SHARE_READ | FILE_SHARE_WRITE);
-    if(handle == INVALID_HANDLE) return false;
+bool TryReadFile(string filename, bool use_share_flags = true) {
+    // TRY METHOD 1: With share flags (for locked files) | PP1: Voi co chia se (cho file bi khoa)
+    int flags = FILE_READ | FILE_TXT | FILE_ANSI;
+    if(use_share_flags) {
+        flags |= FILE_SHARE_READ | FILE_SHARE_WRITE;
+    }
+
+    int handle = FileOpen(filename, flags);
+    if(handle == INVALID_HANDLE) {
+        DebugPrint("[READ] Failed to open: " + filename + " | Error: " + IntegerToString(GetLastError()));
+        return false;
+    }
 
     string json_content = "";
     while(!FileIsEnding(handle)) {
-        json_content += FileReadString(handle);
+        string line = FileReadString(handle);
+        if(StringLen(line) > 0) {
+            json_content += line;
+        }
     }
     FileClose(handle);
 
-    if(StringLen(json_content) < 20) return false;
-    if(!ParseCSDLLoveJSON(json_content)) return false;
+    DebugPrint("[READ] File size: " + IntegerToString(StringLen(json_content)) + " chars");
+
+    if(StringLen(json_content) < 20) {
+        DebugPrint("[READ] Content too short: " + IntegerToString(StringLen(json_content)));
+        return false;
+    }
+
+    // DEBUG: Print first 200 chars to check format | DEBUG: In 200 ky tu dau de kiem tra dinh dang
+    if(StringLen(json_content) > 0) {
+        string preview = StringSubstr(json_content, 0, MathMin(200, StringLen(json_content)));
+        DebugPrint("[READ] Preview: " + preview);
+    }
+
+    if(!ParseCSDLLoveJSON(json_content)) {
+        DebugPrint("[READ] ParseCSDLLoveJSON failed");
+        return false;
+    }
 
     return true;  // SUCCESS | Thanh cong
 }
@@ -556,19 +601,25 @@ void ReadCSDLFile() {
     bool success = false;
 
     // ========== LOCAL FILE (FOLDER_1 / FOLDER_2 / FOLDER_3) ==========
-    // TRY 1: Read main local file | Lan 1: Doc file local chinh
-    success = TryReadFile(g_ea.csdl_filename);
+    // TRY 1: Read main local file WITH share flags | Lan 1: Doc file local chinh VOI co chia se
+    success = TryReadFile(g_ea.csdl_filename, true);
 
     if(!success) {
-        // TRY 2: Wait 100ms and retry | Lan 2: Cho 100ms va doc lai
+        // TRY 2: Wait 100ms and retry WITH share flags | Lan 2: Cho 100ms va doc lai VOI co chia se
         Sleep(100);
-        success = TryReadFile(g_ea.csdl_filename);
+        success = TryReadFile(g_ea.csdl_filename, true);
     }
 
     if(!success) {
-        // TRY 3: Read backup file in DataAutoOner (FOLDER_1) | Lan 3: Doc file du phong trong DataAutoOner
+        // TRY 3: Try WITHOUT share flags (unlock method) | Lan 3: Thu KHONG CO co chia se (pp mo khoa)
+        DebugPrint("[READ] Trying without share flags (unlock method)");
+        success = TryReadFile(g_ea.csdl_filename, false);
+    }
+
+    if(!success) {
+        // TRY 4: Read backup file in DataAutoOner (FOLDER_1) | Lan 4: Doc file du phong trong DataAutoOner
         string backup_file = "DataAutoOner\\" + g_ea.symbol_name + "_LIVE.json";
-        success = TryReadFile(backup_file);
+        success = TryReadFile(backup_file, true);
 
         if(success) {
             Print("[BACKUP] Using DataAutoOner (FOLDER_1) file");
@@ -579,7 +630,7 @@ void ReadCSDLFile() {
     if(!success) {
         // ALL FAILED: Keep old data, continue (no spam warning - only debug)
         // Tat ca that bai: Giu du lieu cu, tiep tuc (khong spam warning - chi debug)
-        DebugPrint("[WARNING] All read attempts failed. Using old data.");
+        DebugPrint("[WARNING] All 4 read attempts failed. Using old data.");
     }
 }
 
@@ -1703,8 +1754,8 @@ void OnDeinit(const int reason) {
     EventKillTimer();
     Comment("");  // Clear Comment | Xoa Comment
 
-    // Delete all dashboard labels (16 labels: dash_0 to dash_15) | Xoa tat ca label dashboard
-    for(int i = 0; i <= 15; i++) {
+    // Delete all dashboard labels (15 labels: dash_0 to dash_14) | Xoa tat ca label dashboard
+    for(int i = 0; i <= 14; i++) {
         ObjectDelete("dash_" + IntegerToString(i));
     }
 
@@ -1897,12 +1948,12 @@ string FormatBonusStatus() {
     return result;
 }
 
-// Main dashboard update with OBJ_LABEL (12 lines, optimized) | Cap nhat dashboard voi OBJ_LABEL (12 dong, toi uu)
+// Main dashboard update with OBJ_LABEL (15 lines, optimized) | Cap nhat dashboard voi OBJ_LABEL (15 dong, toi uu)
 void UpdateDashboard() {
     // Check if dashboard is enabled | Kiem tra dashboard co bat khong
     if(!ShowDashboard) {
         // Hide all labels if disabled | An tat ca label neu tat
-        for(int i = 0; i <= 15; i++) {
+        for(int i = 0; i <= 14; i++) {
             ObjectDelete("dash_" + IntegerToString(i));
         }
         return;
@@ -1974,7 +2025,7 @@ void UpdateDashboard() {
     y_pos += line_height;
 
     // ===== LINE 1: SEPARATOR (White) | DUONG GACH (Trang)
-    CreateOrUpdateLabel("dash_1", "---------------------------------------------", 10, y_pos, clrWhite, 9);
+    CreateOrUpdateLabel("dash_1", "----------------------------------------------------", 10, y_pos, clrWhite, 9);
     y_pos += line_height;
 
     // ===== LINE 2: COLUMN HEADERS (White) | TEN COT (Trang)
@@ -1985,7 +2036,7 @@ void UpdateDashboard() {
     y_pos += line_height;
 
     // ===== LINE 3: SEPARATOR (White) | DUONG GACH (Trang)
-    CreateOrUpdateLabel("dash_3", "---------------------------------------------", 10, y_pos, clrWhite, 9);
+    CreateOrUpdateLabel("dash_3", "--------------------------------------------- ------", 10, y_pos, clrWhite, 9);
     y_pos += line_height;
 
     // ===== LINES 4-10: 7 TF ROWS - ALTERNATING COLORS + P&L | 7 HANG TF - 2 MAU XEN KE + LAI LO
@@ -2044,7 +2095,7 @@ void UpdateDashboard() {
     }
 
     // ===== LINE 11: SEPARATOR (White) | DUONG GACH (Trang)
-    CreateOrUpdateLabel("dash_11", "---------------------------------------------", 10, y_pos, clrWhite, 9);
+    CreateOrUpdateLabel("dash_11", "--------------------------------------------- ------", 10, y_pos, clrWhite, 9);
     y_pos += line_height;
 
     // ===== LINE 12: BONUS STATUS (White) | TRANG THAI BONUS (Trang)
@@ -2072,8 +2123,9 @@ void UpdateDashboard() {
     string broker_info = broker + " | Lev:1:" + IntegerToString(leverage) + " | 2s";
     CreateOrUpdateLabel("dash_14", broker_info, 10, y_pos, clrYellow, 8);
 
-    // Clean up old unused label (line 15 from old layout) | Don dep nhan cu khong dung (dong 15 tu giao dien cu)
+    // Clean up old unused labels | Don dep nhan cu khong dung
     ObjectDelete("dash_15");
+    ObjectDelete("dash_16");
 }
 
 // Create or update OBJ_LABEL | Tao hoac cap nhat OBJ_LABEL
