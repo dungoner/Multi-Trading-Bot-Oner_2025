@@ -2021,22 +2021,22 @@ void UpdateDashboard() {
     string header = "[" + g_ea.symbol_name + "] " + folder + " | 7TFx3S | D1:" + trend +
                     " | $" + DoubleToStr(equity, 0) + " DD:" + DoubleToStr(dd, 1) + "% | " +
                     IntegerToString(total_orders) + "/21";
-    CreateOrUpdateLabel("dash_0", header, 10, y_pos, clrYellow, 9);
+    CreateOrUpdateLabel(g_ea.symbol_prefix + "dash_0", header, 10, y_pos, clrYellow, 9);
     y_pos += line_height;
 
     // ===== LINE 1: SEPARATOR (White) | DUONG GACH (Trang)
-    CreateOrUpdateLabel("dash_1", "----------------------------------------------------", 10, y_pos, clrWhite, 9);
+    CreateOrUpdateLabel(g_ea.symbol_prefix + "dash_1", "----------------------------------------------------", 10, y_pos, clrWhite, 9);
     y_pos += line_height;
 
     // ===== LINE 2: COLUMN HEADERS (White) | TEN COT (Trang)
     string col_header = PadRight("TF", 5) + PadRight("Sig", 5) + PadRight("S1", 7) +
                         PadRight("S2", 7) + PadRight("S3", 7) + PadRight("P&L", 9) +
                         PadRight("News", 7) + "Bonus";
-    CreateOrUpdateLabel("dash_2", col_header, 10, y_pos, clrWhite, 9);
+    CreateOrUpdateLabel(g_ea.symbol_prefix + "dash_2", col_header, 10, y_pos, clrWhite, 9);
     y_pos += line_height;
 
     // ===== LINE 3: SEPARATOR (White) | DUONG GACH (Trang)
-    CreateOrUpdateLabel("dash_3", "--------------------------------------------- ------", 10, y_pos, clrWhite, 9);
+    CreateOrUpdateLabel(g_ea.symbol_prefix + "dash_3", "----------------------------------------------------", 10, y_pos, clrWhite, 9);
     y_pos += line_height;
 
     // ===== LINES 4-10: 7 TF ROWS - ALTERNATING COLORS + P&L | 7 HANG TF - 2 MAU XEN KE + LAI LO
@@ -2090,17 +2090,17 @@ void UpdateDashboard() {
 
         // Alternating colors: Blue (even rows), White (odd rows) | Mau xen ke: Xanh (dong chan), Trang (dong le)
         color row_color = (tf % 2 == 0) ? clrDodgerBlue : clrWhite;
-        CreateOrUpdateLabel("dash_" + IntegerToString(4 + tf), row, 10, y_pos, row_color, 9);
+        CreateOrUpdateLabel(g_ea.symbol_prefix + "dash_" + IntegerToString(4 + tf), row, 10, y_pos, row_color, 9);
         y_pos += line_height;
     }
 
     // ===== LINE 11: SEPARATOR (White) | DUONG GACH (Trang)
-    CreateOrUpdateLabel("dash_11", "--------------------------------------------- ------", 10, y_pos, clrWhite, 9);
+    CreateOrUpdateLabel(g_ea.symbol_prefix + "dash_11", "----------------------------------------------------", 10, y_pos, clrWhite, 9);
     y_pos += line_height;
 
     // ===== LINE 12: BONUS STATUS (White) | TRANG THAI BONUS (Trang)
     string bonus_status = FormatBonusStatus();
-    CreateOrUpdateLabel("dash_12", bonus_status, 10, y_pos, clrWhite, 9);
+    CreateOrUpdateLabel(g_ea.symbol_prefix + "dash_12", bonus_status, 10, y_pos, clrWhite, 9);
     y_pos += line_height;
 
     // ===== LINE 13: NET SUMMARY (Yellow) | TOM TAT NET (Vang)
@@ -2114,18 +2114,18 @@ void UpdateDashboard() {
 
     net_summary += " | " + IntegerToString(total_orders) + "/21";
 
-    CreateOrUpdateLabel("dash_13", net_summary, 10, y_pos, clrYellow, 9);
+    CreateOrUpdateLabel(g_ea.symbol_prefix + "dash_13", net_summary, 10, y_pos, clrYellow, 9);
     y_pos += line_height;
 
     // ===== LINE 14: BROKER INFO (Yellow) | THONG TIN SAN (Vang)
     string broker = AccountCompany();
     int leverage = AccountLeverage();
     string broker_info = broker + " | Lev:1:" + IntegerToString(leverage) + " | 2s";
-    CreateOrUpdateLabel("dash_14", broker_info, 10, y_pos, clrYellow, 8);
+    CreateOrUpdateLabel(g_ea.symbol_prefix + "dash_14", broker_info, 10, y_pos, clrYellow, 8);
 
     // Clean up old unused labels | Don dep nhan cu khong dung
-    ObjectDelete("dash_15");
-    ObjectDelete("dash_16");
+    ObjectDelete(g_ea.symbol_prefix + "dash_15");
+    ObjectDelete(g_ea.symbol_prefix + "dash_16");
 }
 
 // Create or update OBJ_LABEL | Tao hoac cap nhat OBJ_LABEL
