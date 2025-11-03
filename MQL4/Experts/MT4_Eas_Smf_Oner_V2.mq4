@@ -1892,6 +1892,13 @@ void UpdateDashboard() {
     // Count orders by strategy type for compact summary | Dem lenh theo loai chien luoc cho tom tat gon
     int s1_count = 0, s2_count = 0, s3_count = 0;
     double s1_pnl = 0, s2_pnl = 0, s3_pnl = 0;
+
+    // Count BONUS orders per TF | Dem lenh BONUS theo tung TF
+    int bonus_count_per_tf[7];
+    double bonus_lots_per_tf[7];
+    ArrayInitialize(bonus_count_per_tf, 0);
+    ArrayInitialize(bonus_lots_per_tf, 0.0);
+
     for(int i = 0; i < OrdersTotal(); i++) {
         if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) continue;
         if(OrderSymbol() != Symbol()) continue;
@@ -1905,6 +1912,15 @@ void UpdateDashboard() {
             if(magic == g_ea.magic_numbers[tf][0]) { s1_count++; s1_pnl += order_pnl; found = true; break; }
             if(magic == g_ea.magic_numbers[tf][1]) { s2_count++; s2_pnl += order_pnl; found = true; break; }
             if(magic == g_ea.magic_numbers[tf][2]) { s3_count++; s3_pnl += order_pnl; found = true; break; }
+
+            // Check BONUS (magic = S3 + 1000) | Kiem tra BONUS (magic = S3 + 1000)
+            int bonus_magic = g_ea.magic_numbers[tf][2] + 1000;
+            if(magic == bonus_magic) {
+                bonus_count_per_tf[tf]++;
+                bonus_lots_per_tf[tf] += OrderLots();
+                found = true;
+                break;
+            }
         }
     }
 
@@ -1929,7 +1945,8 @@ void UpdateDashboard() {
 
     // ===== LINE 2: COLUMN HEADERS (White) | TEN COT (Trang)
     string col_header = PadRight("TF", 5) + PadRight("Sig", 5) + PadRight("S1", 7) +
-                        PadRight("S2", 7) + PadRight("S3", 7) + PadRight("P&L", 9) + "News";
+                        PadRight("S2", 7) + PadRight("S3", 7) + PadRight("P&L", 9) +
+                        PadRight("News", 7) + "Bonus";
     CreateOrUpdateLabel("dash_2", col_header, 10, y_pos, clrWhite, 9);
     y_pos += line_height;
 
@@ -1962,9 +1979,17 @@ void UpdateDashboard() {
         string nw = IntegerToString(g_ea.csdl_rows[tf].news);
         if(g_ea.csdl_rows[tf].news > 0) nw = "+" + nw;
 
+        // BONUS display: "count|lot" or "-" | Hien thi BONUS: "so|lot" hoac "-"
+        string bonus_str = "-";
+        if(bonus_count_per_tf[tf] > 0) {
+            bonus_str = IntegerToString(bonus_count_per_tf[tf]) + "|" +
+                        DoubleToStr(bonus_lots_per_tf[tf], 2);
+        }
+
         // Build row with fixed-width columns | Xay dung dong voi cot co dinh
         string row = PadRight(G_TF_NAMES[tf], 5) + PadRight(sig, 5) + PadRight(s1, 7) +
-                     PadRight(s2, 7) + PadRight(s3, 7) + PadRight(pnl_str, 9) + nw;
+                     PadRight(s2, 7) + PadRight(s3, 7) + PadRight(pnl_str, 9) +
+                     PadRight(nw, 7) + bonus_str;
 
         // Alternating colors: Blue (even rows), White (odd rows) | Mau xen ke: Xanh (dong chan), Trang (dong le)
         color row_color = (tf % 2 == 0) ? clrDodgerBlue : clrWhite;
