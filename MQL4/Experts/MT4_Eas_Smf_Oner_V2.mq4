@@ -496,6 +496,9 @@ bool ParseLoveRow(string row_data, int row_index) {
         int end_pos = (comma > 0 && comma < bracket) ? comma : bracket;
         if(end_pos > 0) {
             g_ea.csdl_rows[row_index].news = (int)StringToInteger(StringTrim(StringSubstr(temp, 0, end_pos)));
+
+            // 🔍 DEBUG: Print parsed NEWS value
+            DebugPrint("PARSE NEWS TF" + IntegerToString(row_index) + ": " + IntegerToString(g_ea.csdl_rows[row_index].news));
         }
     }
 
@@ -1986,6 +1989,18 @@ void UpdateDashboard() {
     y_pos += line_height;
 
     // ===== LINES 4-10: 7 TF ROWS - ALTERNATING COLORS + P&L | 7 HANG TF - 2 MAU XEN KE + LAI LO
+
+    // 🔍 DEBUG: Print NEWS before display (once per cycle)
+    static datetime last_news_debug = 0;
+    if(TimeCurrent() != last_news_debug) {
+        string news_debug = "DASH NEWS: ";
+        for(int i = 0; i < 7; i++) {
+            news_debug += "TF" + IntegerToString(i) + "=" + IntegerToString(g_ea.csdl_rows[i].news) + " ";
+        }
+        DebugPrint(news_debug);
+        last_news_debug = TimeCurrent();
+    }
+
     for(int tf = 0; tf < 7; tf++) {
         // Signal with ASCII arrows (^ up, v down, - none) | Tin hieu voi mui ten ASCII
         int current_signal = g_ea.csdl_rows[tf].signal;
