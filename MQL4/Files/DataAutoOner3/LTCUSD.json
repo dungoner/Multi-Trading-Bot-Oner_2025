@@ -1,12 +1,12 @@
 {
     "symbol": "LTCUSD",
     "type": "main",
-    "timestamp": 1762146271,
+    "timestamp": 1762146433,
     "rows": 7,
     "columns": 10,
     "data": [
         {"timeframe_name": "M1", "timeframe": 1, "signal": -1, "price": 96.68000, "cross": 0, "timestamp": 1762146120, "pricediff": -10.30, "timediff": 5, "news": 0, "max_loss": -1246.28},
-        {"timeframe_name": "M5", "timeframe": 5, "signal": 1, "price": 97.45000, "cross": 1762145400, "timestamp": 1762145100, "pricediff": -4.40, "timediff": 30, "news": 0, "max_loss": -1246.29},
+        {"timeframe_name": "M5", "timeframe": 5, "signal": -1, "price": 96.45000, "cross": 1762146120, "timestamp": 1762146000, "pricediff": -10.00, "timediff": 15, "news": 0, "max_loss": -1246.27},
         {"timeframe_name": "M15", "timeframe": 15, "signal": -1, "price": 97.32000, "cross": 1762141500, "timestamp": 1762128000, "pricediff": 0.00, "timediff": 0, "news": 0, "max_loss": -1246.45},
         {"timeframe_name": "M30", "timeframe": 30, "signal": 1, "price": 92.64000, "cross": 1761856200, "timestamp": 1761856200, "pricediff": -15.10, "timediff": 60, "news": 0, "max_loss": -1251.14},
         {"timeframe_name": "H1", "timeframe": 60, "signal": -1, "price": 97.63000, "cross": 1761856200, "timestamp": 1762135200, "pricediff": -17.40, "timediff": 120, "news": 0, "max_loss": -1246.58},
@@ -31,6 +31,8 @@
         {"timeframe": "M1", "signal": -1, "price": 96.20000, "cross": 0, "timestamp": 1762144740, "pricediff": -12.10, "timediff": 2, "news": 0
         }],
     "m5": [
+        {"timeframe": "M5", "signal": -1, "price": 96.45000, "cross": 1762146120, "timestamp": 1762146000, "pricediff": -10.00, "timediff": 15, "news": 0
+        },
         {"timeframe": "M5", "signal": 1, "price": 97.45000, "cross": 1762145400, "timestamp": 1762145100, "pricediff": -4.40, "timediff": 30, "news": 0
         },
         {"timeframe": "M5", "signal": -1, "price": 97.01000, "cross": 1762143420, "timestamp": 1762143300, "pricediff": -12.30, "timediff": 5, "news": 0
@@ -42,8 +44,6 @@
         {"timeframe": "M5", "signal": 1, "price": 98.57000, "cross": 1762140060, "timestamp": 1762141200, "pricediff": -7.40, "timediff": 30, "news": 0
         },
         {"timeframe": "M5", "signal": -1, "price": 97.83000, "cross": 1762139460, "timestamp": 1762139400, "pricediff": -11.60, "timediff": 10, "news": 0
-        },
-        {"timeframe": "M5", "signal": 1, "price": 98.99000, "cross": 1762138920, "timestamp": 1762138800, "pricediff": -0.50, "timediff": 45, "news": 0
         }],
     "m15": [
         {"timeframe": "M15", "signal": -1, "price": 97.32000, "cross": 1762141500, "timestamp": 1762128000, "pricediff": 0.00, "timediff": 0, "news": 0
