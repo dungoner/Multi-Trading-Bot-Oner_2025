@@ -1,672 +1,824 @@
-# 🤖 Multi-Trading Bot System - Hướng Dẫn Cho Người Mới
+# 🤖 Multi-Trading Bot System - Hướng Dẫn Đầy Đủ
 
-> **Dành cho:** Lập trình viên mới tham gia dự án hoặc newchat session
-> **Mục đích:** Hiểu hệ thống từ TỔNG QUAN → CHI TIẾT, từ CHỨC NĂNG → CODE
+**Hệ thống giao dịch tự động 7 khung thời gian (Multi-TimeFrame) cho MT4**
+
+> 📖 **Dành cho:** Người không biết code, muốn hiểu hệ thống hoạt động như thế nào
+> 
+> 🎯 **Mục tiêu:** Giải thích rõ ràng LUỒNG → CSDL → CHỨC NĂNG mà không cần đọc code
 
 ---
 
 ## 📋 MỤC LỤC
 
-1. [HỆ THỐNG LÀ GÌ?](#1-hệ-thống-là-gì) ⭐ **ĐỌC ĐẦU TIÊN**
-2. [MỐC NỐI - ĐIỂM QUAN TRỌNG NHẤT](#2-mốc-nối---điểm-quan-trọng-nhất) ⭐⭐⭐
-3. [CHỨC NĂNG CHÍNH (4 chức năng)](#3-chức-năng-chính-4-chức-năng)
-4. [CHỨC NĂNG PHỤ (3 chức năng)](#4-chức-năng-phụ-3-chức-năng)
-5. [CHI TIẾT BOT SPY](#5-chi-tiết-bot-spy)
-6. [CHI TIẾT BOT EA AUTO](#6-chi-tiết-bot-ea-auto)
-7. [CẤU TRÚC CSDL](#7-cấu-trúc-csdl)
-8. [LUỒNG DỮ LIỆU HOÀN CHỈNH](#8-luồng-dữ-liệu-hoàn-chỉnh)
+1. [TỔNG QUAN - 3 BOT LÀ GÌ?](#1-tổng-quan---3-bot-là-gì)
+2. [BOT 1: WT (7 BỘ) - TẠO TÍN HIỆU GỐC](#2-bot-1-wt-7-bộ---tạo-tín-hiệu-gốc)
+3. [BOT 2: SPY (1 BỘ) - TỔNG HỢP VÀ TÍNH NEWS](#3-bot-2-spy-1-bộ---tổng-hợp-và-tính-news)
+4. [BOT 3: EA (1 BỘ) - GIAO DỊCH TỰ ĐỘNG](#4-bot-3-ea-1-bộ---giao-dịch-tự-động)
+5. [CẤU TRÚC CSDL - DỮ LIỆU TRUNG TÂM](#5-cấu-trúc-csdl---dữ-liệu-trung-tâm)
+6. [LUỒNG HOÀN CHỈNH - TỪ ĐẦU ĐẾN CUỐI](#6-luồng-hoàn-chỉnh---từ-đầu-đến-cuối)
+7. [CRITICAL BUG ĐÃ SỬA](#7-critical-bug-đã-sửa)
 
 ---
 
-## 1. HỆ THỐNG LÀ GÌ?
+## 1. TỔNG QUAN - 3 BOT LÀ GÌ?
 
-### 📖 Giải thích đơn giản
+### 🎯 Hệ thống gồm 3 loại bot chạy trên MT4:
 
-Hệ thống này là **2 con bot** làm việc **kết hợp** để giao dịch forex/crypto tự động:
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                    MT4 PLATFORM (1 SYMBOL)                      │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  📊 7 CHARTS BẮT BUỘC (M1, M5, M15, M30, H1, H4, D1)           │
+│                                                                 │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐       ┌──────────┐  │
+│  │ M1 Chart │  │ M5 Chart │  │M15 Chart │  ...  │ D1 Chart │  │
+│  │          │  │          │  │          │       │          │  │
+│  │ + WT Bot │  │ + WT Bot │  │ + WT Bot │       │ + WT Bot │  │
+│  │ + EA Bot │  │          │  │          │       │ + SPY Bot│  │
+│  └────┬─────┘  └────┬─────┘  └────┬─────┘       └────┬─────┘  │
+│       │             │              │                  │        │
+│       │             │              │                  │        │
+│       └─────────────┴──────────────┴──────────────────┘        │
+│                     │                                           │
+│                     ▼                                           │
+│            ┌──────────────────┐                                │
+│            │  BOT SPY (D1)    │ ← Thu thập 7 TF                │
+│            │  Đọc + Ghi file  │                                │
+│            └────────┬─────────┘                                │
+│                     │                                           │
+│                     ▼                                           │
+│              ┌─────────────┐                                   │
+│              │ JSON Files  │ ← 7 rows × 6 columns              │
+│              │ (CSDL 7x6)  │                                   │
+│              └──────┬──────┘                                   │
+│                     │                                           │
+│                     ▼                                           │
+│            ┌──────────────────┐                                │
+│            │  BOT EA (M1)     │ ← Đọc file và giao dịch        │
+│            │  Đọc + Mở lệnh   │                                │
+│            └──────────────────┘                                │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
 
-1. **Bot SPY** (Super_Spy7TF_V2.mq4) - **GIÁM SÁT**
-   - Đọc tín hiệu từ WallStreet EA
-   - Phân tích NEWS CASCADE
-   - **GHI** dữ liệu vào file JSON
+### 📝 Giải thích đơn giản:
 
-2. **Bot EA AUTO** (Eas_Smf_Oner_V2.mq4) - **GIAO DỊCH**
-   - **ĐỌC** dữ liệu từ file JSON
-   - Mở/đóng lệnh tự động
-   - Quản lý stoploss/takeprofit
+1. **7 BOT WT** (WaveTrend) - mỗi khung thời gian 1 bot
+   - Nhiệm vụ: Phân tích giá → tạo tín hiệu BUY/SELL
+   - Ghi kết quả: Vào Global Variables (bộ nhớ MT4)
 
-### 🎯 Câu hỏi quan trọng: 2 bot giao tiếp như thế nào?
+2. **1 BOT SPY** (Surveillance) - chạy trên D1
+   - Nhiệm vụ: Thu thập 7 tín hiệu → tính NEWS CASCADE → ghi file
+   - Đọc từ: Global Variables (7 bot WT)
+   - Ghi vào: File JSON (3 folder)
 
-**TRẢ LỜI:** Qua file JSON với **2 MỐC NỐI** (xem phần 2)
+3. **1 BOT EA** (Expert Advisor) - chạy trên M1
+   - Nhiệm vụ: Đọc file → mở lệnh tự động → quản lý rủi ro
+   - Đọc từ: File JSON (SPY ghi)
+   - Kết quả: Tối đa 21 lệnh (7 TF × 3 strategies) + BONUS
 
 ---
 
-## 2. MỐC NỐI - ĐIỂM QUAN TRỌNG NHẤT
+## 2. BOT 1: WT (7 BỘ) - TẠO TÍN HIỆU GỐC
 
-> ⚠️ **QUAN TRỌNG:** Đây là phần BẮT BUỘC phải hiểu để làm việc với hệ thống!
+### 📍 Vị trí:
+- **7 chart riêng:** M1, M5, M15, M30, H1, H4, D1
+- **Mỗi chart 1 bot WT** (indicator tự động)
 
-### 🔗 CÓ 2 MỐC NỐI
+### 🎯 Nhiệm vụ:
 
-Hệ thống có **2 luồng dữ liệu độc lập** giữa 2 bot:
+**TẠO TÍN HIỆU GIAO DỊCH TỪ WAVE TREND ALGORITHM**
+
+### 🔧 Làm gì?
+
+1. **Phân tích giá:**
+   - Theo dõi biến động giá trên khung thời gian của mình
+   - VD: Bot WT trên M1 → phân tích nến M1
+
+2. **Chạy thuật toán Wave Trend:**
+   - Tính toán các chỉ báo kỹ thuật
+   - Phát hiện xu hướng tăng/giảm
+
+3. **Tạo tín hiệu:**
+   - `+1` = Tín hiệu MUA (BUY)
+   - `-1` = Tín hiệu BÁN (SELL)
+   - `0` = Không có tín hiệu (NONE)
+
+### 💾 Ghi kết quả ở đâu?
+
+**Vào Global Variables của MT4:**
 
 ```
-┌──────────────┐                    ┌──────────────┐
-│   SPY BOT    │                    │   EA AUTO    │
-└──────┬───────┘                    └───────┬──────┘
-       │                                    │
-       ├─→ MỐC NỐI 1: Column 2 ────────────┼─→ S1 + S2 đọc
-       │   (signal: -1/0/1)                 │
-       │                                    │
-       └─→ MỐC NỐI 2: Column 8 ────────────┴─→ S3 đọc
-           (news: ±11~±16)
+Tên biến: {SYMBOL}_{TF}_SignalType1
+VD: 
+- BTCUSD_M1_SignalType1 = 1
+- BTCUSD_M5_SignalType1 = -1
+- BTCUSD_M15_SignalType1 = 0
 ```
 
-### 📊 MỐC NỐI 1: Column 2 - Tín hiệu gốc
+### ❓ Vì sao cần 7 bot riêng?
 
-**TÊN:** `signal`
-**GIÁ TRỊ:** `-1` (SELL) / `0` (NONE) / `1` (BUY)
-**NGUỒN GỐC:** WallStreet EA
-**XỬ LÝ:** SPY Bot (đọc GlobalVariable → ghi file)
-**NGƯỜI DÙNG:** EA Auto strategies S1 + S2
+**TRẢ LỜI:** Mỗi khung thời gian có đặc điểm khác nhau:
+- **M1:** Nhanh, thay đổi liên tục (cho scalping)
+- **H4:** Chậm, ổn định hơn (cho swing trading)
+- **D1:** Rất chậm, xu hướng dài hạn (cho trend following)
 
-**LUỒNG:**
-```
-WallStreet EA → GlobalVariable → SPY Bot → Column 2 → EA Auto (S1+S2)
-```
+→ Không thể 1 bot xử lý được cả 7 khung!
 
-**CODE REFERENCE:**
-- SPY ghi: `Super_Spy7TF_V2.mq4:704` (trong `ProcessSignalForTF`)
-- EA đọc: `Eas_Smf_Oner_V2.mq4:462` (trong `ParseLoveRow`)
+### ✅ Kết quả:
+
+**Sau khi chạy → có 7 tín hiệu độc lập trong Global Variables**
+
+Các bot khác (SPY) sẽ đọc từ đây.
 
 ---
 
-### 📊 MỐC NỐI 2: Column 8 - NEWS CASCADE
+## 3. BOT 2: SPY (1 BỘ) - TỔNG HỢP VÀ TÍNH NEWS
 
-**TÊN:** `news`
-**GIÁ TRỊ:** `0` / `±11~±16` (Category 1) / `±1~±7` (Category 2)
-**NGUỒN GỐC:** SPY Bot phân tích
-**XỬ LÝ:** SPY Bot (DetectCASCADE_New function)
-**NGƯỜI DÙNG:** EA Auto strategy S3
+### 📍 Vị trí:
+- **Chart D1** (1 bot duy nhất cho mỗi symbol)
 
-**LUỒNG:**
-```
-SPY Bot → DetectCASCADE_New() → Column 8 → EA Auto (S3)
-```
+### 🎯 Nhiệm vụ:
 
-**GIẢI THÍCH CHI TIẾT:**
+**THU THẬP 7 TÍN HIỆU + TÍNH NEWS CASCADE → GHI FILE**
 
-NEWS CASCADE có **7 cấp độ** (L1-L7) và **2 category**:
-
-#### Category 1: Cho EA Trading (Scores 10-70)
-- **L1:** LiveDiff > 2.5 USD → Score = ±10
-- **L2:** LiveDiff > 3.0 USD + M5→M1 cascade → Score = ±20
-- **L3:** LiveDiff > 3.5 USD + M15→M5→M1 cascade → Score = ±30
-- **L4-L7:** Tương tự với ngưỡng tăng dần...
-
-#### Category 2: Cho User Reference (Scores 1-7)
-- **L1:** LiveDiff > 0.1 USD + Time < 2 min → Score = ±1
-- **L2:** LiveDiff > 0.2 USD + Time < 4 min → Score = ±2
-- **L3-L7:** Tương tự với ngưỡng tăng dần...
-
-**CODE REFERENCE:**
-- SPY tính: `Super_Spy7TF_V2.mq4:1682` (function `DetectCASCADE_New`)
-- EA đọc: `Eas_Smf_Oner_V2.mq4:1128` (function `ProcessS3Strategy`)
+SPY chia làm **2 PHẦN:**
 
 ---
 
-### 🎓 TẠI SAO CẦN 2 MỐC NỐI?
+### 📊 PHẦN A: THU THẬP TÍN HIỆU GỐC
 
-**Câu hỏi:** Tại sao không chỉ dùng 1 signal?
+#### Làm gì?
 
-**Trả lời:**
-1. **Column 2 (signal)** = Tín hiệu GỐC từ WallStreet EA
-   - Phản ánh phân tích kỹ thuật cơ bản
-   - S1 + S2 dùng để giao dịch nhanh
+1. **Đọc Global Variables từ 7 bot WT:**
+   ```
+   M1_signal  = 1
+   M5_signal  = 1
+   M15_signal = 0
+   M30_signal = -1
+   H1_signal  = -1
+   H4_signal  = 1
+   D1_signal  = 1
+   ```
 
-2. **Column 8 (news)** = Tín hiệu NÂNG CAO từ SPY Bot
-   - Phản ánh độ mạnh đột phá (breakout strength)
-   - S3 dùng để bắt tin tức lớn (high-impact events)
+2. **Tính toán thêm:**
+   - `PriceDiff (USD)`: Chênh lệch giá so với lần trước
+     - VD: Lần trước M1 = 50000, bây giờ = 50002.5 → +2.5 USD
+   
+   - `TimeDiff (phút)`: Thời gian từ tín hiệu trước
+     - VD: Tín hiệu cũ lúc 10:00, mới lúc 10:05 → 5 phút
+   
+   - `MaxLoss`: Lỗ tối đa cho 1 LOT
+     - Dùng để tính stoploss sau này
 
-**VÍ DỤ THỰC TẾ:**
+#### Kết quả?
+
+**Có 7 rows dữ liệu cơ bản:**
+
+| TF  | Signal | Price   | Timestamp | PriceDiff | TimeDiff | MaxLoss |
+|-----|--------|---------|-----------|-----------|----------|---------|
+| M1  | +1     | 50002.5 | 17306...  | +2.5      | 5        | -0.50   |
+| M5  | +1     | 50001.0 | 17306...  | +1.2      | 15       | -0.75   |
+| ... | ...    | ...     | ...       | ...       | ...      | ...     |
+
+---
+
+### 🔥 PHẦN B: TÍNH NEWS CASCADE (QUAN TRỌNG!)
+
+#### NEWS CASCADE là gì?
+
+**PHÁT HIỆN "TIN TỨC LỚN" KHI GIÁ ĐỘT BIẾN**
+
+Khi có tin tức quan trọng → giá tăng/giảm đột ngột → đây là cơ hội giao dịch!
+
+#### Tính toán như thế nào?
+
+**BƯỚC 1: Lấy tín hiệu M1 mới nhất**
 ```
-TF=M1:
-- Column 2 (signal) = 1 (BUY)    ← WallStreet EA phát hiện xu hướng tăng
-- Column 8 (news) = +30 (L3)     ← SPY Bot phát hiện đột phá mạnh
+M1_signal = +1 (BUY)
+M1_price  = 50000.0
+M1_time   = 10:00:00
+```
 
-→ S1: MỞ lệnh BUY (theo signal)
-→ S2: MỞ lệnh BUY (nếu D1 trend = BUY)
-→ S3: MỞ lệnh BUY + BONUS (vì news=+30 rất mạnh)
+**BƯỚC 2: Lấy giá LIVE hiện tại**
+```
+Current_price = 50003.0
+Current_time  = 10:00:30 (30 giây sau)
+```
+
+**BƯỚC 3: Tính độ đột biến**
+```
+live_diff = |50003.0 - 50000.0| = 3.0 USD
+```
+
+**BƯỚC 4: So sánh với 7 ngưỡng CASCADE**
+
+#### 7 CẤP ĐỘ NEWS (2 Categories):
+
+**CATEGORY 1 - EA TRADING (Điểm 10-70):**
+
+| Level | Điều kiện TF          | Ngưỡng USD | Điểm NEWS |
+|-------|-----------------------|------------|-----------|
+| L1    | M1 đủ                 | > 2.5      | ±10       |
+| L2    | M5→M1 cascade         | > 3.0      | ±20       |
+| L3    | M15→M5→M1 cascade     | > 3.5      | ±30       |
+| L4    | M30→M15→M5→M1         | > 4.0      | ±40       |
+| L5    | H1→M30→M15→M5→M1      | > 4.5      | ±50       |
+| L6    | H4→H1→M30→M15→M5→M1   | > 5.0      | ±60       |
+| L7    | D1→H4→...→M1 (cả 7)   | > 5.5      | ±70       |
+
+**CATEGORY 2 - SPECIAL (Điểm 1-7):**
+- Tương tự nhưng ngưỡng riêng
+- Dùng để tham khảo
+
+**VÍ DỤ TÍNH TOÁN:**
+
+```
+M1:  live_diff = 3.0 > 2.5 ✓ → NEWS[M1]  = +10
+M5:  M5→M1 chưa cascade    → NEWS[M5]  = 0
+M15: Chưa đủ điều kiện     → NEWS[M15] = 0
+M30: Chưa đủ điều kiện     → NEWS[M30] = 0
+H1:  Chưa đủ điều kiện     → NEWS[H1]  = 0
+H4:  Chưa đủ điều kiện     → NEWS[H4]  = 0
+D1:  Chưa đủ điều kiện     → NEWS[D1]  = 0
+```
+
+#### Vì sao cần NEWS?
+
+**PHÁT HIỆN CƠ HỘI LỚN!**
+
+- Tin tức → giá biến động mạnh → lợi nhuận cao
+- Càng nhiều TF cascade → tin càng mạnh → điểm càng cao
+- EA dùng NEWS để mở lệnh BONUS (tăng volume)
+
+---
+
+### 📁 PHẦN C: GHI FILE CSDL
+
+#### SPY ghi 3 file đồng thời:
+
+```
+DataAutoOner/SYMBOL_LIVE.json   ← Folder 1
+DataAutoOner2/SYMBOL_LIVE.json  ← Folder 2 (EA đọc chính)
+DataAutoOner3/SYMBOL_LIVE.json  ← Folder 3 (dự phòng)
+```
+
+**Tại sao 3 file?**
+- Tránh file bị lock khi EA đang đọc
+- Tăng reliability (nếu 1 file lỗi, còn 2 file khác)
+
+#### Cấu trúc file JSON (7 rows × 6 columns):
+
+```json
+[
+  {
+    "max_loss": 0.50,
+    "timestamp": 1730620800,
+    "signal": 1,
+    "pricediff": 2.50,
+    "timediff": 5,
+    "news": 30
+  },
+  {
+    "max_loss": 0.75,
+    "timestamp": 1730620500,
+    "signal": 1,
+    "pricediff": 1.20,
+    "timediff": 15,
+    "news": -20
+  },
+  ... (5 rows nữa cho M15, M30, H1, H4, D1)
+]
+```
+
+#### Ý nghĩa 6 cột:
+
+| Cột | Ý nghĩa | EA dùng để? |
+|-----|---------|-------------|
+| `max_loss` | Lỗ tối đa 1 LOT | Tính stoploss |
+| `timestamp` | Thời gian tín hiệu | Kiểm tra tín hiệu mới |
+| **`signal`** | **Tín hiệu (±1, 0)** | **Quyết định BUY/SELL** |
+| `pricediff` | Chênh lệch giá USD | Tham khảo |
+| `timediff` | Thời gian từ tín hiệu trước | Tham khảo |
+| **`news`** | **Điểm NEWS CASCADE** | **Mở lệnh BONUS** |
+
+#### Khi nào SPY ghi file?
+
+**MỖI 2 GIÂY:**
+- Quét 7 TF
+- Cập nhật NEWS
+- Ghi lại 3 file
+
+---
+
+## 4. BOT 3: EA (1 BỘ) - GIAO DỊCH TỰ ĐỘNG
+
+### 📍 Vị trí:
+- **Chart M1** (1 bot duy nhất cho mỗi symbol)
+
+### 🎯 Nhiệm vụ:
+
+**ĐỌC FILE CSDL → GIAO DỊCH 7 TF × 3 STRATEGIES + BONUS**
+
+---
+
+### ⏱️ LUỒNG CHÍNH (Mỗi 2 giây)
+
+```
+┌──────────────────────────────────────────────────────────────┐
+│ GIÂY CHẴN (0,2,4,6...): TRADING CORE                        │
+├──────────────────────────────────────────────────────────────┤
+│                                                              │
+│ [1] ĐỌC FILE CSDL                                           │
+│     ReadCSDLFile()                                           │
+│     ├─ Thử đọc Folder 2 (ưu tiên)                           │
+│     ├─ Nếu fail → thử Folder 1                              │
+│     ├─ Nếu fail → thử Folder 3                              │
+│     └─ Lưu vào g_ea.csdl_rows[7]                           │
+│                                                              │
+│ [2] TÁCH NEWS THÀNH 14 BIẾN                                 │
+│     MapNewsTo14Variables()                                   │
+│     ├─ g_ea.news_level[tf] = MathAbs(news)                 │
+│     └─ g_ea.news_direction[tf] = sign(news)                │
+│                                                              │
+│     VD: news = +30                                           │
+│         → level[tf] = 30 (mức độ)                          │
+│         → direction[tf] = +1 (BUY)                         │
+│                                                              │
+│ [3] QUÉT 7 TF (M1→D1):                                      │
+│     │                                                        │
+│     ├─ [A] ĐÓNG LỆNH NHANH (chỉ M1):                        │
+│     │   if(tf == M1 && M1_đảo_chiều):                      │
+│     │   ├─ CloseS1OrdersByM1()                             │
+│     │   ├─ CloseS2OrdersByM1()                             │
+│     │   └─ CloseAllBonusOrders()                           │
+│     │                                                        │
+│     ├─ [B] ĐÓNG LỆNH BÌNH THƯỜNG (theo TF):                 │
+│     │   if(TF_đảo_chiều):                                  │
+│     │   └─ CloseOrdersForTF(tf)                            │
+│     │                                                        │
+│     └─ [C] MỞ LỆNH MỚI (3 strategies):                      │
+│         ├─ ProcessS1Strategy(tf)  ← HOME/Binary            │
+│         ├─ ProcessS2Strategy(tf)  ← TREND                  │
+│         └─ ProcessS3Strategy(tf)  ← NEWS                   │
+│                                                              │
+│ [4] MỞ LỆNH BONUS                                           │
+│     ProcessBonusNews()                                       │
+│     └─ Quét 7 TF, mở thêm lệnh nếu NEWS cao               │
+│                                                              │
+├──────────────────────────────────────────────────────────────┤
+│ GIÂY LẺ (1,3,5,7...): AUXILIARY                             │
+├──────────────────────────────────────────────────────────────┤
+│                                                              │
+│ [1] CheckStoplossAndTakeProfit()                            │
+│     └─ Đóng lệnh lỗ quá ngưỡng                              │
+│                                                              │
+│ [2] UpdateDashboard()                                        │
+│     └─ Hiển thị bảng điều khiển                             │
+│                                                              │
+│ [3] CheckEmergencyConditions()                              │
+│     └─ Đóng tất cả nếu DD > ngưỡng                          │
+│                                                              │
+└──────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## 3. CHỨC NĂNG CHÍNH (4 chức năng)
+### 🎯 3 CHIẾN LƯỢC GIAO DỊCH
 
-Hệ thống có **4 chức năng chính** tương ứng với **2 phần của mỗi bot**:
+#### Strategy 1: S1_HOME (Binary)
 
-```
-┌────────────────────────────────────────────────────────┐
-│                      SPY BOT                           │
-├────────────────────────────────────────────────────────┤
-│  PHẦN 1: Xử lý TÍN HIỆU GỐC                           │
-│  └─ ProcessSignalForTF() → Ghi Column 2               │
-│                                                        │
-│  PHẦN 2: Xử lý NEWS CASCADE                           │
-│  └─ DetectCASCADE_New() → Ghi Column 8                │
-└────────────────────────────────────────────────────────┘
+**Đọc từ:** Cột `signal`
 
-┌────────────────────────────────────────────────────────┐
-│                    EA AUTO BOT                         │
-├────────────────────────────────────────────────────────┤
-│  PHẦN 1: Giao dịch theo SIGNAL (S1 + S2)             │
-│  ├─ S1: ProcessS1Strategy() → Đọc Column 2           │
-│  └─ S2: ProcessS2Strategy() → Đọc Column 2 (D1)      │
-│                                                        │
-│  PHẦN 2: Giao dịch theo NEWS (S3)                    │
-│  └─ S3: ProcessS3Strategy() → Đọc Column 8           │
-└────────────────────────────────────────────────────────┘
-```
+**Điều kiện mở:**
+- Signal hiện tại ≠ 0 (có tín hiệu BUY hoặc SELL)
+- Signal cũ = 0 (trước đó không có tín hiệu)
+- Timestamp thay đổi (tín hiệu mới)
 
-### 🔄 Mối quan hệ giữa 4 chức năng
+**Điều kiện đóng:**
+- **Nếu S1_CloseByM1 = true:** Đóng khi **M1** đảo chiều (nhanh)
+- **Nếu S1_CloseByM1 = false:** Đóng khi **TF của nó** đảo chiều
 
-```
-SPY PHẦN 1 ──────┐
-                 ├─→ EA PHẦN 1 (S1+S2)
-SPY PHẦN 2 ──────┘
-
-SPY PHẦN 2 ──────→ EA PHẦN 2 (S3)
-```
-
-**CHÚ THÍCH:**
-- SPY PHẦN 1 phục vụ EA PHẦN 1
-- SPY PHẦN 2 phục vụ EA PHẦN 2
-- Hai luồng này **ĐỘC LẬP** nhau!
-
----
-
-## 4. CHỨC NĂNG PHỤ (3 chức năng)
-
-Ngoài 4 chức năng chính, hệ thống có 3 chức năng phụ:
-
-### 4.1 MidnightReset (SPY Bot)
-- **Thời gian:** 0h:00 hàng ngày
-- **Mục đích:** Reset lại các biến, làm mới GlobalVariables
-- **Code:** `Super_Spy7TF_V2.mq4:2887`
-
-### 4.2 HealthCheck (Cả 2 bot)
-- **Thời gian:**
-  - SPY: 5h, 10h, 15h, 20h
-  - EA: 8h, 16h
-- **Mục đích:** Kiểm tra bot có đang hoạt động, nếu treo → tự reset
-- **Code:**
-  - SPY: `Super_Spy7TF_V2.mq4:2856`
-  - EA: `Eas_Smf_Oner_V2.mq4:1459`
-
-### 4.3 Dashboard (Cả 2 bot)
-- **Thời gian:** Cập nhật liên tục (mỗi giây)
-- **Mục đích:** Hiển thị trạng thái bot trên chart
-- **Code:**
-  - SPY: `Super_Spy7TF_V2.mq4:748`
-  - EA: `Eas_Smf_Oner_V2.mq4:1812`
-
----
-
-## 5. CHI TIẾT BOT SPY
-
-### 5.1 Tổng quan
-
-**File:** `MQL4/Indicators/Super_Spy7TF_V2.mq4` (2946 dòng)
-**Loại:** Indicator (hiển thị trên chart)
-**Chạy trên:** 7 charts (M1, M5, M15, M30, H1, H4, D1) - CÙNG 1 symbol
-
-### 5.2 Nhiệm vụ chính
-
-#### A. ĐỌC tín hiệu từ WallStreet EA (PHẦN 1)
-
-**NGUỒN:** GlobalVariable
-**TÊN BIẾN:** `{SYMBOL}_{TF}_SignalType1`
-**VÍ DỤ:** `LTCUSD_M1_SignalType1`, `LTCUSD_M5_SignalType1`...
-
-**XỬ LÝ:**
-1. Đọc signal mới từ GlobalVariable
-2. Tính PriceDiff (USD) = chênh lệch giá so với signal trước
-3. Tính TimeDiff (minutes) = thời gian kể từ signal trước
-4. Ghi vào Column 2, 7, 8 của CSDL
-
-**CODE:**
-```mql4
-// Super_Spy7TF_V2.mq4:2714-2734
-void ProcessAllSignals() {
-    for(int i = 0; i < 7; i++) {
-        string signal_var = g_target_symbol + "_" + tf_names[i] + "_SignalType1";
-        string time_var = g_target_symbol + "_" + tf_names[i] + "_LastSignalTime";
-
-        int current_signal = (int)GlobalVariableGet(signal_var);
-        long current_signal_time = (long)GlobalVariableGet(time_var);
-
-        if(current_signal != 0 &&
-           current_signal_time > g_symbol_data.processed_timestamps[i]) {
-            ProcessSignalForTF(i, current_signal, current_signal_time);
-        }
-    }
-}
-```
-
-#### B. PHÂN TÍCH NEWS CASCADE (PHẦN 2)
-
-**NGUỒN:** Dữ liệu từ CSDL (7 TF)
-**XỬ LÝ:** Hàm `DetectCASCADE_New()`
-
-**LOGIC:**
-1. Kiểm tra 7 level (L1-L7) **ĐỘC LẬP**
-2. Mỗi level có 2 category (EA Trading vs User Reference)
-3. Ghi kết quả vào Column 8
-
-**VÍ DỤ L2 (Category 1):**
-```mql4
-// Super_Spy7TF_V2.mq4:1736-1750
-// L2: M5→M1 aligned + live_diff > 3.0 USD → Score 20
-if(m5_signal != 0 && m1_signal != 0 && m1_signal == m5_signal) {
-    if(m5_cross == m1_time) {  // M5.cross = M1.timestamp
-        double l2_threshold = NewsBaseLiveDiff + (NewsLiveDiffStep * 1);  // 3.0 USD
-        if(live_usd_diff > l2_threshold && IsWithinOneCandle(1, m5_time)) {
-            g_symbol_data.news_results[1] = m5_signal * 20;  // Score
-        } else {
-            g_symbol_data.news_results[1] = 0;
-        }
-    } else {
-        g_symbol_data.news_results[1] = 0;
-    }
-} else {
-    g_symbol_data.news_results[1] = 0;
-}
-```
-
-#### C. GHI FILE
-
-**3 file được ghi:**
-1. **File A:** `DataAutoOner/{SYMBOL}.json` (CSDL1 - 10 columns + history)
-2. **File B:** `DataAutoOner2/{SYMBOL}_LIVE.json` (CSDL2 - 6 columns, no history)
-3. **File C:** `DataAutoOner3/{SYMBOL}_LIVE.json` (CSDL2 - for Python)
-
-**GHI KHI NÀO:**
-- Khi có signal mới: Ghi cả CSDL1 + CSDL2
-- Mỗi 2 giây: Cập nhật NEWS → Ghi cả CSDL1 + CSDL2
-
-**CODE:**
-```mql4
-// Super_Spy7TF_V2.mq4:730-731
-WriteCSDL1ArrayToFile();   // CSDL1: SYMBOL.json (10 columns + history)
-WriteCSDL2ArrayToFile();   // CSDL2: SYMBOL_LIVE.json (6 columns, no history, 3 folders)
-```
-
-### 5.3 Cấu trúc dữ liệu chính
-
-```mql4
-// Super_Spy7TF_V2.mq4:69-120
-struct SymbolCSDL1Data {
-    string symbol;                    // Symbol name
-
-    // CSDL1 CURRENT DATA - 7 TF × 10 COLUMNS
-    int signals[7];                   // Column 3: Signal (-1, 0, 1)
-    double prices[7];                 // Column 4: Price
-    long crosses[7];                  // Column 5: Cross (timestamp of prev TF)
-    long timestamps[7];               // Column 6: Timestamp
-    double pricediffs[7];             // Column 7: PriceDiff USD
-    int timediffs[7];                 // Column 8: TimeDiff minutes
-    int news_results[7];              // Column 9: NEWS CASCADE (±11-16 or 0)
-    double max_losses[7];             // Column 10: Max Loss
-
-    // HISTORY ARRAYS - 7 TF × 7 ENTRIES
-    SignalHistoryEntry m1_history[HISTORY_SIZE];
-    SignalHistoryEntry m5_history[HISTORY_SIZE];
-    // ... (các TF khác)
-};
-```
-
----
-
-## 6. CHI TIẾT BOT EA AUTO
-
-### 6.1 Tổng quan
-
-**File:** `MQL4/Experts/Eas_Smf_Oner_V2.mq4` (2050 dòng)
-**Loại:** Expert Advisor (EA - tự động giao dịch)
-**Chạy trên:** 7 charts (M1, M5, M15, M30, H1, H4, D1) - CÙNG 1 symbol
-
-### 6.2 3 Chiến lược giao dịch
-
-#### A. S1 (HOME) - Giao dịch theo signal gốc
-
-**ĐỌC:** Column 2 (signal)
-**LOGIC:**
-- Nếu signal = 1 → MỞ lệnh BUY
-- Nếu signal = -1 → MỞ lệnh SELL
-- Có 2 mode: BASIC (không check NEWS) vs NEWS Filter (phải có NEWS đủ mạnh)
-
-**CODE:**
-```mql4
-// Eas_Smf_Oner_V2.mq4:1014-1018
-void ProcessS1BasicStrategy(int tf) {
-    int current_signal = g_ea.csdl_rows[tf].signal;
-    if(current_signal == 1 || current_signal == -1) {
-        OpenS1Order(tf, current_signal, "BASIC");
-    }
-}
-```
-
-#### B. S2 (TREND) - Theo xu hướng D1
-
-**ĐỌC:** Column 2 (signal) của D1
-**LOGIC:**
-- Đọc D1 signal → Xác định trend
-- Chỉ mở lệnh khi signal TF hiện tại KHỚP với trend D1
+**Đặc điểm:**
+- Giao dịch ngắn hạn (binary options style)
+- Chờ tín hiệu từ 0 → ±1 (cửa vào tốt nhất)
+- Lot size nhỏ (risk thấp)
 
 **VÍ DỤ:**
 ```
-D1 signal = 1 (BUY trend)
-→ M1 signal = 1 → MỞ lệnh BUY (khớp)
-→ M1 signal = -1 → BỎ QUA (không khớp)
+TF = M15
+signal_cũ = 0
+signal_mới = +1
+
+→ MỞ lệnh S1_M15 BUY
 ```
 
-**CODE:**
-```mql4
-// Eas_Smf_Oner_V2.mq4:1062-1084
-void ProcessS2Strategy(int tf) {
-    int current_signal = g_ea.csdl_rows[tf].signal;
-    int trend_to_follow = g_ea.trend_d1;  // D1 trend
+---
 
-    if(current_signal != trend_to_follow) {
-        return;  // Skip nếu không khớp
-    }
+#### Strategy 2: S2_TREND (Trend Following)
 
-    // Mở lệnh...
+**Đọc từ:** Cột `signal` + Trend D1
+
+**Điều kiện mở:**
+- Signal hiện tại ≠ 0
+- Signal thay đổi (≠ signal cũ)
+- **Signal CÙNG CHIỀU với D1**
+- Timestamp thay đổi
+
+**Điều kiện đóng:**
+- **Nếu S2_CloseByM1 = true:** Đóng khi **M1** đảo chiều
+- **Nếu S2_CloseByM1 = false:** Đóng khi **TF của nó** đảo chiều
+
+**Đặc điểm:**
+- Theo xu hướng chính (D1)
+- Chỉ vào lệnh khi TF nhỏ cùng chiều D1
+- Lot size trung bình
+
+**VÍ DỤ:**
+```
+D1_signal = +1 (BUY trend)
+M5_signal = +1
+
+→ MỞ lệnh S2_M5 BUY (cùng chiều!)
+
+Nếu M5_signal = -1
+→ BỎ QUA (ngược chiều D1)
+```
+
+---
+
+#### Strategy 3: S3_NEWS (News Trading)
+
+**Đọc từ:** Cột `news` (đã tách thành 14 biến)
+
+**Điều kiện mở:**
+- Signal hiện tại ≠ 0
+- `news_level[tf]` ≥ MinNewsLevel (mặc định 20)
+- `news_direction[tf]` = signal (cùng chiều)
+- Timestamp thay đổi
+
+**Điều kiện đóng:**
+- **Luôn luôn:** Đóng khi **TF của nó** đảo chiều
+
+**Đặc điểm:**
+- Chỉ giao dịch khi có "tin tức"
+- News càng mạnh → cơ hội càng lớn
+- Lot size lớn (risk cao, reward cao)
+
+**VÍ DỤ:**
+```
+TF = M1
+signal = +1
+news_level[0] = 30
+news_direction[0] = +1
+
+→ MỞ lệnh S3_M1 BUY
+```
+
+---
+
+### 🎁 BONUS STRATEGY (Bổ sung)
+
+**KHÔNG PHẢI STRATEGY RIÊNG!**
+- Dùng chung **MAGIC với S3**
+- 1 magic có thể có **nhiều lệnh**
+
+**Điều kiện mở:**
+```
+FOR mỗi TF (0→6):
+  if(news_level[tf] >= MinNewsLevelBonus &&
+     news_level[tf] != 1 &&      // Loại bỏ cấp yếu
+     news_level[tf] != 10 &&     // Loại bỏ cấp yếu
+     news_direction[tf] != 0)
+
+  → Mở BonusOrderCount lệnh (mặc định 2)
+  → Lot = S3_lot × BonusLotMultiplier
+  → Magic = g_ea.magic_numbers[tf][2] (GIỐNG S3)
+```
+
+**Điều kiện đóng:**
+```
+Khi M1 đảo chiều → CloseAllBonusOrders()
+→ Đóng TẤT CẢ lệnh có magic = S3 (bao gồm cả BONUS)
+```
+
+**Đặc điểm:**
+- Giao dịch cực ngắn (chỉ theo M1)
+- Mở nhiều lệnh cùng lúc (2-5 lệnh/TF)
+- Chốt lời nhanh theo M1
+
+**VÍ DỤ:**
+```
+TF = H1
+news_level[4] = 50 (rất mạnh!)
+news_direction[4] = +1
+
+→ Mở 2 lệnh BONUS_H1 BUY
+→ Magic = 5878 (GIỐNG S3_H1)
+
+Khi M1 đảo chiều:
+→ Đóng cả 2 lệnh BONUS
+→ Đóng luôn lệnh S3_H1 (cùng magic)
+```
+
+---
+
+### 📊 DASHBOARD (Bảng điều khiển)
+
+**15 dòng hiển thị trên chart:**
+
+```
+[BTCUSD] DA2 | 7TFx3S | D1:^ | $5000 DD:2.5% | 3/21
+---------------------------------------------
+TF    Sig   S1     S2     S3     P&L      News   Bonus
+---------------------------------------------
+M1    ^     1|0.10 -      -      +15.50   +30    2|0.10
+M5    ^     -      -      -      +0.00    -20    -
+M15   -     -      -      -      +0.00    0      -
+M30   -     -      1|0.30 -      +25.00   +40    1|0.15
+H1    ^     -      -      1|0.40 +50.00   0      -
+H4    -     -      -      -      +0.00    0      -
+D1    ^     -      1|0.50 -      +80.00   +50    3|0.25
+---------------------------------------------
+BONUS: M1,M30,D1 | Active | Last:12:34:56
+NET:$170.50 | S1:2x$40 | S2:3x$105 | S3:1x$50 | 9/21
+Exness | Lev:1:500 | 2s
+```
+
+**Giải thích:**
+
+| Cột | Ý nghĩa |
+|-----|---------|
+| TF | Khung thời gian |
+| Sig | Tín hiệu hiện tại (^ = BUY, v = SELL, - = NONE) |
+| S1 | Lệnh S1: `số_lệnh\|lot` (VD: 1\|0.10 = 1 lệnh 0.10 lot) |
+| S2 | Lệnh S2 |
+| S3 | Lệnh S3 |
+| P&L | Lãi/lỗ của TF này |
+| News | Điểm NEWS (±10-70) |
+| Bonus | Lệnh BONUS: `số_lệnh\|tổng_lot` |
+
+**Dòng BONUS:**
+- Hiển thị TF nào đang có lệnh BONUS
+- Status: Active/Inactive
+- Last: Thời gian mở lệnh BONUS cuối
+
+**Dòng NET:**
+- Tổng lãi/lỗ: $170.50
+- Phân tích theo strategy: S1 2 lệnh lãi $40...
+- 9/21: 9 lệnh đang mở / 21 lệnh tối đa
+
+---
+
+## 5. CẤU TRÚC CSDL - DỮ LIỆU TRUNG TÂM
+
+### 📁 File CSDL: `SYMBOL_LIVE.json`
+
+**Định dạng:** JSON Array (7 rows)
+
+**Cấu trúc:** 7 TF × 6 columns
+
+```json
+[
+  {
+    "max_loss": 0.50,
+    "timestamp": 1730620800,
+    "signal": 1,
+    "pricediff": 2.50,
+    "timediff": 5,
+    "news": 30
+  },
+  ... (6 rows nữa)
+]
+```
+
+### 📋 Ý nghĩa từng cột:
+
+| # | Cột | Kiểu | Giá trị | SPY làm gì? | EA làm gì? |
+|---|-----|------|---------|-------------|------------|
+| 1 | `max_loss` | double | -0.50, -1.00... | Tính từ CSDL | Dùng tính stoploss |
+| 2 | `timestamp` | long | 1730620800 | Lấy từ WT | So sánh tín hiệu mới |
+| 3 | **`signal`** | **int** | **±1, 0** | **Đọc WT** | **S1+S2 đọc** |
+| 4 | `pricediff` | double | ±2.50 | Tính giá mới - cũ | Tham khảo |
+| 5 | `timediff` | int | 5 (phút) | Tính time mới - cũ | Tham khảo |
+| 6 | **`news`** | **int** | **±10-70** | **SPY TÍNH** | **S3 đọc** |
+
+### 🔑 2 CỘT QUAN TRỌNG NHẤT:
+
+**CỘT 3: `signal` (Tín hiệu gốc)**
+- Nguồn: 7 bot WT
+- Giá trị: -1 (SELL), 0 (NONE), 1 (BUY)
+- S1 + S2 dùng cột này
+
+**CỘT 6: `news` (NEWS CASCADE)**
+- Nguồn: SPY tính toán
+- Giá trị: 0, ±10-70 (Category 1), ±1-7 (Category 2)
+- S3 + BONUS dùng cột này
+
+---
+
+## 6. LUỒNG HOÀN CHỈNH - TỪ ĐẦU ĐẾN CUỐI
+
+### ⏱️ Timeline chi tiết (1 chu kỳ 2 giây):
+
+```
+═══════════════════════════════════════════════════════════════
+GIÂY 0.0: 7 BOT WT
+═══════════════════════════════════════════════════════════════
+M1_WT:  Phân tích nến → signal = +1 → Ghi GlobalVariable
+M5_WT:  Phân tích nến → signal = +1 → Ghi GlobalVariable
+M15_WT: Phân tích nến → signal = 0  → Ghi GlobalVariable
+...
+D1_WT:  Phân tích nến → signal = +1 → Ghi GlobalVariable
+
+───────────────────────────────────────────────────────────────
+GIÂY 0.5: BOT SPY (D1)
+───────────────────────────────────────────────────────────────
+[1] Đọc 7 GlobalVariables:
+    M1_signal  = +1
+    M5_signal  = +1
+    M15_signal = 0
+    ...
+
+[2] Tính PriceDiff, TimeDiff, MaxLoss
+
+[3] TÍNH NEWS CASCADE:
+    M1_price_cũ  = 50000.0
+    M1_price_live = 50003.0
+    live_diff = 3.0 USD
+    
+    L1: 3.0 > 2.5 ✓ → news[M1] = +10
+    L2: M5→M1 chưa cascade → news[M5] = 0
+    ...
+
+[4] GHI 3 FILE JSON:
+    DataAutoOner/BTCUSD_LIVE.json
+    DataAutoOner2/BTCUSD_LIVE.json
+    DataAutoOner3/BTCUSD_LIVE.json
+
+═══════════════════════════════════════════════════════════════
+GIÂY 1.0: BOT EA (M1)
+═══════════════════════════════════════════════════════════════
+[1] ĐỌC FILE:
+    ReadCSDLFile()
+    → Đọc DataAutoOner2/BTCUSD_LIVE.json
+    → Parse JSON thành 7 rows
+
+[2] TÁCH NEWS:
+    Row 0: news = +10
+    → news_level[0] = 10
+    → news_direction[0] = +1
+
+[3] KIỂM TRA SIGNAL THAY ĐỔI:
+    TF = M1 (0)
+    signal_cũ = 0
+    signal_mới = +1
+    → CÓ THAY ĐỔI!
+
+[4] MỞ LỆNH S1:
+    ProcessS1Strategy(0)
+    → Signal = +1
+    → OrderSend(BUY, 0.11 lot)
+    → Ticket #12345
+
+[5] MỞ LỆNH S2:
+    ProcessS2Strategy(0)
+    → Signal = +1
+    → Trend D1 = +1 (KHỚP!)
+    → OrderSend(BUY, 0.12 lot)
+    → Ticket #12346
+
+[6] KIỂM TRA S3:
+    ProcessS3Strategy(0)
+    → news_level[0] = 10
+    → 10 < 20 (MinNewsLevel)
+    → BỎ QUA (NEWS quá yếu)
+
+[7] KIỂM TRA BONUS:
+    ProcessBonusNews()
+    → news_level[0] = 10
+    → 10 < 20 (MinNewsLevelBonus)
+    → BỎ QUA
+
+───────────────────────────────────────────────────────────────
+GIÂY 2.0: SPY CẬP NHẬT NEWS
+───────────────────────────────────────────────────────────────
+DetectCASCADE_New()
+→ Tính lại NEWS cho 7 TF
+→ Ghi lại 3 file
+
+───────────────────────────────────────────────────────────────
+GIÂY 3.0: EA KIỂM TRA STOPLOSS + DASHBOARD
+───────────────────────────────────────────────────────────────
+CheckStoplossAndTakeProfit()
+→ Quét tất cả lệnh
+→ Nếu lỗ > threshold → đóng
+
+UpdateDashboard()
+→ Cập nhật bảng điều khiển
+
+═══════════════════════════════════════════════════════════════
+... LẶP LẠI MỖI 2 GIÂY
+═══════════════════════════════════════════════════════════════
+```
+
+---
+
+## 7. CRITICAL BUG ĐÃ SỬA
+
+### ⚠️ BUG NGHIÊM TRỌNG: NEWS không bao giờ được parse!
+
+**Ngày phát hiện:** 2025-01-03
+
+**Vấn đề:**
+
+Cột `news` là cột CUỐI CÙNG trong JSON:
+```json
+{"max_loss":0.5,"timestamp":1730620800,"signal":1,"pricediff":2.5,"timediff":5,"news":30}
+```
+
+**Code CŨ (SAI):**
+```cpp
+int end_pos = (comma > 0 && comma < bracket) ? comma : bracket;
+if(end_pos > 0) {
+    news = StringToInteger(...);
 }
 ```
 
-#### C. S3 (NEWS) - Giao dịch theo NEWS CASCADE
+**Tại sao SAI:**
+1. NEWS là cột cuối → **KHÔNG có dấu phẩy sau**
+2. `StringFind(temp, ",")` = `-1` (không tìm thấy)
+3. `StringFind(temp, "}")` có thể = `-1` hoặc sai vị trí
+4. → `end_pos = -1`
+5. → `if(end_pos > 0)` = **FALSE**
+6. → **KHÔNG BAO GIỜ CHẠY VÀO ĐOẠN PARSE!**
 
-**ĐỌC:** Column 8 (news)
-**LOGIC:**
-- Kiểm tra news >= MinNewsLevelS3 (default: 20)
-- Kiểm tra hướng news KHỚP với signal
-- Nếu đủ điều kiện → MỞ lệnh
+**Hậu quả:**
+- NEWS luôn = 0
+- S3 strategy **KHÔNG BAO GIỜ CHẠY** (vì NEWS = 0 < 20)
+- BONUS strategy **KHÔNG BAO GIỜ CHẠY** (vì NEWS = 0 < 20)
+- Dashboard hiển thị đúng... giá trị sai (0)
 
-**BONUS:**
-- Nếu EnableBonusNews = true
-- Và news >= MinNewsLevelBonus
-- → Mở thêm N lệnh (BonusOrderCount)
-
-**CODE:**
-```mql4
-// Eas_Smf_Oner_V2.mq4:1126-1146
-void ProcessS3Strategy(int tf) {
-    int tf_news = g_ea.csdl_rows[tf].news;
-    int news_abs = MathAbs(tf_news);
-
-    if(news_abs < MinNewsLevelS3) {
-        return;  // NEWS quá yếu, bỏ qua
-    }
-
-    int news_direction = (tf_news > 0) ? 1 : -1;
-    int current_signal = g_ea.csdl_rows[tf].signal;
-
-    if(current_signal != news_direction) {
-        return;  // Hướng không khớp, bỏ qua
-    }
-
-    // Mở lệnh...
+**Code MỚI (ĐÚNG):**
+```cpp
+int end_pos = StringLen(temp);  // Mặc định = độ dài string
+if(comma > 0 && bracket > 0) {
+    end_pos = (comma < bracket) ? comma : bracket;
+} else if(bracket > 0) {
+    end_pos = bracket;
 }
+// Luôn có end_pos > 0 → luôn parse được!
 ```
 
-### 6.3 Quản lý rủi ro
+**Cách phát hiện:**
+- So sánh code EA với code SPY
+- SPY parse đúng → EA học theo
+- **Thank you for the hint!** 🙏
 
-#### A. Stoploss (2 layers)
-
-**Layer 1 (CSDL-based):**
-- Dùng max_loss từ CSDL (Column 10)
-- Threshold = max_loss × lot
-- VÍ DỤ: max_loss = -1000, lot = 0.1 → SL = -100 USD
-
-**Layer 2 (Margin-based - Emergency):**
-- Dùng margin / divisor
-- VÍ DỤ: margin = 500 USD, divisor = 5 → SL = -100 USD
-
-**CODE:**
-```mql4
-// Eas_Smf_Oner_V2.mq4:1286-1298
-if(StoplossMode == LAYER1_MAXLOSS) {
-    sl_threshold = g_ea.layer1_thresholds[tf][s];
-}
-else if(StoplossMode == LAYER2_MARGIN) {
-    double margin_usd = OrderLots() * MarketInfo(Symbol(), MODE_MARGINREQUIRED);
-    sl_threshold = -(margin_usd / Layer2_Divisor);
-}
-
-if(profit <= sl_threshold) {
-    CloseOrderSafely(ticket, "STOPLOSS");
-    g_ea.position_flags[tf][s] = 0;
-}
-```
-
-#### B. TakeProfit (optional)
-
-- Nếu UseTakeProfit = true
-- Threshold = max_loss × lot × multiplier
-- VÍ DỤ: max_loss = -1000, lot = 0.1, multiplier = 3 → TP = +300 USD
+**File đã sửa:**
+- MT4: `MQL4/Experts/MT4_Eas_Smf_Oner_V2.mq4` (commit a7eb5bd)
+- MT5: `MQL5/Experts/MT5_EAs_MTF_ONER_V2.mq5` (commit 2497bcb)
 
 ---
 
-## 7. CẤU TRÚC CSDL
+## 📝 TÓM TẮT NHANH
 
-### 7.1 CSDL1 (Main Database)
+### Hệ thống làm gì?
 
-**File:** `DataAutoOner/{SYMBOL}.json`
-**Cấu trúc:** 7 rows (TF) × 10 columns
-**Có history:** Có (7 signal gần nhất mỗi TF)
+1. **7 BOT WT** → Tạo tín hiệu BUY/SELL
+2. **BOT SPY** → Thu thập tín hiệu + Tính NEWS → Ghi file
+3. **BOT EA** → Đọc file → Mở lệnh tự động
 
-**10 COLUMNS:**
+### Dữ liệu chảy như thế nào?
 
-| Column | Tên | Kiểu | Mô tả | Người dùng |
-|--------|-----|------|-------|------------|
-| 1 | timeframe_name | string | "M1", "M5"... | Display |
-| 2 | timeframe | int | 1, 5, 15... | Parser |
-| **3** | **signal** | **int** | **-1/0/1** | **S1+S2 (MỐC NỐI 1)** |
-| 4 | price | double | Entry price | Calculate diff |
-| 5 | cross | long | Prev TF timestamp | Cascade check |
-| 6 | timestamp | long | Signal time | Sync check |
-| 7 | pricediff | double | USD diff | Display |
-| 8 | timediff | int | Minutes diff | Display |
-| **9** | **news** | **int** | **±11~±16** | **S3 (MỐC NỐI 2)** |
-| 10 | max_loss | double | Max loss/lot | Stoploss |
+```
+WT → GlobalVariable → SPY → JSON File → EA → Lệnh giao dịch
+```
 
-### 7.2 CSDL2 (Live Database)
+### 2 cột quan trọng nhất trong CSDL?
 
-**File:** `DataAutoOner2/{SYMBOL}_LIVE.json`
-**Cấu trúc:** 7 rows (TF) × 6 columns
-**Có history:** KHÔNG
+1. **`signal`** (±1, 0) → S1 + S2 đọc
+2. **`news`** (±10-70) → S3 + BONUS đọc
 
-**6 COLUMNS:**
+### 3 strategies + 1 BONUS là gì?
 
-| Column | Tên | Mô tả |
-|--------|-----|-------|
-| 1 | max_loss | Max loss/lot |
-| 2 | timestamp | Signal time |
-| **3** | **signal** | **-1/0/1 (MỐC NỐI 1)** |
-| 4 | pricediff | USD diff |
-| 5 | timediff | Minutes diff |
-| **6** | **news** | **±11~±16 (MỐC NỐI 2)** |
+1. **S1:** Tín hiệu từ 0 → ±1 (binary)
+2. **S2:** Tín hiệu cùng chiều D1 (trend)
+3. **S3:** Tín hiệu + NEWS mạnh (news trading)
+4. **BONUS:** Nhiều lệnh khi NEWS cực mạnh (volume boost)
 
-### 7.3 Tại sao có 2 CSDL?
+### Tối đa bao nhiêu lệnh?
 
-**CSDL1:**
-- Đầy đủ, có history
-- Dùng cho phân tích, dashboard
-- Dung lượng lớn hơn
+**21 lệnh cơ bản:**
+- 7 TF × 3 strategies = 21
 
-**CSDL2:**
-- Nhỏ gọn, chỉ dữ liệu hiện tại
-- Dùng cho EA giao dịch (đọc nhanh)
-- Có 3 bản copy (DataAutoOner, DataAutoOner2, DataAutoOner3)
+**+ BONUS:**
+- Mỗi TF có thể thêm 2-5 lệnh
+- Tổng cộng: ~40-50 lệnh cùng lúc
 
 ---
 
-## 8. LUỒNG DỮ LIỆU HOÀN CHỈNH
-
-### 8.1 Sơ đồ chi tiết theo thời gian
-
-```
-GIÂY 0 (SPY Bot - EVEN second):
-┌──────────────────────────────────────────┐
-│ 1. Đọc GlobalVariable                    │
-│    └─ LTCUSD_M1_SignalType1 = 1         │
-│                                          │
-│ 2. ProcessSignalForTF(0, 1, timestamp)  │
-│    ├─ Tính PriceDiff = +2.5 USD         │
-│    ├─ Tính TimeDiff = 5 minutes         │
-│    └─ g_symbol_data.signals[0] = 1      │
-│                                          │
-│ 3. DetectCASCADE_New()                  │
-│    ├─ L1: LiveDiff = 3.0 > 2.5 ✓        │
-│    └─ news_results[0] = +10              │
-│                                          │
-│ 4. WriteCSDL1ArrayToFile()              │
-│    └─ Ghi vào DataAutoOner/LTCUSD.json  │
-│                                          │
-│ 5. WriteCSDL2ArrayToFile()              │
-│    ├─ Ghi DataAutoOner/LTCUSD_LIVE.json │
-│    ├─ Ghi DataAutoOner2/LTCUSD_LIVE.json│
-│    └─ Ghi DataAutoOner3/LTCUSD_LIVE.json│
-└──────────────────────────────────────────┘
-           ▼
-GIÂY 1 (EA Auto - ODD second):
-┌──────────────────────────────────────────┐
-│ 1. ReadCSDLFile()                        │
-│    └─ Đọc DataAutoOner2/LTCUSD_LIVE.json│
-│                                          │
-│ 2. ParseCSDLLoveJSON()                   │
-│    ├─ csdl_rows[0].signal = 1           │
-│    └─ csdl_rows[0].news = +10           │
-│                                          │
-│ 3. HasValidS2BaseCondition(0)           │
-│    ├─ signal_old = 0                    │
-│    ├─ signal_new = 1                    │
-│    └─ return true (có thay đổi!)        │
-│                                          │
-│ 4. ProcessS1Strategy(0)                 │
-│    └─ OrderSend(BUY, 0.11 lot)          │
-│       → Ticket #12345                    │
-│                                          │
-│ 5. ProcessS2Strategy(0)                 │
-│    ├─ trend_d1 = 1 (BUY trend)          │
-│    ├─ signal = 1 (khớp!)                │
-│    └─ OrderSend(BUY, 0.12 lot)          │
-│       → Ticket #12346                    │
-│                                          │
-│ 6. ProcessS3Strategy(0)                 │
-│    ├─ news = +10 (< 20, quá yếu)        │
-│    └─ BỎ QUA                             │
-│                                          │
-│ 7. UpdateDashboard()                     │
-│    └─ Hiển thị: M1 [BUY] S1:✓ S2:✓ S3:○ │
-└──────────────────────────────────────────┘
-```
-
-### 8.2 Timeline so sánh 2 bot
-
-```
-TIME │ SPY BOT (Indicator)          │ EA AUTO (Expert Advisor)
-─────┼──────────────────────────────┼─────────────────────────────
-0.0s │ Đọc GlobalVariable           │
-0.5s │ Phân tích NEWS CASCADE       │
-0.8s │ Ghi file CSDL1 + CSDL2       │
-     │                              │
-1.0s │                              │ Đọc file CSDL2
-1.2s │                              │ Parse JSON
-1.5s │                              │ Kiểm tra signal thay đổi
-1.8s │                              │ Mở lệnh S1, S2, S3
-     │                              │
-2.0s │ Cập nhật NEWS (mỗi 2s)      │
-2.5s │ Ghi lại file CSDL1 + CSDL2   │
-     │                              │
-3.0s │                              │ Kiểm tra stoploss
-3.5s │                              │ Cập nhật dashboard
-```
-
----
-
-## 9. HƯỚNG DẪN NHANH CHO NEWCHAT
-
-### Bạn là newchat session mới? Đọc theo thứ tự:
-
-1. ✅ Đọc phần 1: **HỆ THỐNG LÀ GÌ?**
-2. ⭐⭐⭐ Đọc phần 2: **MỐC NỐI** (QUAN TRỌNG NHẤT!)
-3. ✅ Đọc phần 3: **CHỨC NĂNG CHÍNH**
-4. ✅ Đọc phần 8: **LUỒNG DỮ LIỆU HOÀN CHỈNH**
-5. 📖 Sau đó đọc phần 5, 6, 7 nếu cần chi tiết
-
-### Câu hỏi thường gặp:
-
-**Q: Làm sao biết S1 đọc ở đâu?**
-A: Đọc phần 2 → MỐC NỐI 1 → Column 2
-
-**Q: Làm sao biết S3 đọc ở đâu?**
-A: Đọc phần 2 → MỐC NỐI 2 → Column 8
-
-**Q: NEWS CASCADE là gì?**
-A: Đọc phần 2 → MỐC NỐI 2 → Giải thích chi tiết
-
-**Q: Tại sao có 2 bot?**
-A: SPY giám sát + phân tích, EA giao dịch. Tách biệt để dễ bảo trì.
-
-**Q: File nào EA đọc?**
-A: DataAutoOner2/{SYMBOL}_LIVE.json (CSDL2)
-
----
-
-## 10. TÀI LIỆU THAM KHẢO
-
-### Code References (Các dòng code quan trọng)
-
-**SPY Bot:**
-- ProcessSignalForTF: `Super_Spy7TF_V2.mq4:658`
-- DetectCASCADE_New: `Super_Spy7TF_V2.mq4:1682`
-- WriteCSDL1ArrayToFile: `Super_Spy7TF_V2.mq4:376`
-- WriteCSDL2ArrayToFile: `Super_Spy7TF_V2.mq4:472`
-
-**EA Auto:**
-- ParseCSDLLoveJSON: `Eas_Smf_Oner_V2.mq4:502`
-- ProcessS1Strategy: `Eas_Smf_Oner_V2.mq4:1051`
-- ProcessS2Strategy: `Eas_Smf_Oner_V2.mq4:1062`
-- ProcessS3Strategy: `Eas_Smf_Oner_V2.mq4:1126`
-- CheckStoplossAndTakeProfit: `Eas_Smf_Oner_V2.mq4:1259`
-
-### Các file quan trọng
-
-```
-Multi-Trading-Bot-Oner_2025/
-├── MQL4/
-│   ├── Indicators/
-│   │   └── Super_Spy7TF_V2.mq4          (2946 dòng)
-│   └── Experts/
-│       └── Eas_Smf_Oner_V2.mq4          (2050 dòng)
-├── Files/
-│   ├── DataAutoOner/                     (CSDL1 + CSDL2 A)
-│   ├── DataAutoOner2/                    (CSDL2 B - EA đọc)
-│   └── DataAutoOner3/                    (CSDL2 C - Python)
-└── README.md                             (File này)
-```
-
----
-
-## 📝 LƯU Ý QUAN TRỌNG
-
-1. **2 MỐC NỐI** là khái niệm quan trọng nhất
-2. **4 CHỨC NĂNG CHÍNH** = 2 phần của mỗi bot
-3. **3 CHỨC NĂNG PHỤ** chỉ hỗ trợ, không liên quan đến giao dịch chính
-4. Đọc từ TỔNG QUAN → CHI TIẾT, đừng nhảy vào code ngay!
-
----
-
-**Cập nhật:** 2025-01-03
-**Người viết:** AI Assistant
-**Mục đích:** Giúp newchat session hiểu hệ thống nhanh chóng
+**📅 Cập nhật:** 2025-01-03  
+**📧 Support:** Check code comments for details  
+**🔧 Version:** 2.0 (After NEWS bug fix)
