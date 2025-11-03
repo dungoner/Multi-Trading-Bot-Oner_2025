@@ -62,6 +62,10 @@ input int BonusOrderCount = 2;         // S3: Bonus count (1-5 orders)
 input int MinNewsLevelBonus = 20;      // S3: Min NEWS for Bonus (threshold)
 input double BonusLotMultiplier = 1.0; // S3: Bonus lot multiplier (1.0-10.0)
 
+//--- B.4 Close Mode Configuration (2) | Che do dong lenh
+input bool S1_CloseByM1 = true;   // S1: Close by M1 signal (TRUE=fast M1, FALSE=own TF)
+input bool S2_CloseByM1 = true;   // S2: Close by M1 signal (TRUE=fast M1, FALSE=own TF)
+
 input string _________Sep_C___ = "___C. RISK PROTECTION _________";  //
 
 //--- C.1 Stoploss mode (3) | Che do cat lo
@@ -952,6 +956,51 @@ void CloseAllBonusOrders() {
     }
 }
 
+// Close S1 orders across ALL 7 TF when M1 signal changes | Dong lenh S1 qua 7 khung khi M1 thay doi
+void CloseS1OrdersByM1() {
+    for(int tf = 0; tf < 7; tf++) {
+        if(!IsTFEnabled(tf)) continue;
+        int target_magic = g_ea.magic_numbers[tf][0];
+        for(int i = OrdersTotal() - 1; i >= 0; i--) {
+            if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) continue;
+            if(OrderSymbol() != Symbol()) continue;
+            if(OrderMagicNumber() == target_magic) {
+                CloseOrderSafely(OrderTicket(), "S1_M1_CLOSE");
+            }
+        }
+        g_ea.position_flags[tf][0] = 0;
+    }
+}
+
+// Close S2 orders across ALL 7 TF when M1 signal changes | Dong lenh S2 qua 7 khung khi M1 thay doi
+void CloseS2OrdersByM1() {
+    for(int tf = 0; tf < 7; tf++) {
+        if(!IsTFEnabled(tf)) continue;
+        int target_magic = g_ea.magic_numbers[tf][1];
+        for(int i = OrdersTotal() - 1; i >= 0; i--) {
+            if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) continue;
+            if(OrderSymbol() != Symbol()) continue;
+            if(OrderMagicNumber() == target_magic) {
+                CloseOrderSafely(OrderTicket(), "S2_M1_CLOSE");
+            }
+        }
+        g_ea.position_flags[tf][1] = 0;
+    }
+}
+
+// Close only S3 for specific TF | Dong chi S3 cho TF cu the
+void CloseS3OrdersForTF(int tf) {
+    int target_magic = g_ea.magic_numbers[tf][2];
+    for(int i = OrdersTotal() - 1; i >= 0; i--) {
+        if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) continue;
+        if(OrderSymbol() != Symbol()) continue;
+        if(OrderMagicNumber() == target_magic) {
+            CloseOrderSafely(OrderTicket(), "S3_SIGNAL_CHG");
+        }
+    }
+    g_ea.position_flags[tf][2] = 0;
+}
+
 //=============================================================================
 //  PART 13: BASE CONDITION CHECK (1 function) | KIEM TRA DIEU KIEN GOC
 //=============================================================================
@@ -1197,6 +1246,11 @@ void ProcessBonusNews() {
 
         // Skip if NEWS below threshold | Bo qua neu NEWS duoi nguong
         if(news_abs < MinNewsLevelBonus) continue;
+
+        // OPTIMIZED: Skip low-value NEWS (Category 2 L1 and Category 1 L1) | TOI UU: Bo qua tin tuc gia tri thap
+        // Category 2 Level 1: ±1 (too weak for Bonus) | Cap 2 muc 1: ±1 (qua yeu cho Bonus)
+        // Category 1 Level 1: ±10 (minimum level, prefer higher) | Cap 1 muc 1: ±10 (muc toi thieu, uu tien cao hon)
+        if(news_abs == 1 || news_abs == 10) continue;
 
         // Determine direction | Xac dinh huong
         int news_direction = (tf_news > 0) ? 1 : -1;
@@ -1992,17 +2046,42 @@ void OnTimer() {
         // IMPORTANT: CLOSE function runs on ALL 7 TF (no TF filter) | QUAN TRONG: Ham dong chay TAT CA 7 TF (khong loc TF)
         // OPEN function respects TF/Strategy toggles | Ham mo tuan theo bat/tat TF/Chien luoc
         for(int tf = 0; tf < 7; tf++) {
+            // STEP 3.1: FAST CLOSE by M1 (S1, S2, Bonus) | DONG NHANH theo M1 (S1, S2, Bonus)
+            if(tf == 0 && HasValidS2BaseCondition(0)) {
+                if(S1_CloseByM1) CloseS1OrdersByM1();
+                if(S2_CloseByM1) CloseS2OrdersByM1();
+                if(EnableBonusNews) CloseAllBonusOrders();
+            }
+
+            // STEP 3.2: NORMAL CLOSE by TF signal | DONG BINH THUONG theo tin hieu TF
             if(HasValidS2BaseCondition(tf)) {
-
-                // STEP 3.1: Close ALL BONUS orders when M1 signal changes | Dong TAT CA lenh BONUS khi M1 thay doi
-                // LOGIC: Check if current TF is M1 (tf==0), if yes close ALL 7 TF bonus orders
-                // LOGIC: Kiem tra neu TF hien tai la M1, neu dung dong TAT CA 7 khung lenh bonus
-                if(tf == 0 && EnableBonusNews) {
-                    CloseAllBonusOrders();  // Close magic[tf][2] for ALL 7 TF
+                if(S1_CloseByM1 && S2_CloseByM1) {
+                    CloseS3OrdersForTF(tf);
+                } else if(S1_CloseByM1) {
+                    for(int i = OrdersTotal() - 1; i >= 0; i--) {
+                        if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) continue;
+                        if(OrderSymbol() != Symbol()) continue;
+                        int magic = OrderMagicNumber();
+                        if(magic == g_ea.magic_numbers[tf][1] || magic == g_ea.magic_numbers[tf][2]) {
+                            CloseOrderSafely(OrderTicket(), "SIGNAL_CHANGE");
+                        }
+                    }
+                    g_ea.position_flags[tf][1] = 0;
+                    g_ea.position_flags[tf][2] = 0;
+                } else if(S2_CloseByM1) {
+                    for(int j = OrdersTotal() - 1; j >= 0; j--) {
+                        if(!OrderSelect(j, SELECT_BY_POS, MODE_TRADES)) continue;
+                        if(OrderSymbol() != Symbol()) continue;
+                        int order_magic = OrderMagicNumber();
+                        if(order_magic == g_ea.magic_numbers[tf][0] || order_magic == g_ea.magic_numbers[tf][2]) {
+                            CloseOrderSafely(OrderTicket(), "SIGNAL_CHANGE");
+                        }
+                    }
+                    g_ea.position_flags[tf][0] = 0;
+                    g_ea.position_flags[tf][2] = 0;
+                } else {
+                    CloseAllStrategiesByMagicForTF(tf);
                 }
-
-                // STEP 3.2: Close old orders for this TF (ALL 3 strategies) | Dong lenh cu cua TF (TAT CA 3 chien luoc)
-                CloseAllStrategiesByMagicForTF(tf);
 
                 // STEP 3.3: Open new orders (ONLY if TF enabled) | Mo lenh moi (CHI neu TF bat)
                 if(IsTFEnabled(tf)) {
