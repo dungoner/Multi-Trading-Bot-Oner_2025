@@ -1894,7 +1894,21 @@ void OnDeinit(const int reason) {
 
     // Delete all dashboard labels (15 labels: dash_0 to dash_14) | Xoa tat ca label dashboard
     for(int i = 0; i <= 14; i++) {
-        ObjectDelete("dash_" + IntegerToString(i));
+        string obj_name = "dash_" + IntegerToString(i);
+        if(ObjectFind(obj_name) >= 0) {
+            ObjectDelete(obj_name);
+        }
+    }
+
+    // Delete all objects with "dash_" prefix (cleanup any orphaned objects)
+    // Xoa tat ca object co tien to "dash_" (don dep cac object con sot lai)
+    int total = ObjectsTotal();
+    for(int i = total - 1; i >= 0; i--) {
+        string obj_name = ObjectName(i);
+        // Check if object name starts with "dash_" prefix
+        if(StringFind(obj_name, "dash_") == 0) {
+            ObjectDelete(obj_name);
+        }
     }
 
     Print("[EA] Shutdown. Reason: ", reason);

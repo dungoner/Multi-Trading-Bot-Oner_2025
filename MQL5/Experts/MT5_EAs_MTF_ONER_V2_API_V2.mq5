@@ -2253,8 +2253,23 @@ void OnDeinit(const int reason) {
     Comment("");  // Clear Comment | Xoa Comment
 
     // Delete all dashboard labels (15 labels: dash_0 to dash_14) | Xoa tat ca label dashboard
+    // IMPORTANT: Use direct MT5 call (not wrapper) to ensure objects are deleted
     for(int i = 0; i <= 14; i++) {
-        ObjectDelete("dash_" + IntegerToString(i));
+        string obj_name = "dash_" + IntegerToString(i);
+        if(::ObjectFind(0, obj_name) >= 0) {
+            ::ObjectDelete(0, obj_name);
+        }
+    }
+
+    // Delete all objects with current symbol prefix (cleanup any orphaned objects)
+    // Xoa tat ca object co tien to symbol hien tai (don dep cac object con sot lai)
+    int total = ::ObjectsTotal(0);
+    for(int i = total - 1; i >= 0; i--) {
+        string obj_name = ::ObjectName(0, i);
+        // Check if object name starts with "dash_" prefix
+        if(StringFind(obj_name, "dash_") == 0) {
+            ::ObjectDelete(0, obj_name);
+        }
     }
 
     Print("[EA] Shutdown. Reason: ", reason);
