@@ -3665,6 +3665,10 @@ elif mode == 1:
         "last_data_time": 0,
         "symbols_received": {},  # {symbol: {count, last_update, last_mtime}}
     }
+
+    # Health check: Track last error log time per symbol (1h interval)
+    # Purpose: Reduce log spam (similar to EA's CheckSPYBotHealth)
+    error_log_tracker = {}  # {symbol: {"last_log_time": timestamp, "error_count": count}}
     # Flask app (Dashboard only)
     app_dashboard = Flask(__name__)
     CORS(app_dashboard)
@@ -3741,10 +3745,14 @@ elif mode == 1:
                 log_message("ERROR", f"Failed to fetch symbols: HTTP {response.status_code}")
                 return False
         except requests.exceptions.Timeout:
-            log_message("ERROR", "Timeout while fetching symbols from Bot 1")
+            if should_log_error("global", "timeout"):
+                error_count = error_log_tracker.get("global_timeout", {}).get("error_count", 0)
+                log_message("ERROR", f"Timeout while fetching symbols from Bot 1 (errors in last 1h: {error_count})")
             return False
         except requests.exceptions.ConnectionError:
-            log_message("ERROR", "Connection error: Bot 1 offline or wrong URL")
+            if should_log_error("global", "connection"):
+                error_count = error_log_tracker.get("global_connection", {}).get("error_count", 0)
+                log_message("ERROR", f"Connection error: Bot 1 offline or wrong URL (errors in last 1h: {error_count})")
             return False
         except Exception as e:
             log_message("ERROR", f"fetch_symbols_from_bot1 failed: {e}")
@@ -3754,6 +3762,49 @@ elif mode == 1:
         if ts == 0:
             return "Never"
         return datetime.fromtimestamp(ts).strftime("%Y-%m-%d %H:%M:%S")
+
+    def should_log_error(symbol, error_type="timeout"):
+        """Check if error should be logged (1h interval health check)
+
+        Similar to EA's CheckSPYBotHealth (8h/16h), but 1h interval here.
+        Purpose: Reduce log spam for transient network errors.
+
+        Args:
+            symbol: Symbol name or "global" for non-symbol errors
+            error_type: Type of error ("timeout", "connection", "http_500", etc.)
+
+        Returns:
+            bool: True if error should be logged, False to suppress
+
+        Example:
+            if should_log_error("EURUSD", "timeout"):
+                log_message("ERROR", f"Timeout pulling EURUSD...")
+        """
+        current_time = time.time()
+        tracker_key = f"{symbol}_{error_type}"
+
+        # First time seeing this error
+        if tracker_key not in error_log_tracker:
+            error_log_tracker[tracker_key] = {
+                "last_log_time": current_time,
+                "error_count": 1
+            }
+            return True
+
+        # Check time since last log
+        last_log_time = error_log_tracker[tracker_key]["last_log_time"]
+        time_since_last_log = current_time - last_log_time
+
+        # Increment error count
+        error_log_tracker[tracker_key]["error_count"] += 1
+
+        # Log if 1 hour (3600s) has passed
+        if time_since_last_log >= 3600:
+            error_log_tracker[tracker_key]["last_log_time"] = current_time
+            return True
+
+        return False
+
     def log_message(level, message):
         """Write log to console only (file writing removed for simplification)
         Args:
@@ -3874,15 +3925,24 @@ elif mode == 1:
                                 receiver_state["last_bot1_contact"] = int(time.time())
                         else:
                             receiver_state["total_errors"] += 1
-                            log_message("ERROR", f"Bot 1 API error: {symbol} (HTTP {response.status_code})")
+
+                            if should_log_error(symbol, f"http_{response.status_code}"):
+                                error_count = error_log_tracker.get(f"{symbol}_http_{response.status_code}", {}).get("error_count", 0)
+                                log_message("ERROR", f"Bot 1 API error: {symbol} (HTTP {response.status_code}) (errors in last 1h: {error_count})")
                     except requests.exceptions.Timeout:
                         receiver_state["total_errors"] += 1
                         receiver_state["bot1_status"] = "offline"
-                        log_message("ERROR", f"Timeout pulling {symbol} from Bot 1")
+
+                        if should_log_error(symbol, "timeout"):
+                            error_count = error_log_tracker.get(f"{symbol}_timeout", {}).get("error_count", 0)
+                            log_message("ERROR", f"Timeout pulling {symbol} from Bot 1 (errors in last 1h: {error_count})")
                     except requests.exceptions.ConnectionError:
                         receiver_state["total_errors"] += 1
                         receiver_state["bot1_status"] = "offline"
-                        log_message("ERROR", f"Connection error to Bot 1 (pulling {symbol})")
+
+                        if should_log_error(symbol, "connection"):
+                            error_count = error_log_tracker.get(f"{symbol}_connection", {}).get("error_count", 0)
+                            log_message("ERROR", f"Connection error to Bot 1 (pulling {symbol}) (errors in last 1h: {error_count})")
                     except Exception as e:
                         receiver_state["total_errors"] += 1
                         log_message("ERROR", f"Failed to pull {symbol}: {e}")
