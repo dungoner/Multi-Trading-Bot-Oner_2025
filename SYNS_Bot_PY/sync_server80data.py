@@ -308,7 +308,8 @@ if mode == 0:
     # QUIET MODE LOGGING (Reduce console spam for VPS 24/7)
     # ==============================================================================
 
-    bot_config = load_bot_config()
+    # Use bot_config from global scope (already loaded at line 36-37)
+    # Optimization: Avoid loading config file multiple times
     QUIET_MODE = bot_config.get('quiet_mode', False)
 
     def log_print(message, level="INFO"):
@@ -331,7 +332,9 @@ if mode == 0:
         else:
             print(message)  # Normal mode: print all
 
-    config = load_config()
+    # Extract sender config from global bot_config (already loaded at line 36-37)
+    # Optimization: Avoid loading config file multiple times
+    config = bot_config.get('sender', {})
     # Global variables
     file_cache = {}      # Cache CSDL live files {symbol: {data, mtime, updates, size}}
     history_cache = {}   # Cache CSDL history files {symbol: {data, mtime, filepath}}
@@ -3636,8 +3639,8 @@ elif mode == 1:
             print(f"❌ ERROR: Cannot load {BOT_CONFIG_FILE}: {e}")
             sys.exit(1)
 
-    # Load config
-    bot_config = load_bot_config()
+    # Use bot_config from global scope (already loaded at line 36-37)
+    # Optimization: Avoid loading config file multiple times
 
     # Extract receiver config with fallback defaults
     RECEIVER_CONFIG = bot_config.get('receiver', {
