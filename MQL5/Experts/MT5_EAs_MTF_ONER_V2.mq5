@@ -1,8 +1,8 @@
 //+------------------------------------------------------------------+
-//| _MT5_EAs_MTF ONER_V2_API_V2
+//| _MT5_EAs_MTF ONER_V2
 //| Multi Timeframe Expert Advisor for MT5 | EA nhieu khung thoi gian cho MT5
 //| 7 TF × 3 Strategies = 21 orders | 7 khung x 3 chien luoc = 21 lenh
-//| Version: 2.0 API_V2 (MT5) - Added HTTP API + MT4 fixes | Phien ban: 2.0 API_V2 - Them HTTP API + Fix MT4
+//| Version: API_V2 (MT5) - Added HTTP API + MT4 fixes | Phien ban: API_V2 - Them HTTP API + MT4
 //+------------------------------------------------------------------+
 #property copyright "_MT5_EAs_MTF ONER"
 
@@ -30,7 +30,7 @@ input bool S1_CloseByM1 = false;   // S1: Close by M1 (TRUE=fast M1, FALSE=own T
 input bool S2_CloseByM1 = false;   // S2: Close by M1 (TRUE=fast M1, FALSE=own TF)
 
 //--- A.4 Risk management (2) | Quan ly rui ro
-input double FixedLotSize = 0.01;          // Lot size (0.01-1.0 recommended)
+input double FixedLotSize = 0.1;          // Lot size (0.01-1.0 recommended)
 input double MaxLoss_Fallback = -1000.0;   // Maxloss fallback ($USD if CSDL fails)
 
 //--- A.5 Data source (1) | Nguon du lieu
@@ -53,7 +53,7 @@ input string ___Sep_B___ = "___B. STRATEGY CONFIG ________";  //
 
 //--- B.1 S1 NEWS Filter (3) | Loc tin tuc cho S1
 input bool S1_UseNewsFilter = false;         // S1: Use NEWS filter (TRUE=strict, FALSE=basic)
-input int MinNewsLevelS1 = 2;                // S1: Min NEWS level (2-70, higher=stricter)
+input int MinNewsLevelS1 = 20;                // S1: Min NEWS level (2-70, higher=stricter)
 input bool S1_RequireNewsDirection = true;   // S1: Match NEWS direction (signal==news!)
 
 //--- B.2 S2 TREND Mode (1) | Che do xu huong
@@ -68,8 +68,8 @@ input S2_TREND_MODE S2_TrendMode = S2_FOLLOW_D1;  // S2: Trend (D1 auto/manual)
 input int MinNewsLevelS3 = 20;         // S3: Min NEWS level (2-70)
 input bool EnableBonusNews = true;     // S3: Enable Bonus (extra on high NEWS)
 input int BonusOrderCount = 1;         // S3: Bonus count (1-5 orders)
-input int MinNewsLevelBonus = 2;      // S3: Min NEWS for Bonus (threshold)
-input double BonusLotMultiplier = 1.0; // S3: Bonus lot multiplier (1.0-10.0)
+input int MinNewsLevelBonus = 20;      // S3: Min NEWS for Bonus (threshold)
+input double BonusLotMultiplier = 1.2; // S3: Bonus lot multiplier (1.0-10.0)
 
 input string ___Sep_C___ = "___C. RISK PROTECTION _________";  //
 
