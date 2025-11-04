@@ -48,6 +48,7 @@ input CSDL_SOURCE_ENUM CSDL_Source = FOLDER_2;  // CSDL folder (signal source)
 // NOTE: MT4 WebRequest automatically uses port 80 for http:// | LUU Y: MT4 WebRequest tu dong dung port 80
 input string HTTP_Server_IP = "147.189.173.121";  // HTTP Server IP (Bot Python VPS)
 input string HTTP_API_Key = "";                    // API Key (empty = no auth | de trong = khong xac thuc)
+input bool EnableSymbolNormalization = true;       // Normalize symbol name (LTCUSDC→LTCUSD, FALSE=use exact name)
 
 input string ___Sep_B___ = "___B. STRATEGY CONFIG ________";  //
 
@@ -121,8 +122,9 @@ struct CSDLLoveRow {
 //=============================================================================
 
 struct EASymbolData {
-    // Symbol & File info (4 vars) | Thong tin symbol va file
-    string symbol_name;          // Symbol name (BTCUSD, LTCUSD...) | Ten symbol
+    // Symbol & File info (5 vars) | Thong tin symbol va file
+    string symbol_name;          // Symbol name from broker (may have suffix: LTCUSDC, XAUUSD.xyz) | Ten symbol tu broker
+    string normalized_symbol_name; // Normalized symbol name (LTCUSD, XAUUSD) for API calls | Ten symbol chuan hoa cho goi API
     string symbol_prefix;        // Symbol prefix with underscore | Tien to symbol co gach duoi
     string csdl_folder;          // CSDL folder path | Duong dan thu muc CSDL
     string csdl_filename;        // Full CSDL filename | Ten file CSDL day du
@@ -423,6 +425,16 @@ bool InitializeSymbolRecognition() {
 
 // Initialize symbol prefix with underscore | Khoi tao tien to ky hieu voi gach duoi
 void InitializeSymbolPrefix() {
+    // Set normalized symbol name for API calls (optional, can be disabled)
+    if(EnableSymbolNormalization) {
+        g_ea.normalized_symbol_name = NormalizeSymbolName(g_ea.symbol_name);
+    } else {
+        // Use exact symbol name from broker (no normalization)
+        g_ea.normalized_symbol_name = g_ea.symbol_name;
+        Print("[NORMALIZE] Normalization DISABLED - Using exact symbol: " + g_ea.symbol_name);
+    }
+
+    // Symbol prefix uses ORIGINAL name (not normalized) for local consistency
     g_ea.symbol_prefix = g_ea.symbol_name + "_";
 }
 
@@ -603,9 +615,48 @@ bool TryReadFile(string filename, bool use_share_flags = true) {
 
 // Read CSDL from HTTP API (Remote VPS) | Doc CSDL tu HTTP API (VPS tu xa)
 // Inherited from V1 | Ke thua tu V1
+// Normalize symbol name for API calls | Chuan hoa ten symbol cho goi API
+// SMART ALGORITHM: Keep max 6 chars for Forex/Crypto, or original length for stocks (<=6)
+// Broker suffixes are ALWAYS after 6th character (LTCUSDC→LTCUSD, XAUUSDpro→XAUUSD)
+// Stocks (4-5 chars) stay unchanged (AAPL, TSLA, GOOGL)
+string NormalizeSymbolName(string symbol) {
+    string normalized = symbol;
+
+    // STEP 1: Remove everything after "." (broker suffix pattern: XAUUSD.xyz, EURUSD.m)
+    int dot_pos = StringFind(normalized, ".");
+    if(dot_pos >= 0) {
+        normalized = StringSubstr(normalized, 0, dot_pos);
+        DebugPrint("[NORMALIZE] Removed dot suffix: " + symbol + " → " + normalized);
+    }
+
+    // STEP 2: Keep MAXIMUM 6 characters (all Forex/Crypto pairs are 6 chars)
+    // Examples:
+    //   - LTCUSDC (7 chars) → LTCUSD (6 chars)
+    //   - XAUUSDpro (10 chars) → XAUUSD (6 chars)
+    //   - EURUSD (6 chars) → EURUSD (unchanged)
+    //   - AAPL (4 chars) → AAPL (unchanged - stock symbol)
+    //   - Any char after 6th is ALWAYS broker suffix
+    int max_length = 6;
+    if(StringLen(normalized) > max_length) {
+        string truncated = StringSubstr(normalized, 0, max_length);
+        DebugPrint("[NORMALIZE] Truncated to 6 chars: " + normalized + " → " + truncated);
+        normalized = truncated;
+    }
+
+    // STEP 3: Convert to uppercase (standard format)
+    StringToUpper(normalized);
+
+    if(normalized != symbol) {
+        Print("[NORMALIZE] Symbol standardized: " + symbol + " → " + normalized);
+    }
+
+    return normalized;
+}
+
 bool ReadCSDLFromHTTP() {
-    // Build URL: http://IP/api/csdl/SYMBOL_LIVE.json
-    string url = "http://" + HTTP_Server_IP + "/api/csdl/" + g_ea.symbol_name + "_LIVE.json";
+    // Use normalized symbol name for API call (already computed in InitializeSymbolPrefix)
+    // This handles broker-specific suffixes: LTCUSDC→LTCUSD, XAUUSD.xyz→XAUUSD
+    string url = "http://" + HTTP_Server_IP + "/api/csdl/" + g_ea.normalized_symbol_name + "_LIVE.json";
 
     // Build headers with API key (if provided)
     string headers = "";

@@ -47,6 +47,7 @@ input CSDL_SOURCE_ENUM CSDL_Source = FOLDER_2;  // CSDL folder (signal source)
 // NOTE: MT5 WebRequest automatically uses port 80 for http:// | LUU Y: MT5 WebRequest tu dong dung port 80
 input string HTTP_Server_IP = "147.189.173.121";  // HTTP Server IP (Bot Python VPS)
 input string HTTP_API_Key = "";                    // API Key (empty = no auth | de trong = khong xac thuc)
+input bool EnableSymbolNormalization = true;       // Normalize symbol name (LTCUSDC→LTCUSD, FALSE=use exact name)
 
 input string ___Sep_B___ = "___B. STRATEGY CONFIG ________";  //
 
@@ -784,8 +785,14 @@ bool InitializeSymbolRecognition() {
 
 // Initialize symbol prefix with underscore | Khoi tao tien to ky hieu voi gach duoi
 void InitializeSymbolPrefix() {
-    // Set normalized symbol name for API calls (remove broker suffixes)
-    g_ea.normalized_symbol_name = NormalizeSymbolName(g_ea.symbol_name);
+    // Set normalized symbol name for API calls (optional, can be disabled)
+    if(EnableSymbolNormalization) {
+        g_ea.normalized_symbol_name = NormalizeSymbolName(g_ea.symbol_name);
+    } else {
+        // Use exact symbol name from broker (no normalization)
+        g_ea.normalized_symbol_name = g_ea.symbol_name;
+        Print("[NORMALIZE] Normalization DISABLED - Using exact symbol: " + g_ea.symbol_name);
+    }
 
     // Symbol prefix uses ORIGINAL name (not normalized) for local consistency
     g_ea.symbol_prefix = g_ea.symbol_name + "_";
