@@ -1,5 +1,5 @@
 //+-----------------------------------------------------------------------------------+
-//  SUPER SPY BOT V2 - Multi-Timeframe Signal Monitor | BOT GIAM SAT TIN HIEU NHIEU KHUNG THOI GIAN V2
+// SUPER SPY BOT V2 - Multi-Timeframe Signal Monitor | BOT GIAM SAT TIN HIEU NHIEU KHUNG THOI GIAN V2
 //+-----------------------------------------------------------------------------------+
 #property copyright "SUPER_Spy7TF_Oner V2 - Multi-Timeframe Signal Spy with NEWS CASCADE Analysis"
 
