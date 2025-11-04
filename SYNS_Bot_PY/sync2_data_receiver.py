@@ -29,6 +29,7 @@ import json
 import time
 import threading
 import requests
+import logging
 from datetime import datetime
 from flask import Flask, request, jsonify
 from flask_cors import CORS
@@ -92,6 +93,31 @@ error_log_tracker = {}  # {symbol: {"last_log_time": timestamp, "error_count": c
 # Flask app (Dashboard only)
 app_dashboard = Flask(__name__)
 CORS(app_dashboard)
+
+# ==============================================================================
+# ADVANCED LOG SUPPRESSION (Reduce CMD spam)
+# ==============================================================================
+# Suppress Flask development server request logs
+log = logging.getLogger('werkzeug')
+
+# ✅ CUSTOM FILTER: Suppress TimeoutError and Bad request from scanners
+class SmartLogFilter(logging.Filter):
+    def filter(self, record):
+        """Filter out spam logs while keeping important errors"""
+        quiet = bot_config.get('quiet_mode', False)
+        if not quiet:
+            return True
+
+        msg = record.getMessage()
+        # Suppress TimeoutError and Bad requests
+        if 'TimeoutError' in msg or 'Request timed out' in msg:
+            return False
+        if 'code 400' in msg or 'Bad request syntax' in msg or 'Bad request version' in msg:
+            return False
+        return True
+
+log.addFilter(SmartLogFilter())
+log.setLevel(logging.ERROR)  # Only show errors, not every request
 
 # ============================================
 # SECTION 2: HELPER FUNCTIONS

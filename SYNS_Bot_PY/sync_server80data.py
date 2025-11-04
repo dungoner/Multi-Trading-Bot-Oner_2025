@@ -112,9 +112,53 @@ if mode == 0:
                 print("Please run this script as Administrator manually.")
                 input("Press Enter to exit...")
                 sys.exit(1)
+
+    # ==============================================================================
+    # ADVANCED LOG SUPPRESSION (Reduce CMD spam while keeping important errors)
+    # ==============================================================================
     # Suppress Flask development server request logs
     log = logging.getLogger('werkzeug')
+
+    # ✅ CUSTOM FILTER: Suppress TimeoutError and Bad request from scanners
+    # BUT: Keep important errors (500, crashes, etc.)
+    class SmartLogFilter(logging.Filter):
+        def filter(self, record):
+            """Filter out spam logs while keeping important errors
+
+            SUPPRESS (when QUIET_MODE=ON):
+            - TimeoutError (network timeout from slow clients)
+            - Bad request syntax (malicious scanners)
+            - Bad request version (malicious scanners)
+
+            KEEP (always show):
+            - 500 Internal Server Error (real bugs)
+            - Connection errors (server issues)
+            - Other critical errors
+            """
+            # Get the global QUIET_MODE variable
+            # Note: bot_config is loaded at line 36-37
+            quiet = bot_config.get('quiet_mode', False)
+
+            if not quiet:
+                return True  # Normal mode: show all logs
+
+            # QUIET MODE: Filter spam logs
+            msg = record.getMessage()
+
+            # Suppress TimeoutError (client timeout, not our fault)
+            if 'TimeoutError' in msg or 'Request timed out' in msg:
+                return False  # SUPPRESS
+
+            # Suppress "Bad request" from malicious scanners
+            if 'code 400' in msg or 'Bad request syntax' in msg or 'Bad request version' in msg:
+                return False  # SUPPRESS
+
+            # Keep all other logs (500 errors, crashes, etc.)
+            return True
+
+    log.addFilter(SmartLogFilter())
     log.setLevel(logging.ERROR)  # Only show errors, not every request
+
     # ==============================================================================
     # CONFIGURATION
     # ==============================================================================
@@ -1032,7 +1076,8 @@ if mode == 0:
             "count": len(symbols),
             "timestamp": int(time.time())
         }
-        log_print(f"[API] Symbols list requested: {len(symbols)} symbols available", "INFO")
+        # ✅ SUPPRESSED: No need to log every 60s request (spam reduction)
+        # log_print(f"[API] Symbols list requested: {len(symbols)} symbols available", "INFO")
         return jsonify(response), 200
     @app_api.route('/api/health', methods=['GET'])
     def health_check():
@@ -3614,8 +3659,29 @@ elif mode == 1:
     from flask import Flask, request, jsonify
     from flask_cors import CORS
 
+    # ==============================================================================
+    # ADVANCED LOG SUPPRESSION (Bot 2 - Same as Bot 1)
+    # ==============================================================================
     # Suppress Flask development server request logs
     log = logging.getLogger('werkzeug')
+
+    # ✅ CUSTOM FILTER: Suppress TimeoutError and Bad request from scanners
+    class SmartLogFilter(logging.Filter):
+        def filter(self, record):
+            """Filter out spam logs while keeping important errors"""
+            quiet = bot_config.get('quiet_mode', False)
+            if not quiet:
+                return True
+
+            msg = record.getMessage()
+            # Suppress TimeoutError and Bad requests
+            if 'TimeoutError' in msg or 'Request timed out' in msg:
+                return False
+            if 'code 400' in msg or 'Bad request syntax' in msg or 'Bad request version' in msg:
+                return False
+            return True
+
+    log.addFilter(SmartLogFilter())
     log.setLevel(logging.ERROR)  # Only show errors, not every request
 
     # ============================================
