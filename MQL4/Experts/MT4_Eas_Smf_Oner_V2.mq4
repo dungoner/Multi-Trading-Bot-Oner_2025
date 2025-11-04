@@ -1893,20 +1893,22 @@ void OnDeinit(const int reason) {
     Comment("");  // Clear Comment | Xoa Comment
 
     // Delete all dashboard labels (15 labels: dash_0 to dash_14) | Xoa tat ca label dashboard
+    // ✅ FIX: Use g_ea.symbol_prefix to delete objects correctly | Su dung g_ea.symbol_prefix de xoa dung
     for(int i = 0; i <= 14; i++) {
-        string obj_name = "dash_" + IntegerToString(i);
+        string obj_name = g_ea.symbol_prefix + "dash_" + IntegerToString(i);
         if(ObjectFind(obj_name) >= 0) {
             ObjectDelete(obj_name);
         }
     }
 
-    // Delete all objects with "dash_" prefix (cleanup any orphaned objects)
-    // Xoa tat ca object co tien to "dash_" (don dep cac object con sot lai)
+    // Delete all objects with symbol_prefix + "dash_" pattern (cleanup any orphaned objects)
+    // Xoa tat ca object co pattern symbol_prefix + "dash_" (don dep cac object con sot lai)
     int total = ObjectsTotal();
     for(int i = total - 1; i >= 0; i--) {
         string obj_name = ObjectName(i);
-        // Check if object name starts with "dash_" prefix
-        if(StringFind(obj_name, "dash_") == 0) {
+        // Check if object name starts with symbol_prefix AND contains "dash_"
+        // Kiem tra object bat dau bang symbol_prefix VA chua "dash_"
+        if(StringFind(obj_name, g_ea.symbol_prefix) == 0 && StringFind(obj_name, "dash_") > 0) {
             ObjectDelete(obj_name);
         }
     }
