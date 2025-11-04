@@ -221,11 +221,10 @@ string SignalToString(int signal) {
 // Global variables for OrderSelect compatibility
 static int g_selected_ticket = -1;
 
-// OrdersTotal() wrapper - returns PositionsTotal() for MT5
-// Use inline function instead of macro to avoid argument expansion issues
-int OrdersTotal() {
-    return PositionsTotal();
-}
+// NOTE: MT5 separates orders and positions (different from MT4):
+// - OrdersTotal() returns PENDING orders only (buy limit, sell stop, etc.)
+// - PositionsTotal() returns OPEN positions (active buy/sell trades)
+// MT4's OrdersTotal() returned ALL orders, so we use PositionsTotal() in MT5
 
 // Define MT4 constants for MT5 (needed before OrderSend wrapper)
 #define SELECT_BY_POS 0
@@ -1250,7 +1249,7 @@ bool RestoreOrCleanupPositions() {
     int closed_count = 0;
 
     // Step 2: Scan all open orders | Buoc 2: Quet tat ca lenh mo
-    for(int i = OrdersTotal() - 1; i >= 0; i--) {
+    for(int i = PositionsTotal() - 1; i >= 0; i--) {
         if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) continue;
 
         // Get order info | Lay thong tin lenh
@@ -1370,7 +1369,7 @@ void CloseAllStrategiesByMagicForTF(int tf) {
     int signal_new = g_ea.csdl_rows[tf].signal;
     datetime timestamp_new = (datetime)g_ea.csdl_rows[tf].timestamp;
 
-    for(int i = OrdersTotal() - 1; i >= 0; i--) {
+    for(int i = PositionsTotal() - 1; i >= 0; i--) {
         if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) continue;
         if(OrderSymbol() != _Symbol) continue;
 
@@ -1422,7 +1421,7 @@ void CloseAllBonusOrders() {
         double total_lot = 0;
 
         // Scan all orders on MT4 | Quet tat ca lenh tren MT4
-        for(int i = OrdersTotal() - 1; i >= 0; i--) {
+        for(int i = PositionsTotal() - 1; i >= 0; i--) {
             if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) continue;
             if(OrderSymbol() != _Symbol) continue;
 
@@ -1457,7 +1456,7 @@ void CloseS1OrdersByM1() {
     for(int tf = 0; tf < 7; tf++) {
         if(!IsTFEnabled(tf)) continue;
         int target_magic = g_ea.magic_numbers[tf][0];
-        for(int i = OrdersTotal() - 1; i >= 0; i--) {
+        for(int i = PositionsTotal() - 1; i >= 0; i--) {
             if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) continue;
             if(OrderSymbol() != _Symbol) continue;
             if(OrderMagicNumber() == target_magic) {
@@ -1473,7 +1472,7 @@ void CloseS2OrdersByM1() {
     for(int tf = 0; tf < 7; tf++) {
         if(!IsTFEnabled(tf)) continue;
         int target_magic = g_ea.magic_numbers[tf][1];
-        for(int i = OrdersTotal() - 1; i >= 0; i--) {
+        for(int i = PositionsTotal() - 1; i >= 0; i--) {
             if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) continue;
             if(OrderSymbol() != _Symbol) continue;
             if(OrderMagicNumber() == target_magic) {
@@ -1487,7 +1486,7 @@ void CloseS2OrdersByM1() {
 // Close only S3 for specific TF | Dong chi S3 cho TF cu the
 void CloseS3OrdersForTF(int tf) {
     int target_magic = g_ea.magic_numbers[tf][2];
-    for(int i = OrdersTotal() - 1; i >= 0; i--) {
+    for(int i = PositionsTotal() - 1; i >= 0; i--) {
         if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) continue;
         if(OrderSymbol() != _Symbol) continue;
         if(OrderMagicNumber() == target_magic) {
@@ -1815,10 +1814,10 @@ void ProcessBonusNews() {
 // Stoploss: 2 layers (LAYER1, LAYER2) | Cat lo: 2 tang
 // Take profit: 1 layer (based on max_loss × multiplier) | Chot loi: 1 tang (dua tren max_loss × he so)
 void CheckStoplossAndTakeProfit() {
-    if(OrdersTotal() == 0) return;
+    if(PositionsTotal() == 0) return;
 
     // Scan all orders once | Quet tat ca lenh 1 lan duy nhat
-    for(int i = OrdersTotal() - 1; i >= 0; i--) {
+    for(int i = PositionsTotal() - 1; i >= 0; i--) {
         if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) continue;
         if(OrderSymbol() != _Symbol) continue;
 
@@ -2202,7 +2201,7 @@ void ScanAllOrdersForDashboard(int &total_orders, double &total_profit, double &
     int s1_count = 0;
     int s2s3_count = 0;
 
-    for(int i = 0; i < OrdersTotal(); i++) {
+    for(int i = 0; i < PositionsTotal(); i++) {
         if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) continue;
         if(OrderSymbol() != _Symbol) continue;
 
@@ -2279,7 +2278,7 @@ double CalculateTFPnL(int tf) {
         int target_magic = g_ea.magic_numbers[tf][s];
 
         // Scan all orders to find matching magic | Quet tat ca lenh de tim magic khop
-        for(int i = 0; i < OrdersTotal(); i++) {
+        for(int i = 0; i < PositionsTotal(); i++) {
             if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) continue;
             if(OrderSymbol() != _Symbol) continue;
             if(OrderMagicNumber() == target_magic) {
@@ -2295,7 +2294,7 @@ double CalculateTFPnL(int tf) {
 bool HasBonusOrders(int tf) {
     int target_magic = g_ea.magic_numbers[tf][2]; // S3 magic for this TF | Magic S3 cho TF nay
 
-    for(int i = 0; i < OrdersTotal(); i++) {
+    for(int i = 0; i < PositionsTotal(); i++) {
         if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) continue;
         if(OrderSymbol() != _Symbol) continue;
         if(OrderMagicNumber() == target_magic) {
@@ -2405,7 +2404,7 @@ void UpdateDashboard() {
     ArrayInitialize(bonus_count_per_tf, 0);
     ArrayInitialize(bonus_lots_per_tf, 0.0);
 
-    for(int i = 0; i < OrdersTotal(); i++) {
+    for(int i = 0; i < PositionsTotal(); i++) {
         if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) continue;
         if(OrderSymbol() != _Symbol) continue;
 
@@ -2601,7 +2600,7 @@ void OnTimer() {
                 if(S1_CloseByM1 && S2_CloseByM1) {
                     CloseS3OrdersForTF(tf);
                 } else if(S1_CloseByM1) {
-                    for(int i = OrdersTotal() - 1; i >= 0; i--) {
+                    for(int i = PositionsTotal() - 1; i >= 0; i--) {
                         if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) continue;
                         if(OrderSymbol() != _Symbol) continue;
                         int magic = OrderMagicNumber();
@@ -2612,7 +2611,7 @@ void OnTimer() {
                     g_ea.position_flags[tf][1] = 0;
                     g_ea.position_flags[tf][2] = 0;
                 } else if(S2_CloseByM1) {
-                    for(int j = OrdersTotal() - 1; j >= 0; j--) {
+                    for(int j = PositionsTotal() - 1; j >= 0; j--) {
                         if(!OrderSelect(j, SELECT_BY_POS, MODE_TRADES)) continue;
                         if(OrderSymbol() != _Symbol) continue;
                         int order_magic = OrderMagicNumber();
