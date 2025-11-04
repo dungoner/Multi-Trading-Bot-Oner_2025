@@ -224,6 +224,14 @@ static int g_selected_ticket = -1;
 // OrdersTotal() wrapper - returns PositionsTotal() for MT5
 #define OrdersTotal() PositionsTotal()
 
+// Define MT4 constants for MT5 (needed before OrderSend wrapper)
+#define SELECT_BY_POS 0
+#define SELECT_BY_TICKET 1
+#define MODE_TRADES 0
+#define MODE_MARGINREQUIRED 16
+#define OP_BUY 0
+#define OP_SELL 1
+
 // OrderSelect() wrapper - MT4 compatible for MT5
 bool OrderSelect(int index, int select, int pool=0) {
     // SELECT_BY_POS = 0, SELECT_BY_TICKET = 1
@@ -295,6 +303,11 @@ double OrderTakeProfit() {
     return PositionGetDouble(POSITION_TP);
 }
 
+// OrderComment() wrapper
+string OrderComment() {
+    return PositionGetString(POSITION_COMMENT);
+}
+
 // TimeSeconds() wrapper - MT5 doesn't have this
 int TimeSeconds(datetime time) {
     MqlDateTime dt;
@@ -334,6 +347,10 @@ string AccountName() {
 
 string AccountServer() {
     return AccountInfoString(ACCOUNT_SERVER);
+}
+
+int AccountLeverage() {
+    return (int)AccountInfoInteger(ACCOUNT_LEVERAGE);
 }
 
 // OrderSwap() wrapper
@@ -458,7 +475,7 @@ void RefreshRates() {
 // MarketInfo() wrapper - MT5 uses SymbolInfoDouble/SymbolInfoInteger
 double MarketInfo(string symbol, int type) {
     switch(type) {
-        case 16:  // MODE_MARGINREQUIRED
+        case 16: {  // MODE_MARGINREQUIRED
             // In MT5, we need to calculate margin requirement
             // For simplicity, use contract size * current price / leverage
             double contract_size = SymbolInfoDouble(symbol, SYMBOL_TRADE_CONTRACT_SIZE);
@@ -472,7 +489,7 @@ double MarketInfo(string symbol, int type) {
             if(leverage == 0) leverage = 100;  // Default leverage
 
             return (contract_size * bid) / leverage;
-
+        }
         default:
             return 0.0;
     }
@@ -522,14 +539,6 @@ bool ObjectDelete(string name) {
 
 // Digits predefined variable - MT5 uses _Digits
 #define Digits _Digits
-
-// Define MT4 constants for MT5
-#define SELECT_BY_POS 0
-#define SELECT_BY_TICKET 1
-#define MODE_TRADES 0
-#define MODE_MARGINREQUIRED 16
-#define OP_BUY 0
-#define OP_SELL 1
 
 //=============================================================================
 //  END OF MT4 COMPATIBILITY LAYER | KẾT THÚC LỚP TƯƠNG THÍCH MT4
@@ -941,8 +950,8 @@ bool ReadCSDLFromHTTP() {
 
     // Send HTTP GET request (timeout 500ms = 0.5s)
     // Timeout 500ms is suitable for LAN/VPS (typically <100ms)
-    // MT5 syntax: WebRequest(method, url, cookie, headers, timeout, data[], result[], result_headers)
-    int res = WebRequest("GET", url, "", headers, 500, post_data, result, result_headers);
+    // MT5 syntax: WebRequest(method, url, headers, timeout, data[], result[], result_headers)
+    int res = WebRequest("GET", url, headers, 500, post_data, result, result_headers);
 
     // Check for errors
     if(res == -1) {
@@ -1953,7 +1962,7 @@ void SmartTFReset() {
 
         ChartSetSymbolPeriod(chart_ids[i], current_symbol, PERIOD_W1);
         Sleep(1000);
-        ChartSetSymbolPeriod(chart_ids[i], current_symbol, other_period);
+        ChartSetSymbolPeriod(chart_ids[i], current_symbol, (ENUM_TIMEFRAMES)other_period);
         Sleep(1000);
     }
 
@@ -1961,7 +1970,7 @@ void SmartTFReset() {
     Print("[RESET] Step ", (total_charts+1), "/", (total_charts+1), ": Current chart TF ", current_period, " (LAST - via W1)...");
     ChartSetSymbolPeriod(current_chart_id, current_symbol, PERIOD_W1);
     Sleep(1000);
-    ChartSetSymbolPeriod(current_chart_id, current_symbol, current_period);
+    ChartSetSymbolPeriod(current_chart_id, current_symbol, (ENUM_TIMEFRAMES)current_period);
     Sleep(1000);
 
     Print("[SMART_TF_RESET] ? Completed! ", (total_charts + 1), " charts reset");
