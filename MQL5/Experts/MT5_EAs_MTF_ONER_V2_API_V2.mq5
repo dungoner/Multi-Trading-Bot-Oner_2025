@@ -5,7 +5,6 @@
 //| Version: 2.0 API_V2 (MT5) - Added HTTP API + MT4 fixes | Phien ban: 2.0 API_V2 - Them HTTP API + Fix MT4
 //+------------------------------------------------------------------+
 #property copyright "_MT5_EAs_MTF ONER"
-#property strict
 
 //=============================================================================
 //  PART 1: USER INPUTS (30 inputs + 4 separators) | CAU HINH NGUOI DUNG
@@ -303,10 +302,232 @@ int TimeSeconds(datetime time) {
     return dt.sec;
 }
 
+// TimeToStr() wrapper - MT5 uses TimeToString
+string TimeToStr(datetime time, int mode=TIME_DATE|TIME_MINUTES) {
+    return TimeToString(time, mode);
+}
+
+// Account functions wrappers - MT5 uses AccountInfo*
+double AccountBalance() {
+    return AccountInfoDouble(ACCOUNT_BALANCE);
+}
+
+double AccountEquity() {
+    return AccountInfoDouble(ACCOUNT_EQUITY);
+}
+
+double AccountProfit() {
+    return AccountInfoDouble(ACCOUNT_PROFIT);
+}
+
+double AccountFreeMargin() {
+    return AccountInfoDouble(ACCOUNT_MARGIN_FREE);
+}
+
+string AccountCompany() {
+    return AccountInfoString(ACCOUNT_COMPANY);
+}
+
+string AccountName() {
+    return AccountInfoString(ACCOUNT_NAME);
+}
+
+string AccountServer() {
+    return AccountInfoString(ACCOUNT_SERVER);
+}
+
+// OrderSwap() wrapper
+double OrderSwap() {
+    return PositionGetDouble(POSITION_SWAP);
+}
+
+// OrderCommission() wrapper
+double OrderCommission() {
+    // MT5 doesn't have commission in position, only in deal history
+    // For simplicity, return 0 (commission is typically small and included in spread)
+    return 0.0;
+}
+
+// OrderCloseTime() wrapper - MT5 doesn't have this for positions
+// Returns 0 for open positions (positions don't have close time)
+datetime OrderCloseTime() {
+    // In MT5, positions are always open. To check if closed, position won't exist.
+    // This function is used to check if order is already closed
+    // If we can't select the position, it means it's closed
+    return 0;  // Always return 0 for open positions
+}
+
+// OrderClose() wrapper - MT5 uses CTrade or MqlTradeRequest
+bool OrderClose(int ticket, double lots, double price, int slippage, color arrow_color) {
+    // Use PositionClose for MT5
+    MqlTradeRequest request;
+    MqlTradeResult result;
+
+    // Select position first
+    if(!PositionSelectByTicket(ticket)) {
+        return false;  // Position doesn't exist
+    }
+
+    ZeroMemory(request);
+    ZeroMemory(result);
+
+    request.action = TRADE_ACTION_DEAL;
+    request.position = ticket;
+    request.symbol = PositionGetString(POSITION_SYMBOL);
+    request.volume = lots;
+    request.deviation = slippage;
+    request.magic = (int)PositionGetInteger(POSITION_MAGIC);
+
+    // Determine if position is BUY or SELL
+    ENUM_POSITION_TYPE pos_type = (ENUM_POSITION_TYPE)PositionGetInteger(POSITION_TYPE);
+    if(pos_type == POSITION_TYPE_BUY) {
+        request.type = ORDER_TYPE_SELL;  // Close BUY with SELL
+        request.price = SymbolInfoDouble(request.symbol, SYMBOL_BID);
+    } else {
+        request.type = ORDER_TYPE_BUY;   // Close SELL with BUY
+        request.price = SymbolInfoDouble(request.symbol, SYMBOL_ASK);
+    }
+
+    return ::OrderSend(request, result);
+}
+
+// OrderModify() wrapper - MT5 uses MqlTradeRequest
+bool OrderModify(int ticket, double price, double sl, double tp, datetime expiration, color arrow_color) {
+    MqlTradeRequest request;
+    MqlTradeResult result;
+
+    if(!PositionSelectByTicket(ticket)) {
+        return false;
+    }
+
+    ZeroMemory(request);
+    ZeroMemory(result);
+
+    request.action = TRADE_ACTION_SLTP;
+    request.position = ticket;
+    request.symbol = PositionGetString(POSITION_SYMBOL);
+    request.sl = sl;
+    request.tp = tp;
+
+    return ::OrderSend(request, result);
+}
+
+// OrderSend() wrapper - MT5 uses MqlTradeRequest structure
+int OrderSend(string symbol, int cmd, double volume, double price, int slippage,
+              double stoploss, double takeprofit, string comment, int magic,
+              datetime expiration, color arrow_color) {
+    MqlTradeRequest request;
+    MqlTradeResult result;
+
+    ZeroMemory(request);
+    ZeroMemory(result);
+
+    request.action = TRADE_ACTION_DEAL;
+    request.symbol = symbol;
+    request.volume = volume;
+    request.deviation = slippage;
+    request.magic = magic;
+    request.comment = comment;
+    request.sl = stoploss;
+    request.tp = takeprofit;
+
+    // Convert MT4 order type to MT5
+    if(cmd == OP_BUY) {
+        request.type = ORDER_TYPE_BUY;
+        request.price = SymbolInfoDouble(symbol, SYMBOL_ASK);
+    } else if(cmd == OP_SELL) {
+        request.type = ORDER_TYPE_SELL;
+        request.price = SymbolInfoDouble(symbol, SYMBOL_BID);
+    } else {
+        return -1;  // Only market orders supported
+    }
+
+    if(!::OrderSend(request, result)) {
+        return -1;
+    }
+
+    return (int)result.order;
+}
+
+// RefreshRates() wrapper - Not needed in MT5, but keep for compatibility
+void RefreshRates() {
+    // MT5 automatically updates rates, no action needed
+    return;
+}
+
+// MarketInfo() wrapper - MT5 uses SymbolInfoDouble/SymbolInfoInteger
+double MarketInfo(string symbol, int type) {
+    switch(type) {
+        case 16:  // MODE_MARGINREQUIRED
+            // In MT5, we need to calculate margin requirement
+            // For simplicity, use contract size * current price / leverage
+            double contract_size = SymbolInfoDouble(symbol, SYMBOL_TRADE_CONTRACT_SIZE);
+            double tick_value = SymbolInfoDouble(symbol, SYMBOL_TRADE_TICK_VALUE);
+            double tick_size = SymbolInfoDouble(symbol, SYMBOL_TRADE_TICK_SIZE);
+            double bid = SymbolInfoDouble(symbol, SYMBOL_BID);
+
+            // Simplified margin calculation
+            // This is an approximation - actual margin depends on account leverage and broker settings
+            long leverage = AccountInfoInteger(ACCOUNT_LEVERAGE);
+            if(leverage == 0) leverage = 100;  // Default leverage
+
+            return (contract_size * bid) / leverage;
+
+        default:
+            return 0.0;
+    }
+}
+
+// ObjectCreate() wrapper - MT5 requires chart_id
+bool ObjectCreate(string name, int object_type, int sub_window, datetime time1, double price1,
+                  datetime time2=0, double price2=0, datetime time3=0, double price3=0) {
+    return ::ObjectCreate(0, name, (ENUM_OBJECT)object_type, sub_window, time1, price1, time2, price2, time3, price3);
+}
+
+// ObjectSet() wrapper - MT5 uses ObjectSetInteger/ObjectSetDouble
+bool ObjectSet(string name, int prop_id, double value) {
+    // Most common properties are integer-based
+    return ::ObjectSetInteger(0, name, (ENUM_OBJECT_PROPERTY_INTEGER)prop_id, (long)value);
+}
+
+// ObjectSetText() wrapper - MT5 uses ObjectSetString and ObjectSetInteger
+bool ObjectSetText(string name, string text, int font_size, string font_name="", color text_color=clrNONE) {
+    bool result = true;
+    result = result && ::ObjectSetString(0, name, OBJPROP_TEXT, text);
+    if(font_size > 0) {
+        result = result && ::ObjectSetInteger(0, name, OBJPROP_FONTSIZE, font_size);
+    }
+    if(font_name != "") {
+        result = result && ::ObjectSetString(0, name, OBJPROP_FONT, font_name);
+    }
+    if(text_color != clrNONE) {
+        result = result && ::ObjectSetInteger(0, name, OBJPROP_COLOR, text_color);
+    }
+    return result;
+}
+
+// ObjectFind() wrapper - MT5 requires chart_id
+int ObjectFind(string name) {
+    return (int)::ObjectFind(0, name);
+}
+
+// ObjectDelete() wrapper - MT5 requires chart_id
+bool ObjectDelete(string name) {
+    return ::ObjectDelete(0, name);
+}
+
+// Bid and Ask predefined variables - MT5 uses SymbolInfoDouble
+#define Bid SymbolInfoDouble(_Symbol, SYMBOL_BID)
+#define Ask SymbolInfoDouble(_Symbol, SYMBOL_ASK)
+
+// Digits predefined variable - MT5 uses _Digits
+#define Digits _Digits
+
 // Define MT4 constants for MT5
 #define SELECT_BY_POS 0
 #define SELECT_BY_TICKET 1
 #define MODE_TRADES 0
+#define MODE_MARGINREQUIRED 16
 #define OP_BUY 0
 #define OP_SELL 1
 
@@ -720,7 +941,8 @@ bool ReadCSDLFromHTTP() {
 
     // Send HTTP GET request (timeout 500ms = 0.5s)
     // Timeout 500ms is suitable for LAN/VPS (typically <100ms)
-    int res = WebRequest("GET", url, "", headers, 500, post_data, 0, result, result_headers);
+    // MT5 syntax: WebRequest(method, url, cookie, headers, timeout, data[], result[], result_headers)
+    int res = WebRequest("GET", url, "", headers, 500, post_data, result, result_headers);
 
     // Check for errors
     if(res == -1) {
@@ -1023,7 +1245,7 @@ bool RestoreOrCleanupPositions() {
         int magic = OrderMagicNumber();
         int ticket = OrderTicket();
         int order_type = OrderType();
-        string order_symbol = Order_Symbol;
+        string order_symbol = OrderSymbol();
 
         // Filter: Only this symbol | Loc: Chi lenh cua symbol nay
         if(order_symbol != _Symbol) continue;
@@ -1138,7 +1360,7 @@ void CloseAllStrategiesByMagicForTF(int tf) {
 
     for(int i = OrdersTotal() - 1; i >= 0; i--) {
         if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) continue;
-        if(Order_Symbol != _Symbol) continue;
+        if(OrderSymbol() != _Symbol) continue;
 
         int magic = OrderMagicNumber();
         int ticket = OrderTicket();
@@ -1190,7 +1412,7 @@ void CloseAllBonusOrders() {
         // Scan all orders on MT4 | Quet tat ca lenh tren MT4
         for(int i = OrdersTotal() - 1; i >= 0; i--) {
             if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) continue;
-            if(Order_Symbol != _Symbol) continue;
+            if(OrderSymbol() != _Symbol) continue;
 
             // If magic matches, close it | Neu magic trung, dong no
             if(OrderMagicNumber() == target_magic) {
@@ -1225,7 +1447,7 @@ void CloseS1OrdersByM1() {
         int target_magic = g_ea.magic_numbers[tf][0];
         for(int i = OrdersTotal() - 1; i >= 0; i--) {
             if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) continue;
-            if(Order_Symbol != _Symbol) continue;
+            if(OrderSymbol() != _Symbol) continue;
             if(OrderMagicNumber() == target_magic) {
                 CloseOrderSafely(OrderTicket(), "S1_M1_CLOSE");
             }
@@ -1241,7 +1463,7 @@ void CloseS2OrdersByM1() {
         int target_magic = g_ea.magic_numbers[tf][1];
         for(int i = OrdersTotal() - 1; i >= 0; i--) {
             if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) continue;
-            if(Order_Symbol != _Symbol) continue;
+            if(OrderSymbol() != _Symbol) continue;
             if(OrderMagicNumber() == target_magic) {
                 CloseOrderSafely(OrderTicket(), "S2_M1_CLOSE");
             }
@@ -1255,7 +1477,7 @@ void CloseS3OrdersForTF(int tf) {
     int target_magic = g_ea.magic_numbers[tf][2];
     for(int i = OrdersTotal() - 1; i >= 0; i--) {
         if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) continue;
-        if(Order_Symbol != _Symbol) continue;
+        if(OrderSymbol() != _Symbol) continue;
         if(OrderMagicNumber() == target_magic) {
             CloseOrderSafely(OrderTicket(), "S3_SIGNAL_CHG");
         }
@@ -1586,7 +1808,7 @@ void CheckStoplossAndTakeProfit() {
     // Scan all orders once | Quet tat ca lenh 1 lan duy nhat
     for(int i = OrdersTotal() - 1; i >= 0; i--) {
         if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) continue;
-        if(Order_Symbol != _Symbol) continue;
+        if(OrderSymbol() != _Symbol) continue;
 
         int magic = OrderMagicNumber();
         int ticket = OrderTicket();
@@ -1942,7 +2164,7 @@ void OnDeinit(const int reason) {
 
     // Delete all dashboard labels (15 labels: dash_0 to dash_14) | Xoa tat ca label dashboard
     for(int i = 0; i <= 14; i++) {
-        ObjectDelete(0, "dash_" + IntegerToString(i));
+        ObjectDelete("dash_" + IntegerToString(i));
     }
 
     Print("[EA] Shutdown. Reason: ", reason);
@@ -1970,7 +2192,7 @@ void ScanAllOrdersForDashboard(int &total_orders, double &total_profit, double &
 
     for(int i = 0; i < OrdersTotal(); i++) {
         if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) continue;
-        if(Order_Symbol != _Symbol) continue;
+        if(OrderSymbol() != _Symbol) continue;
 
         int magic = OrderMagicNumber();
         double profit = OrderProfit() + OrderSwap() + OrderCommission();
@@ -2047,7 +2269,7 @@ double CalculateTFPnL(int tf) {
         // Scan all orders to find matching magic | Quet tat ca lenh de tim magic khop
         for(int i = 0; i < OrdersTotal(); i++) {
             if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) continue;
-            if(Order_Symbol != _Symbol) continue;
+            if(OrderSymbol() != _Symbol) continue;
             if(OrderMagicNumber() == target_magic) {
                 total_pnl += OrderProfit() + OrderSwap() + OrderCommission();
             }
@@ -2063,7 +2285,7 @@ bool HasBonusOrders(int tf) {
 
     for(int i = 0; i < OrdersTotal(); i++) {
         if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) continue;
-        if(Order_Symbol != _Symbol) continue;
+        if(OrderSymbol() != _Symbol) continue;
         if(OrderMagicNumber() == target_magic) {
             // Check if comment contains "BONUS" | Kiem tra comment co chua "BONUS"
             string comment = OrderComment();
@@ -2140,7 +2362,7 @@ void UpdateDashboard() {
     if(!ShowDashboard) {
         // Hide all labels if disabled | An tat ca label neu tat
         for(int i = 0; i <= 14; i++) {
-            ObjectDelete(0, "dash_" + IntegerToString(i));
+            ObjectDelete("dash_" + IntegerToString(i));
         }
         return;
     }
@@ -2173,7 +2395,7 @@ void UpdateDashboard() {
 
     for(int i = 0; i < OrdersTotal(); i++) {
         if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) continue;
-        if(Order_Symbol != _Symbol) continue;
+        if(OrderSymbol() != _Symbol) continue;
 
         double order_pnl = OrderProfit() + OrderSwap() + OrderCommission();
         int magic = OrderMagicNumber();
@@ -2310,8 +2532,8 @@ void UpdateDashboard() {
     CreateOrUpdateLabel(g_ea.symbol_prefix + "dash_14", broker_info, 10, y_pos, clrYellow, 8);
 
     // Clean up old unused labels | Don dep nhan cu khong dung
-    ObjectDelete(0, g_ea.symbol_prefix + "dash_15");
-    ObjectDelete(0, g_ea.symbol_prefix + "dash_16");
+    ObjectDelete(g_ea.symbol_prefix + "dash_15");
+    ObjectDelete(g_ea.symbol_prefix + "dash_16");
 }
 
 // Create or update OBJ_LABEL | Tao hoac cap nhat OBJ_LABEL
@@ -2369,7 +2591,7 @@ void OnTimer() {
                 } else if(S1_CloseByM1) {
                     for(int i = OrdersTotal() - 1; i >= 0; i--) {
                         if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) continue;
-                        if(Order_Symbol != _Symbol) continue;
+                        if(OrderSymbol() != _Symbol) continue;
                         int magic = OrderMagicNumber();
                         if(magic == g_ea.magic_numbers[tf][1] || magic == g_ea.magic_numbers[tf][2]) {
                             CloseOrderSafely(OrderTicket(), "SIGNAL_CHANGE");
@@ -2380,7 +2602,7 @@ void OnTimer() {
                 } else if(S2_CloseByM1) {
                     for(int j = OrdersTotal() - 1; j >= 0; j--) {
                         if(!OrderSelect(j, SELECT_BY_POS, MODE_TRADES)) continue;
-                        if(Order_Symbol != _Symbol) continue;
+                        if(OrderSymbol() != _Symbol) continue;
                         int order_magic = OrderMagicNumber();
                         if(order_magic == g_ea.magic_numbers[tf][0] || order_magic == g_ea.magic_numbers[tf][2]) {
                             CloseOrderSafely(OrderTicket(), "SIGNAL_CHANGE");
