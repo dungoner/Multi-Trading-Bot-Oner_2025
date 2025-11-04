@@ -4,7 +4,7 @@
 //| 7 TF × 3 Strategies = 21 orders | 7 khung x 3 chien luoc = 21 lenh
 //| Version: API_V2 (MT5) - Added HTTP API + MT4 fixes | Phien ban: API_V2 - Them HTTP API + MT4
 //+------------------------------------------------------------------+
-#property copyright "_MT5_EAs_MTF ONER"
+#property copyright "_MT5_EAs_MTF ONER_V2"
 
 //=============================================================================
 //  PART 1: USER INPUTS (30 inputs + 4 separators) | CAU HINH NGUOI DUNG
@@ -46,14 +46,14 @@ input CSDL_SOURCE_ENUM CSDL_Source = FOLDER_2;  // CSDL folder (signal source)
 // IMPORTANT: MT5 must allow URL in Tools->Options->Expert Advisors | QUAN TRONG: MT5 phai cho phep URL
 // NOTE: MT5 WebRequest automatically uses port 80 for http:// | LUU Y: MT5 WebRequest tu dong dung port 80
 input string HTTP_Server_IP = "147.189.173.121";  // HTTP Server IP (Bot Python VPS)
-input string HTTP_API_Key = "";                    // API Key (empty = no auth | de trong = khong xac thuc)
-input bool EnableSymbolNormalization = true;       // Normalize symbol name (LTCUSDC→LTCUSD, FALSE=use exact name)
+input string HTTP_API_Key = "";                    // API Key (empty = no auth | de trong)
+input bool EnableSymbolNormal = true;       // Symbol name (LTCUSDc.xyz -> FALSE =use LTCUSD)
 
 input string ___Sep_B___ = "___B. STRATEGY CONFIG ________";  //
 
 //--- B.1 S1 NEWS Filter (3) | Loc tin tuc cho S1
 input bool S1_UseNewsFilter = false;         // S1: Use NEWS filter (TRUE=strict, FALSE=basic)
-input int MinNewsLevelS1 = 20;                // S1: Min NEWS level (2-70, higher=stricter)
+input int MinNewsLevelS1 = 20;               // S1: Min NEWS level (2-70, higher=stricter)
 input bool S1_RequireNewsDirection = true;   // S1: Match NEWS direction (signal==news!)
 
 //--- B.2 S2 TREND Mode (1) | Che do xu huong
@@ -786,7 +786,7 @@ bool InitializeSymbolRecognition() {
 // Initialize symbol prefix with underscore | Khoi tao tien to ky hieu voi gach duoi
 void InitializeSymbolPrefix() {
     // Set normalized symbol name for API calls (optional, can be disabled)
-    if(EnableSymbolNormalization) {
+    if(EnableSymbolNormal) {
         g_ea.normalized_symbol_name = NormalizeSymbolName(g_ea.symbol_name);
     } else {
         // Use exact symbol name from broker (no normalization)
