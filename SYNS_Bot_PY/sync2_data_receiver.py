@@ -85,6 +85,10 @@ receiver_state = {
     "symbols_received": {},  # {symbol: {count, last_update, last_mtime}}
 }
 
+# Health check: Track last error log time per symbol (1h interval)
+# Giống EA: CheckSPYBotHealth (8h/16h), nhưng ở đây 1h/lần
+error_log_tracker = {}  # {symbol: {"last_log_time": timestamp, "error_count": count}}
+
 # Flask app (Dashboard only)
 app_dashboard = Flask(__name__)
 CORS(app_dashboard)
@@ -193,6 +197,47 @@ def format_timestamp(ts):
     if ts == 0:
         return "Never"
     return datetime.fromtimestamp(ts).strftime("%Y-%m-%d %H:%M:%S")
+
+def should_log_error(symbol, error_type="timeout"):
+    """Check if error should be logged (1h interval health check)
+
+    Similar to EA's CheckSPYBotHealth (8h/16h), but 1h interval here.
+    Purpose: Reduce log spam for transient network errors.
+
+    Args:
+        symbol: Symbol name (e.g. "BTCUSD")
+        error_type: Error type (e.g. "timeout", "connection")
+
+    Returns:
+        bool: True if should log (>= 1h since last log), False otherwise
+    """
+    current_time = time.time()
+    tracker_key = f"{symbol}_{error_type}"
+
+    if tracker_key not in error_log_tracker:
+        # First error for this symbol/type → Log immediately
+        error_log_tracker[tracker_key] = {
+            "last_log_time": current_time,
+            "error_count": 1
+        }
+        return True
+
+    # Check time since last log
+    last_log_time = error_log_tracker[tracker_key]["last_log_time"]
+    time_since_last_log = current_time - last_log_time
+
+    # Increment error count (always track, even if not logging)
+    error_log_tracker[tracker_key]["error_count"] += 1
+
+    # Log if >= 1 hour (3600 seconds) since last log
+    if time_since_last_log >= 3600:
+        error_log_tracker[tracker_key]["last_log_time"] = current_time
+        error_count = error_log_tracker[tracker_key]["error_count"]
+
+        # Include error count in decision (will be printed by caller)
+        return True
+
+    return False
 
 def log_message(level, message):
     """Write log to console only (file writing removed for simplification)
@@ -336,17 +381,29 @@ def poll_bot1():
 
                     else:
                         receiver_state["total_errors"] += 1
-                        log_message("ERROR", f"Bot 1 API error: {symbol} (HTTP {response.status_code})")
+
+                        # Health check: Only log every 1 hour (3600s) to reduce spam
+                        if should_log_error(symbol, f"http_{response.status_code}"):
+                            error_count = error_log_tracker.get(f"{symbol}_http_{response.status_code}", {}).get("error_count", 0)
+                            log_message("ERROR", f"Bot 1 API error: {symbol} (HTTP {response.status_code}) (errors in last 1h: {error_count})")
 
                 except requests.exceptions.Timeout:
                     receiver_state["total_errors"] += 1
                     receiver_state["bot1_status"] = "offline"
-                    log_message("ERROR", f"Timeout pulling {symbol} from Bot 1")
+
+                    # Health check: Only log every 1 hour (3600s) to reduce spam
+                    if should_log_error(symbol, "timeout"):
+                        error_count = error_log_tracker.get(f"{symbol}_timeout", {}).get("error_count", 0)
+                        log_message("ERROR", f"Timeout pulling {symbol} from Bot 1 (errors in last 1h: {error_count})")
 
                 except requests.exceptions.ConnectionError:
                     receiver_state["total_errors"] += 1
                     receiver_state["bot1_status"] = "offline"
-                    log_message("ERROR", f"Connection error to Bot 1 (pulling {symbol})")
+
+                    # Health check: Only log every 1 hour (3600s) to reduce spam
+                    if should_log_error(symbol, "connection"):
+                        error_count = error_log_tracker.get(f"{symbol}_connection", {}).get("error_count", 0)
+                        log_message("ERROR", f"Connection error to Bot 1 (pulling {symbol}) (errors in last 1h: {error_count})")
 
                 except Exception as e:
                     receiver_state["total_errors"] += 1
@@ -565,3 +622,4 @@ if __name__ == "__main__":
         print("\n\n🛑 Shutting down...")
         log_message("INFO", "Receiver Bot 2 stopped by user")
         sys.exit(0)
+
