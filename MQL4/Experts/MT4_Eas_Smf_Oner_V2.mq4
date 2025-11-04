@@ -1,11 +1,10 @@
 //+------------------------------------------------------------------+
-//| _MT4_EAs_MTF ONER_V2
+//| MT4_EAs_MTF ONER_V2
 //| Multi Timeframe Expert Advisor for MT4 | EA nhieu khung thoi gian cho MT4
 //| 7 TF × 3 Strategies = 21 orders | 7 khung x 3 chien luoc = 21 lenh
-//| Version: 2.0 (MT4) | Phien ban: 2.0 (MT4)
+//| Version: API_V2 (MT4) - Added HTTP API support | Phien ban: API_V2 - Them ho tro HTTP API
 //+------------------------------------------------------------------+
 #property copyright "_MT4_EAs_MTF ONER"
-#property version "2.00"
 #property strict
 
 //=============================================================================
@@ -21,7 +20,7 @@ input bool TF_M15 = true;  // M15 (Signal Symbol_M15)
 input bool TF_M30 = true;  // M30 (Buy/Sell Symbol_M30)
 input bool TF_H1 = true;   // H1 (Signal Symbol_H1)
 input bool TF_H4 = true;   // H4 (Buy/Sell Symbol_H4)
-input bool TF_D1 = false;   // D1 (Signal Symbol_D1)
+input bool TF_D1 = false;  // D1 (Signal Symbol_D1)
 
 //--- A.2 Strategy toggles (3) | Bat/tat chien luoc
 input bool S1_HOME = true;   // S1: Binary (Home_7TF > B1:S1_NewsFilter=false)
@@ -32,7 +31,7 @@ input bool S1_CloseByM1 = false;   // S1: Close by M1 (TRUE=fast M1, FALSE=own T
 input bool S2_CloseByM1 = false;   // S2: Close by M1 (TRUE=fast M1, FALSE=own TF)
 
 //--- A.4 Risk management (2) | Quan ly rui ro
-input double FixedLotSize = 0.01;          // Lot size (0.01-1.0 recommended)
+input double FixedLotSize = 0.1;          // Lot size (0.01-1.0 recommended)
 input double MaxLoss_Fallback = -1000.0;   // Maxloss fallback ($USD if CSDL fails)
 
 //--- A.5 Data source (1) | Nguon du lieu
@@ -40,8 +39,16 @@ enum CSDL_SOURCE_ENUM {
     FOLDER_1 = 0,  // DataAutoOner (Botspy)
     FOLDER_2 = 1,  // DataAutoOner2 (_Default_Ea)
     FOLDER_3 = 2,  // DataAutoOner3 (_Sync/_Ea)
+    HTTP_API = 3   // HTTP API (Remote VPS via Bot Python)
 };
 input CSDL_SOURCE_ENUM CSDL_Source = FOLDER_2;  // CSDL folder (signal source)
+
+//--- A.6 HTTP API settings (only used if CSDL_Source = HTTP_API) | Cau hinh HTTP API
+// IMPORTANT: MT4 must allow URL in Tools->Options->Expert Advisors | QUAN TRONG: MT4 phai cho phep URL
+// NOTE: MT4 WebRequest automatically uses port 80 for http:// | LUU Y: MT4 WebRequest tu dong dung port 80
+input string HTTP_Server_IP = "147.189.173.121";  // HTTP Server IP (Bot Python VPS)
+input string HTTP_API_Key = "";            // API Key (empty = no auth | de trong)
+input bool EnableSymbolNormal = false;     // symbol name (LTCUSDc.xyz -> FALSE =use LTCUSD)
 
 input string ___Sep_B___ = "___B. STRATEGY CONFIG ________";  //
 
@@ -62,8 +69,8 @@ input S2_TREND_MODE S2_TrendMode = S2_FOLLOW_D1;  // S2: Trend (D1 auto/manual)
 input int MinNewsLevelS3 = 20;         // S3: Min NEWS level (2-70)
 input bool EnableBonusNews = true;     // S3: Enable Bonus (extra on high NEWS)
 input int BonusOrderCount = 1;         // S3: Bonus count (1-5 orders)
-input int MinNewsLevelBonus = 2;      // S3: Min NEWS for Bonus (threshold)
-input double BonusLotMultiplier = 1.0; // S3: Bonus lot multiplier (1.0-10.0)
+input int MinNewsLevelBonus = 2;       // S3: Min NEWS for Bonus (threshold)
+input double BonusLotMultiplier = 1.2; // S3: Bonus lot multiplier (1.0-10.0)
 
 input string ___Sep_C___ = "___C. RISK PROTECTION _________";  //
 
@@ -115,8 +122,9 @@ struct CSDLLoveRow {
 //=============================================================================
 
 struct EASymbolData {
-    // Symbol & File info (4 vars) | Thong tin symbol va file
-    string symbol_name;          // Symbol name (BTCUSD, LTCUSD...) | Ten symbol
+    // Symbol & File info (5 vars) | Thong tin symbol va file
+    string symbol_name;          // Symbol name from broker (may have suffix: LTCUSDC, XAUUSD.xyz) | Ten symbol tu broker
+    string normalized_symbol_name; // Normalized symbol name (LTCUSD, XAUUSD) for API calls | Ten symbol chuan hoa cho goi API
     string symbol_prefix;        // Symbol prefix with underscore | Tien to symbol co gach duoi
     string csdl_folder;          // CSDL folder path | Duong dan thu muc CSDL
     string csdl_filename;        // Full CSDL filename | Ten file CSDL day du
@@ -417,6 +425,16 @@ bool InitializeSymbolRecognition() {
 
 // Initialize symbol prefix with underscore | Khoi tao tien to ky hieu voi gach duoi
 void InitializeSymbolPrefix() {
+    // Set normalized symbol name for API calls (optional, can be disabled)
+    if(EnableSymbolNormal) {
+        g_ea.normalized_symbol_name = NormalizeSymbolName(g_ea.symbol_name);
+    } else {
+        // Use exact symbol name from broker (no normalization)
+        g_ea.normalized_symbol_name = g_ea.symbol_name;
+        Print("[NORMALIZE] Normalization DISABLED - Using exact symbol: " + g_ea.symbol_name);
+    }
+
+    // Symbol prefix uses ORIGINAL name (not normalized) for local consistency
     g_ea.symbol_prefix = g_ea.symbol_name + "_";
 }
 
@@ -595,34 +613,151 @@ bool TryReadFile(string filename, bool use_share_flags = true) {
     return true;  // SUCCESS | Thanh cong
 }
 
-// Read CSDL from local file only | Chi doc CSDL tu file local
-// Supports 3 sources: FOLDER_1, FOLDER_2, FOLDER_3 | Ho tro 3 nguon: 3 folder local
+// Read CSDL from HTTP API (Remote VPS) | Doc CSDL tu HTTP API (VPS tu xa)
+// Inherited from V1 | Ke thua tu V1
+// Normalize symbol name for API calls | Chuan hoa ten symbol cho goi API
+// SMART ALGORITHM: Keep max 6 chars for Forex/Crypto, or original length for stocks (<=6)
+// Broker suffixes are ALWAYS after 6th character (LTCUSDC→LTCUSD, XAUUSDpro→XAUUSD)
+// Stocks (4-5 chars) stay unchanged (AAPL, TSLA, GOOGL)
+string NormalizeSymbolName(string symbol) {
+    string normalized = symbol;
+
+    // STEP 1: Remove everything after "." (broker suffix pattern: XAUUSD.xyz, EURUSD.m)
+    int dot_pos = StringFind(normalized, ".");
+    if(dot_pos >= 0) {
+        normalized = StringSubstr(normalized, 0, dot_pos);
+        DebugPrint("[NORMALIZE] Removed dot suffix: " + symbol + " → " + normalized);
+    }
+
+    // STEP 2: Keep MAXIMUM 6 characters (all Forex/Crypto pairs are 6 chars)
+    // Examples:
+    //   - LTCUSDC (7 chars) → LTCUSD (6 chars)
+    //   - XAUUSDpro (10 chars) → XAUUSD (6 chars)
+    //   - EURUSD (6 chars) → EURUSD (unchanged)
+    //   - AAPL (4 chars) → AAPL (unchanged - stock symbol)
+    //   - Any char after 6th is ALWAYS broker suffix
+    int max_length = 6;
+    if(StringLen(normalized) > max_length) {
+        string truncated = StringSubstr(normalized, 0, max_length);
+        DebugPrint("[NORMALIZE] Truncated to 6 chars: " + normalized + " → " + truncated);
+        normalized = truncated;
+    }
+
+    // STEP 3: Convert to uppercase (standard format)
+    StringToUpper(normalized);
+
+    if(normalized != symbol) {
+        Print("[NORMALIZE] Symbol standardized: " + symbol + " → " + normalized);
+    }
+
+    return normalized;
+}
+
+bool ReadCSDLFromHTTP() {
+    // Use normalized symbol name for API call (already computed in InitializeSymbolPrefix)
+    // This handles broker-specific suffixes: LTCUSDC→LTCUSD, XAUUSD.xyz→XAUUSD
+    string url = "http://" + HTTP_Server_IP + "/api/csdl/" + g_ea.normalized_symbol_name + "_LIVE.json";
+
+    // Build headers with API key (if provided)
+    string headers = "";
+    if(StringLen(HTTP_API_Key) > 0) {
+        headers = "X-API-Key: " + HTTP_API_Key + "\r\n";
+    }
+
+    // Prepare WebRequest
+    char post_data[];
+    char result[];
+    string result_headers;
+
+    // Send HTTP GET request (timeout 500ms = 0.5s)
+    // Timeout 500ms is suitable for LAN/VPS (typically <100ms)
+    int res = WebRequest("GET", url, "", headers, 500, post_data, 0, result, result_headers);
+
+    // Check for errors
+    if(res == -1) {
+        int error = GetLastError();
+        DebugPrint("[HTTP_ERROR] Cannot connect to API: " + url + " Error:" + IntegerToString(error));
+
+        // Common errors:
+        // 4060 = URL not allowed (need to add URL in MT4 settings)
+        // 4014 = WebRequest not allowed
+        if(error == 4060) {
+            DebugPrint("[HTTP_ERROR] URL not allowed! Add URL in MT4: Tools > Options > Expert Advisors > Allow WebRequest");
+        }
+
+        return false;
+    }
+
+    // Check HTTP status code (200 = OK)
+    if(res != 200) {
+        DebugPrint("[HTTP_ERROR] Server returned status code: " + IntegerToString(res));
+        return false;
+    }
+
+    // Convert response to string
+    string json_content = CharArrayToString(result);
+
+    // Check if response is valid JSON (minimum 20 bytes)
+    if(StringLen(json_content) < 20) {
+        DebugPrint("[HTTP_ERROR] Response too short: " + IntegerToString(StringLen(json_content)) + " bytes");
+        return false;
+    }
+
+    // Parse JSON response (reuse existing function)
+    if(!ParseCSDLLoveJSON(json_content)) {
+        DebugPrint("[HTTP_ERROR] Failed to parse JSON response");
+        return false;
+    }
+
+    DebugPrint("[HTTP_OK] Successfully loaded CSDL from API");
+    return true;
+}
+
+// Read CSDL with smart routing (HTTP or Local file) | Doc CSDL voi dinh tuyen thong minh (HTTP hoac file local)
+// Supports 4 sources: FOLDER_1, FOLDER_2, FOLDER_3, HTTP_API | Ho tro 4 nguon: 3 folder local + HTTP API
 void ReadCSDLFile() {
     bool success = false;
 
-    // ========== LOCAL FILE (FOLDER_1 / FOLDER_2 / FOLDER_3) ==========
-    // TRY 1: Read main local file WITH share flags | Lan 1: Doc file local chinh VOI co chia se
-    success = TryReadFile(g_ea.csdl_filename, true);
+    // ========== MODE 1: HTTP API (Remote VPS) ==========
+    if(CSDL_Source == HTTP_API) {
+        // TRY 1: Read from HTTP API | Lan 1: Doc tu HTTP API
+        success = ReadCSDLFromHTTP();
 
-    if(!success) {
-        // TRY 2: Wait 100ms and retry WITH share flags | Lan 2: Cho 100ms va doc lai VOI co chia se
-        Sleep(100);
+        if(!success) {
+            // TRY 2: Retry HTTP after 100ms | Lan 2: Thu lai HTTP sau 100ms
+            Sleep(100);
+            success = ReadCSDLFromHTTP();
+        }
+
+        // NO FALLBACK to local file - If HTTP fails, something is seriously wrong
+        // KHONG fallback sang file local - Neu HTTP loi, co van de nghiem trong
+        // User should check: 1) Python Bot running? 2) Network OK? 3) API Key correct?
+    }
+    // ========== MODE 2: LOCAL FILE (FOLDER_1 / FOLDER_2 / FOLDER_3) ==========
+    else {
+        // TRY 1: Read main local file WITH share flags | Lan 1: Doc file local chinh VOI co chia se
         success = TryReadFile(g_ea.csdl_filename, true);
-    }
 
-    if(!success) {
-        // TRY 3: Try WITHOUT share flags (unlock method) | Lan 3: Thu KHONG CO co chia se (pp mo khoa)
-        DebugPrint("[READ] Trying without share flags (unlock method)");
-        success = TryReadFile(g_ea.csdl_filename, false);
-    }
+        if(!success) {
+            // TRY 2: Wait 100ms and retry WITH share flags | Lan 2: Cho 100ms va doc lai VOI co chia se
+            Sleep(100);
+            success = TryReadFile(g_ea.csdl_filename, true);
+        }
 
-    if(!success) {
-        // TRY 4: Read backup file in DataAutoOner (FOLDER_1) | Lan 4: Doc file du phong trong DataAutoOner
-        string backup_file = "DataAutoOner\\" + g_ea.symbol_name + "_LIVE.json";
-        success = TryReadFile(backup_file, true);
+        if(!success) {
+            // TRY 3: Try WITHOUT share flags (unlock method) | Lan 3: Thu KHONG CO co chia se (pp mo khoa)
+            DebugPrint("[READ] Trying without share flags (unlock method)");
+            success = TryReadFile(g_ea.csdl_filename, false);
+        }
 
-        if(success) {
-            Print("[BACKUP] Using DataAutoOner (FOLDER_1) file");
+        if(!success) {
+            // TRY 4: Read backup file in DataAutoOner (FOLDER_1) | Lan 4: Doc file du phong trong DataAutoOner
+            string backup_file = "DataAutoOner\\" + g_ea.symbol_name + "_LIVE.json";
+            success = TryReadFile(backup_file, true);
+
+            if(success) {
+                Print("[BACKUP] Using DataAutoOner (FOLDER_1) file");
+            }
         }
     }
 
@@ -630,7 +765,7 @@ void ReadCSDLFile() {
     if(!success) {
         // ALL FAILED: Keep old data, continue (no spam warning - only debug)
         // Tat ca that bai: Giu du lieu cu, tiep tuc (khong spam warning - chi debug)
-        DebugPrint("[WARNING] All 4 read attempts failed. Using old data.");
+        DebugPrint("[WARNING] All read attempts failed. Using old data.");
     }
 }
 
@@ -1092,7 +1227,10 @@ bool HasValidS2BaseCondition(int tf) {
     datetime timestamp_old = g_ea.timestamp_old[tf];
     datetime timestamp_new = (datetime)g_ea.csdl_rows[tf].timestamp;
 
-    return (signal_old != signal_new && signal_new != 0 && timestamp_old < timestamp_new);
+    return (signal_old != signal_new &&
+            signal_new != 0 &&
+            timestamp_old < timestamp_new &&
+            (timestamp_new - timestamp_old) > 15);
 }
 
 //=============================================================================
@@ -1756,7 +1894,21 @@ void OnDeinit(const int reason) {
 
     // Delete all dashboard labels (15 labels: dash_0 to dash_14) | Xoa tat ca label dashboard
     for(int i = 0; i <= 14; i++) {
-        ObjectDelete("dash_" + IntegerToString(i));
+        string obj_name = "dash_" + IntegerToString(i);
+        if(ObjectFind(obj_name) >= 0) {
+            ObjectDelete(obj_name);
+        }
+    }
+
+    // Delete all objects with "dash_" prefix (cleanup any orphaned objects)
+    // Xoa tat ca object co tien to "dash_" (don dep cac object con sot lai)
+    int total = ObjectsTotal();
+    for(int i = total - 1; i >= 0; i--) {
+        string obj_name = ObjectName(i);
+        // Check if object name starts with "dash_" prefix
+        if(StringFind(obj_name, "dash_") == 0) {
+            ObjectDelete(obj_name);
+        }
     }
 
     Print("[EA] Shutdown. Reason: ", reason);
