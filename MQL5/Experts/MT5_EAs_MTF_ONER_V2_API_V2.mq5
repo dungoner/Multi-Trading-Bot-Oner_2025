@@ -120,8 +120,9 @@ struct CSDLLoveRow {
 //=============================================================================
 
 struct EASymbolData {
-    // Symbol & File info (4 vars) | Thong tin symbol va file
-    string symbol_name;          // Symbol name (BTCUSD, LTCUSD...) | Ten symbol
+    // Symbol & File info (5 vars) | Thong tin symbol va file
+    string symbol_name;          // Symbol name from broker (may have suffix: LTCUSDC, XAUUSD.xyz) | Ten symbol tu broker
+    string normalized_symbol_name; // Normalized symbol name (LTCUSD, XAUUSD) for API calls | Ten symbol chuan hoa cho goi API
     string symbol_prefix;        // Symbol prefix with underscore | Tien to symbol co gach duoi
     string csdl_folder;          // CSDL folder path | Duong dan thu muc CSDL
     string csdl_filename;        // Full CSDL filename | Ten file CSDL day du
@@ -783,6 +784,10 @@ bool InitializeSymbolRecognition() {
 
 // Initialize symbol prefix with underscore | Khoi tao tien to ky hieu voi gach duoi
 void InitializeSymbolPrefix() {
+    // Set normalized symbol name for API calls (remove broker suffixes)
+    g_ea.normalized_symbol_name = NormalizeSymbolName(g_ea.symbol_name);
+
+    // Symbol prefix uses ORIGINAL name (not normalized) for local consistency
     g_ea.symbol_prefix = g_ea.symbol_name + "_";
 }
 
@@ -963,9 +968,68 @@ bool TryReadFile(string filename, bool use_share_flags = true) {
 
 // Read CSDL from HTTP API (Remote VPS) | Doc CSDL tu HTTP API (VPS tu xa)
 // Inherited from V1 | Ke thua tu V1
+// Normalize symbol name for API calls | Chuan hoa ten symbol cho goi API
+// Different brokers use different suffixes: LTCUSDC, XAUUSD.xyz, EURUSD.m, etc.
+// This function removes common broker-specific suffixes to get standard name
+string NormalizeSymbolName(string symbol) {
+    string normalized = symbol;
+
+    // STEP 1: Remove everything after "." (most common broker suffix pattern)
+    // Examples: "XAUUSD.xyz" → "XAUUSD", "EURUSD.m" → "EURUSD"
+    int dot_pos = StringFind(normalized, ".");
+    if(dot_pos >= 0) {
+        normalized = StringSubstr(normalized, 0, dot_pos);
+        DebugPrint("[NORMALIZE] Removed dot suffix: " + symbol + " → " + normalized);
+    }
+
+    // STEP 2: Remove common single-letter suffixes at END (only if length > 6)
+    // Examples: "LTCUSDC" → "LTCUSD", "XAUUSDM" → "XAUUSD"
+    // BUT preserve pairs like "USDCAD" (C is part of currency code)
+    int len = StringLen(normalized);
+    if(len > 6) {
+        string last_char = StringSubstr(normalized, len - 1, 1);
+        // Common broker suffixes: C, M, P, E (case-insensitive)
+        if(last_char == "C" || last_char == "c" ||
+           last_char == "M" || last_char == "m" ||
+           last_char == "P" || last_char == "p" ||
+           last_char == "E" || last_char == "e") {
+            string without_suffix = StringSubstr(normalized, 0, len - 1);
+            DebugPrint("[NORMALIZE] Testing suffix removal: " + normalized + " → " + without_suffix);
+            normalized = without_suffix;
+        }
+    }
+
+    // STEP 3: Remove common multi-char suffixes at END
+    // Examples: "EURUSDpro", "XAUUSDfx", "BTCUSDspot"
+    string[] common_suffixes = {"pro", "ecn", "raw", "std", "mini", "micro", "fx", "spot"};
+    for(int i = 0; i < ArraySize(common_suffixes); i++) {
+        string suffix = common_suffixes[i];
+        int suffix_len = StringLen(suffix);
+        if(StringLen(normalized) > suffix_len) {
+            string end = StringSubstr(normalized, StringLen(normalized) - suffix_len);
+            // Case-insensitive comparison
+            if(StringCompare(end, suffix, false) == 0) {
+                normalized = StringSubstr(normalized, 0, StringLen(normalized) - suffix_len);
+                DebugPrint("[NORMALIZE] Removed suffix '" + suffix + "': " + symbol + " → " + normalized);
+                break; // Only remove one suffix
+            }
+        }
+    }
+
+    // STEP 4: Convert to uppercase (standard format)
+    StringToUpper(normalized);
+
+    if(normalized != symbol) {
+        Print("[NORMALIZE] Symbol standardized: " + symbol + " → " + normalized);
+    }
+
+    return normalized;
+}
+
 bool ReadCSDLFromHTTP() {
-    // Build URL: http://IP/api/csdl/SYMBOL_LIVE.json
-    string url = "http://" + HTTP_Server_IP + "/api/csdl/" + g_ea.symbol_name + "_LIVE.json";
+    // Use normalized symbol name for API call (already computed in InitializeSymbolPrefix)
+    // This handles broker-specific suffixes: LTCUSDC→LTCUSD, XAUUSD.xyz→XAUUSD
+    string url = "http://" + HTTP_Server_IP + "/api/csdl/" + g_ea.normalized_symbol_name + "_LIVE.json";
 
     // Build headers with API key (if provided)
     string headers = "";
