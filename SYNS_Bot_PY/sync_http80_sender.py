@@ -273,13 +273,20 @@ def reload_config():
     config = load_config()
     print(f"[CONFIG] Configuration reloaded")
 
-config = load_config()
+# ==============================================================================
+# LOAD CONFIG ONCE AT STARTUP (Optimization)
+# ==============================================================================
+# Load unified bot_config.json ONCE at startup
+bot_config = load_bot_config()
+
+# Extract sender config from bot_config
+config = bot_config.get('sender', {})
 
 # ==============================================================================
 # QUIET MODE LOGGING (Reduce console spam for VPS 24/7)
 # ==============================================================================
 
-bot_config = load_bot_config()
+# Use global bot_config (already loaded above)
 QUIET_MODE = bot_config.get('quiet_mode', False)
 
 def log_print(message, level="INFO"):
@@ -737,7 +744,7 @@ def check_weekly_restart():
 
 def load_symlink_config():
     """Load symlink configuration (backward compatible wrapper)"""
-    bot_config = load_bot_config()
+    # Use global bot_config (already loaded at startup)
     return bot_config.get('symlink', {})
 
 def save_symlink_config(symlink_config):
@@ -1013,7 +1020,7 @@ def get_folder_status(mql_path, folder_name):
 
 def load_autostart_config():
     """Load auto-start configuration (backward compatible wrapper)"""
-    bot_config = load_bot_config()
+    # Use global bot_config (already loaded at startup)
     autostart_config = bot_config.get('autostart', {})
 
     # Ensure mt_platforms exists
