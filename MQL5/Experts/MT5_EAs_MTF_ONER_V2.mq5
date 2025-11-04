@@ -458,6 +458,11 @@ void BuildCSDLFilename() {
 // ReadCSDLFile() - Local file reading only
 
 // Parse one row of CSDL data (6 columns)
+// ⚠️ CRITICAL BUG FIXED (2025-01-03): NEWS column parse logic was BROKEN for months!
+//    OLD: end_pos = (comma>0 && comma<bracket) ? comma : bracket → If comma=-1, end_pos=-1 → NEVER PARSED!
+//    NEW: end_pos = StringLen(temp) as fallback → ALWAYS parses last column correctly
+//    BUG FOUND by comparing with SPY Bot code structure. Thank you for the hint!
+//    IMPACT: S3 and BONUS strategies never worked (NEWS always 0). Now FIXED.
 bool ParseLoveRow(string row_data, int row_index) {
     // Column 1: max_loss
     int maxloss_pos = StringFind(row_data, "\"max_loss\":");
@@ -509,15 +514,27 @@ bool ParseLoveRow(string row_data, int row_index) {
         }
     }
 
-    // Column 6: news (??i tên t? s1_news)
+    // Column 6: news (last column, may not have comma)
     int news_pos = StringFind(row_data, "\"news\":");
     if(news_pos >= 0) {
         string temp = StringSubstr(row_data, news_pos + 7);
+
+        // Find end position: comma or bracket (whichever comes first, or use string length)
         int comma = StringFind(temp, ",");
         int bracket = StringFind(temp, "}");
-        int end_pos = (comma > 0 && comma < bracket) ? comma : bracket;
-        if(end_pos > 0) {
-            g_ea.csdl_rows[row_index].news = (int)StringToInteger(StringTrim(StringSubstr(temp, 0, end_pos)));
+
+        int end_pos = StringLen(temp);  // Default to full string
+        if(comma > 0 && bracket > 0) {
+            end_pos = (comma < bracket) ? comma : bracket;  // Pick smaller position
+        } else if(comma > 0) {
+            end_pos = comma;
+        } else if(bracket > 0) {
+            end_pos = bracket;
+        }
+
+        if(end_pos > 0 && end_pos <= StringLen(temp)) {
+            string news_str = StringTrim(StringSubstr(temp, 0, end_pos));
+            g_ea.csdl_rows[row_index].news = (int)StringToInteger(news_str);
         }
     }
 
@@ -536,14 +553,14 @@ bool ParseCSDLLoveJSON(string json_content) {
     string rows[];
     int row_count = StringSplit(json_content, '}', rows);
 
-    Print("[DEBUG] LOVE JSON: Found ", row_count, " rows after split");
+    if(DebugMode) Print("[DEBUG] LOVE JSON: Found ", row_count, " rows after split");
 
     int parsed_count = 0;
     for(int i = 0; i < 7 && i < row_count; i++) {
         string row_data = rows[i];
 
         // Debug: show raw row before cleaning
-        if(StringLen(row_data) > 10 && StringLen(row_data) < 200) {
+        if(DebugMode && StringLen(row_data) > 10 && StringLen(row_data) < 200) {
             Print("[DEBUG] Row[", i, "] raw: ", row_data);
         }
 
@@ -551,21 +568,21 @@ bool ParseCSDLLoveJSON(string json_content) {
         StringReplace(row_data, "{", "");
 
         if(StringLen(row_data) < 10) {
-            Print("[DEBUG] Row[", i, "] skipped (too short: ", StringLen(row_data), " chars)");
+            if(DebugMode) Print("[DEBUG] Row[", i, "] skipped (too short: ", StringLen(row_data), " chars)");
             continue;
         }
 
-        Print("[DEBUG] Row[", i, "] cleaned: ", StringSubstr(row_data, 0, 100), "...");
+        if(DebugMode) Print("[DEBUG] Row[", i, "] cleaned: ", StringSubstr(row_data, 0, 100), "...");
 
         if(ParseLoveRow(row_data, i)) {
             parsed_count++;
-            Print("[DEBUG] Row[", i, "] parsed OK. Signal=", g_ea.csdl_rows[i].signal);
+            if(DebugMode) Print("[DEBUG] Row[", i, "] parsed OK. Signal=", g_ea.csdl_rows[i].signal);
         } else {
-            Print("[DEBUG] Row[", i, "] ParseLoveRow FAILED!");
+            if(DebugMode) Print("[DEBUG] Row[", i, "] ParseLoveRow FAILED!");
         }
     }
 
-    Print("[DEBUG] Total parsed: ", parsed_count, " / ", row_count, " rows");
+    if(DebugMode) Print("[DEBUG] Total parsed: ", parsed_count, " / ", row_count, " rows");
     return (parsed_count >= 1);
 }
 
@@ -581,7 +598,7 @@ bool TryReadFile(string filename) {
 
     // Get file size for validation
     ulong file_size = FileSize(handle);
-    Print("[DEBUG] Opening file: ", filename, " Size: ", file_size, " bytes");
+    if(DebugMode) Print("[DEBUG] Opening file: ", filename, " Size: ", file_size, " bytes");
 
     if(file_size == 0) {
         Print("[ERROR] File is empty!");
@@ -601,7 +618,7 @@ bool TryReadFile(string filename) {
     uint bytes_read = FileReadArray(handle, buffer, 0, (uint)file_size);
     FileClose(handle);
 
-    Print("[DEBUG] Read ", bytes_read, " bytes from file");
+    if(DebugMode) Print("[DEBUG] Read ", bytes_read, " bytes from file");
 
     if(bytes_read == 0) {
         Print("[ERROR] FileReadArray returned 0 bytes!");
@@ -611,11 +628,13 @@ bool TryReadFile(string filename) {
     // Convert byte array to string (ANSI decoding)
     string json_content = CharArrayToString(buffer, 0, (int)bytes_read, CP_ACP);
 
-    Print("[DEBUG] Converted to string. Length: ", StringLen(json_content));
-    if(StringLen(json_content) > 0 && StringLen(json_content) < 300) {
-        Print("[DEBUG] Content: ", json_content);
-    } else if(StringLen(json_content) >= 300) {
-        Print("[DEBUG] Preview: ", StringSubstr(json_content, 0, 150), "...");
+    if(DebugMode) {
+        Print("[DEBUG] Converted to string. Length: ", StringLen(json_content));
+        if(StringLen(json_content) > 0 && StringLen(json_content) < 300) {
+            Print("[DEBUG] Content: ", json_content);
+        } else if(StringLen(json_content) >= 300) {
+            Print("[DEBUG] Preview: ", StringSubstr(json_content, 0, 150), "...");
+        }
     }
 
     if(StringLen(json_content) < 20) {
@@ -629,7 +648,7 @@ bool TryReadFile(string filename) {
         return false;
     }
 
-    Print("[DEBUG] File parsed successfully!");
+    if(DebugMode) Print("[DEBUG] File parsed successfully!");
     return true;  // SUCCESS
 }
 
@@ -2061,22 +2080,22 @@ void UpdateDashboard() {
     string header = "[" + g_ea.symbol_name + "] " + folder + " | 7TFx3S | D1:" + trend +
                     " | $" + DoubleToString(equity, 0) + " DD:" + DoubleToString(dd, 1) + "% | " +
                     IntegerToString(total_orders) + "/21";
-    CreateOrUpdateLabel("dash_0", header, 10, y_pos, clrYellow, 9);
+    CreateOrUpdateLabel(g_ea.symbol_prefix + "dash_0", header, 10, y_pos, clrYellow, 9);
     y_pos += line_height;
 
     // ===== LINE 1: SEPARATOR (White)
-    CreateOrUpdateLabel("dash_1", "---------------------------------------------", 10, y_pos, clrWhite, 9);
+    CreateOrUpdateLabel(g_ea.symbol_prefix + "dash_1", "---------------------------------------------", 10, y_pos, clrWhite, 9);
     y_pos += line_height;
 
     // ===== LINE 2: COLUMN HEADERS (White)
     string col_header = PadRight("TF", 5) + PadRight("Sig", 5) + PadRight("S1", 7) +
                         PadRight("S2", 7) + PadRight("S3", 7) + PadRight("P&L", 9) +
                         PadRight("News", 7) + "Bonus";
-    CreateOrUpdateLabel("dash_2", col_header, 10, y_pos, clrWhite, 9);
+    CreateOrUpdateLabel(g_ea.symbol_prefix + "dash_2", col_header, 10, y_pos, clrWhite, 9);
     y_pos += line_height;
 
     // ===== LINE 3: SEPARATOR (White)
-    CreateOrUpdateLabel("dash_3", "---------------------------------------------", 10, y_pos, clrWhite, 9);
+    CreateOrUpdateLabel(g_ea.symbol_prefix + "dash_3", "---------------------------------------------", 10, y_pos, clrWhite, 9);
     y_pos += line_height;
 
     // ===== LINES 4-10: 7 TF ROWS - ALTERNATING COLORS + P&L
@@ -2118,17 +2137,17 @@ void UpdateDashboard() {
 
         // Alternating colors: Blue (even rows), White (odd rows)
         color row_color = (tf % 2 == 0) ? clrDodgerBlue : clrWhite;
-        CreateOrUpdateLabel("dash_" + IntegerToString(4 + tf), row, 10, y_pos, row_color, 9);
+        CreateOrUpdateLabel(g_ea.symbol_prefix + "dash_" + IntegerToString(4 + tf), row, 10, y_pos, row_color, 9);
         y_pos += line_height;
     }
 
     // ===== LINE 11: SEPARATOR (White)
-    CreateOrUpdateLabel("dash_11", "---------------------------------------------", 10, y_pos, clrWhite, 9);
+    CreateOrUpdateLabel(g_ea.symbol_prefix + "dash_11", "---------------------------------------------", 10, y_pos, clrWhite, 9);
     y_pos += line_height;
 
     // ===== LINE 12: BONUS STATUS (White)
     string bonus_status = FormatBonusStatus();
-    CreateOrUpdateLabel("dash_12", bonus_status, 10, y_pos, clrWhite, 9);
+    CreateOrUpdateLabel(g_ea.symbol_prefix + "dash_12", bonus_status, 10, y_pos, clrWhite, 9);
     y_pos += line_height;
 
     // ===== LINE 13: NET SUMMARY (Yellow)
@@ -2142,17 +2161,17 @@ void UpdateDashboard() {
 
     net_summary += " | " + IntegerToString(total_orders) + "/21";
 
-    CreateOrUpdateLabel("dash_13", net_summary, 10, y_pos, clrYellow, 9);
+    CreateOrUpdateLabel(g_ea.symbol_prefix + "dash_13", net_summary, 10, y_pos, clrYellow, 9);
     y_pos += line_height;
 
     // ===== LINE 14: BROKER INFO (Yellow)
     string broker = AccountInfoString(ACCOUNT_COMPANY);
     int leverage = (int)AccountInfoInteger(ACCOUNT_LEVERAGE);
     string broker_info = broker + " | Lev:1:" + IntegerToString(leverage) + " | 2s";
-    CreateOrUpdateLabel("dash_14", broker_info, 10, y_pos, clrYellow, 8);
+    CreateOrUpdateLabel(g_ea.symbol_prefix + "dash_14", broker_info, 10, y_pos, clrYellow, 8);
 
     // Clean up old unused label (line 15 from old layout)
-    ObjectDelete(0, "dash_15");
+    ObjectDelete(0, g_ea.symbol_prefix + "dash_15");
 }
 
 // Create or update OBJ_LABEL
@@ -2298,5 +2317,4 @@ void OnTimer() {
         // STEP 5: Health check at 8h/16h (M1 only)
         CheckSPYBotHealth();
     }
-
 }
