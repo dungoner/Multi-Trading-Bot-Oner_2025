@@ -317,6 +317,34 @@ int TimeSeconds(datetime time) {
     return dt.sec;
 }
 
+// TimeHour() wrapper - MT5 doesn't have this MT4 function
+int TimeHour(datetime time) {
+    MqlDateTime dt;
+    TimeToStruct(time, dt);
+    return dt.hour;
+}
+
+// TimeMinute() wrapper - MT5 doesn't have this MT4 function
+int TimeMinute(datetime time) {
+    MqlDateTime dt;
+    TimeToStruct(time, dt);
+    return dt.min;
+}
+
+// TimeDay() wrapper - MT5 doesn't have this MT4 function
+int TimeDay(datetime time) {
+    MqlDateTime dt;
+    TimeToStruct(time, dt);
+    return dt.day;
+}
+
+// TimeDayOfWeek() wrapper - MT5 doesn't have this MT4 function
+int TimeDayOfWeek(datetime time) {
+    MqlDateTime dt;
+    TimeToStruct(time, dt);
+    return dt.day_of_week;
+}
+
 // TimeToStr() wrapper - MT5 uses TimeToString
 string TimeToStr(datetime time, int mode=TIME_DATE|TIME_MINUTES) {
     return TimeToString(time, mode);
