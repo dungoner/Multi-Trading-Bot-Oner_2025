@@ -222,7 +222,10 @@ string SignalToString(int signal) {
 static int g_selected_ticket = -1;
 
 // OrdersTotal() wrapper - returns PositionsTotal() for MT5
-#define OrdersTotal() PositionsTotal()
+// Use inline function instead of macro to avoid argument expansion issues
+int OrdersTotal() {
+    return PositionsTotal();
+}
 
 // Define MT4 constants for MT5 (needed before OrderSend wrapper)
 #define SELECT_BY_POS 0
