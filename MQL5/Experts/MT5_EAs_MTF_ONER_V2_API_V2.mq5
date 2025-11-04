@@ -969,54 +969,34 @@ bool TryReadFile(string filename, bool use_share_flags = true) {
 // Read CSDL from HTTP API (Remote VPS) | Doc CSDL tu HTTP API (VPS tu xa)
 // Inherited from V1 | Ke thua tu V1
 // Normalize symbol name for API calls | Chuan hoa ten symbol cho goi API
-// Different brokers use different suffixes: LTCUSDC, XAUUSD.xyz, EURUSD.m, etc.
-// This function removes common broker-specific suffixes to get standard name
+// SMART ALGORITHM: Keep max 6 chars for Forex/Crypto, or original length for stocks (<=6)
+// Broker suffixes are ALWAYS after 6th character (LTCUSDC→LTCUSD, XAUUSDpro→XAUUSD)
+// Stocks (4-5 chars) stay unchanged (AAPL, TSLA, GOOGL)
 string NormalizeSymbolName(string symbol) {
     string normalized = symbol;
 
-    // STEP 1: Remove everything after "." (most common broker suffix pattern)
-    // Examples: "XAUUSD.xyz" → "XAUUSD", "EURUSD.m" → "EURUSD"
+    // STEP 1: Remove everything after "." (broker suffix pattern: XAUUSD.xyz, EURUSD.m)
     int dot_pos = StringFind(normalized, ".");
     if(dot_pos >= 0) {
         normalized = StringSubstr(normalized, 0, dot_pos);
         DebugPrint("[NORMALIZE] Removed dot suffix: " + symbol + " → " + normalized);
     }
 
-    // STEP 2: Remove common single-letter suffixes at END (only if length > 6)
-    // Examples: "LTCUSDC" → "LTCUSD", "XAUUSDM" → "XAUUSD"
-    // BUT preserve pairs like "USDCAD" (C is part of currency code)
-    int len = StringLen(normalized);
-    if(len > 6) {
-        string last_char = StringSubstr(normalized, len - 1, 1);
-        // Common broker suffixes: C, M, P, E (case-insensitive)
-        if(last_char == "C" || last_char == "c" ||
-           last_char == "M" || last_char == "m" ||
-           last_char == "P" || last_char == "p" ||
-           last_char == "E" || last_char == "e") {
-            string without_suffix = StringSubstr(normalized, 0, len - 1);
-            DebugPrint("[NORMALIZE] Testing suffix removal: " + normalized + " → " + without_suffix);
-            normalized = without_suffix;
-        }
+    // STEP 2: Keep MAXIMUM 6 characters (all Forex/Crypto pairs are 6 chars)
+    // Examples:
+    //   - LTCUSDC (7 chars) → LTCUSD (6 chars)
+    //   - XAUUSDpro (10 chars) → XAUUSD (6 chars)
+    //   - EURUSD (6 chars) → EURUSD (unchanged)
+    //   - AAPL (4 chars) → AAPL (unchanged - stock symbol)
+    //   - Any char after 6th is ALWAYS broker suffix
+    int max_length = 6;
+    if(StringLen(normalized) > max_length) {
+        string truncated = StringSubstr(normalized, 0, max_length);
+        DebugPrint("[NORMALIZE] Truncated to 6 chars: " + normalized + " → " + truncated);
+        normalized = truncated;
     }
 
-    // STEP 3: Remove common multi-char suffixes at END
-    // Examples: "EURUSDpro", "XAUUSDfx", "BTCUSDspot"
-    string[] common_suffixes = {"pro", "ecn", "raw", "std", "mini", "micro", "fx", "spot"};
-    for(int i = 0; i < ArraySize(common_suffixes); i++) {
-        string suffix = common_suffixes[i];
-        int suffix_len = StringLen(suffix);
-        if(StringLen(normalized) > suffix_len) {
-            string end = StringSubstr(normalized, StringLen(normalized) - suffix_len);
-            // Case-insensitive comparison
-            if(StringCompare(end, suffix, false) == 0) {
-                normalized = StringSubstr(normalized, 0, StringLen(normalized) - suffix_len);
-                DebugPrint("[NORMALIZE] Removed suffix '" + suffix + "': " + symbol + " → " + normalized);
-                break; // Only remove one suffix
-            }
-        }
-    }
-
-    // STEP 4: Convert to uppercase (standard format)
+    // STEP 3: Convert to uppercase (standard format)
     StringToUpper(normalized);
 
     if(normalized != symbol) {
