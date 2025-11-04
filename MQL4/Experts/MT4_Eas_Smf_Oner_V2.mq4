@@ -5,7 +5,7 @@
 //| Version: 2.0 (MT4) | Phien ban: 2.0 (MT4)
 //+------------------------------------------------------------------+
 #property copyright "_MT4_EAs_MTF ONER"
-#property version "2"
+#property version "2.00"
 #property strict
 
 //=============================================================================
@@ -2250,3 +2250,4 @@ void OnTimer() {
         CheckSPYBotHealth();
     }
 }
+
