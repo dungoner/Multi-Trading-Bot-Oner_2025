@@ -5,7 +5,6 @@
 //| Version: 2.0 (MT4) | Phien ban: 2.0 (MT4)
 //+------------------------------------------------------------------+
 #property copyright "_MT4_EAs_MTF ONER"
-#property version "2.00"
 #property strict
 
 //=============================================================================
@@ -1092,7 +1091,10 @@ bool HasValidS2BaseCondition(int tf) {
     datetime timestamp_old = g_ea.timestamp_old[tf];
     datetime timestamp_new = (datetime)g_ea.csdl_rows[tf].timestamp;
 
-    return (signal_old != signal_new && signal_new != 0 && timestamp_old < timestamp_new);
+    return (signal_old != signal_new &&
+            signal_new != 0 &&
+            timestamp_old < timestamp_new &&
+            (timestamp_new - timestamp_old) > 15);
 }
 
 //=============================================================================
