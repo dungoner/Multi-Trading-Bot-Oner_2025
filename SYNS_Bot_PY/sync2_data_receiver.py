@@ -381,7 +381,11 @@ def poll_bot1():
 
                     else:
                         receiver_state["total_errors"] += 1
-                        log_message("ERROR", f"Bot 1 API error: {symbol} (HTTP {response.status_code})")
+
+                        # Health check: Only log every 1 hour (3600s) to reduce spam
+                        if should_log_error(symbol, f"http_{response.status_code}"):
+                            error_count = error_log_tracker.get(f"{symbol}_http_{response.status_code}", {}).get("error_count", 0)
+                            log_message("ERROR", f"Bot 1 API error: {symbol} (HTTP {response.status_code}) (errors in last 1h: {error_count})")
 
                 except requests.exceptions.Timeout:
                     receiver_state["total_errors"] += 1
