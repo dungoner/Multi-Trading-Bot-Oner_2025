@@ -61,8 +61,65 @@ def request_admin():
             input("Press Enter to exit...")
             sys.exit(1)
 
+# ==============================================================================
+# LOAD CONFIG FIRST (needed for SmartLogFilter)
+# ==============================================================================
+# Need to load bot_config.json early to check quiet_mode
+# This is a temporary load - will be reloaded later at line 280
+import json as json_temp
+BOT_CONFIG_FILE_TEMP = "bot_config.json"
+try:
+    if os.path.exists(BOT_CONFIG_FILE_TEMP):
+        with open(BOT_CONFIG_FILE_TEMP, 'r', encoding='utf-8') as f:
+            bot_config_temp = json_temp.load(f)
+    else:
+        bot_config_temp = {"quiet_mode": False}
+except:
+    bot_config_temp = {"quiet_mode": False}
+
+# ==============================================================================
+# ADVANCED LOG SUPPRESSION (Reduce CMD spam while keeping important errors)
+# ==============================================================================
 # Suppress Flask development server request logs
 log = logging.getLogger('werkzeug')
+
+# ✅ CUSTOM FILTER: Suppress TimeoutError and Bad request from scanners
+# BUT: Keep important errors (500, crashes, etc.)
+class SmartLogFilter(logging.Filter):
+    def filter(self, record):
+        """Filter out spam logs while keeping important errors
+
+        SUPPRESS (when QUIET_MODE=ON):
+        - TimeoutError (network timeout from slow clients)
+        - Bad request syntax (malicious scanners)
+        - Bad request version (malicious scanners)
+
+        KEEP (always show):
+        - 500 Internal Server Error (real bugs)
+        - Connection errors (server issues)
+        - Other critical errors
+        """
+        # Get quiet_mode from temp config
+        quiet = bot_config_temp.get('quiet_mode', False)
+
+        if not quiet:
+            return True  # Normal mode: show all logs
+
+        # QUIET MODE: Filter spam logs
+        msg = record.getMessage()
+
+        # Suppress TimeoutError (client timeout, not our fault)
+        if 'TimeoutError' in msg or 'Request timed out' in msg:
+            return False  # SUPPRESS
+
+        # Suppress "Bad request" from malicious scanners
+        if 'code 400' in msg or 'Bad request syntax' in msg or 'Bad request version' in msg:
+            return False  # SUPPRESS
+
+        # Keep all other logs (500 errors, crashes, etc.)
+        return True
+
+log.addFilter(SmartLogFilter())
 log.setLevel(logging.ERROR)  # Only show errors, not every request
 
 # ==============================================================================
@@ -1345,7 +1402,8 @@ def get_symbols():
         "timestamp": int(time.time())
     }
 
-    print(f"[API] Symbols list requested: {len(symbols)} symbols available")
+    # ✅ SUPPRESSED: No need to log every 60s request (spam reduction)
+    # print(f"[API] Symbols list requested: {len(symbols)} symbols available")
 
     return jsonify(response), 200
 
