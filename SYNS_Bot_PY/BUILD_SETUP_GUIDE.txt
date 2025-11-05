@@ -1,0 +1,130 @@
+================================================================================
+SYNS BOT SYSTEM - HƯỚNG DẪN BUILD SETUP.EXE (WINDOWS ONLY)
+================================================================================
+
+⚠️ QUAN TRỌNG: BUILD SETUP.EXE CHỈ ĐƯỢC THỰC HIỆN TRÊN WINDOWS!
+
+Inno Setup chỉ chạy trên Windows, không thể build từ Linux/Mac.
+
+================================================================================
+BƯỚC 1: DOWNLOAD INNO SETUP (FREE - 1 PHÚT)
+================================================================================
+
+Truy cập: https://jrsoftware.org/isdl.php
+
+Download: Inno Setup 6.x (phiên bản mới nhất)
+
+Cài đặt:
+- Chạy file innosetup-6.x.x.exe
+- Next → Next → Install
+- Mặc định cài vào: C:\Program Files (x86)\Inno Setup 6\
+
+================================================================================
+BƯỚC 2: COPY PACKAGE VỀ MÁY WINDOWS
+================================================================================
+
+Copy toàn bộ thư mục SYNS_Bot_PY về máy Windows:
+
+Ví dụ: D:\SYNS_Bot_PY\
+
+Cấu trúc:
+D:\SYNS_Bot_PY\
+├── python\                      ← Python Embedded (phải có!)
+├── *.py                         ← 4 bot files
+├── bot_config.json
+├── setup_portable.iss           ← Script Inno Setup
+├── setup_exe.iss
+├── build_exe.bat
+├── build_all_setups.bat         ← CHẠY FILE NÀY!
+└── BUILD_SETUP_GUIDE.txt        ← File này
+
+================================================================================
+BƯỚC 3: BUILD TẤT CẢ (1 LỆNH DUY NHẤT!)
+================================================================================
+
+Mở Command Prompt (CMD) hoặc PowerShell:
+
+cd D:\SYNS_Bot_PY
+build_all_setups.bat
+
+Script sẽ TỰ ĐỘNG:
+1. Kiểm tra Inno Setup đã cài chưa
+2. Build 4 .exe files (Bot0, Bot1, Bot2, Bot3)
+3. Compile SETUP 1: SYNS_Bot_Portable_Setup.exe
+4. Compile SETUP 2: SYNS_Bot_EXE_Setup.exe
+
+Đợi 2-5 phút (tùy tốc độ máy).
+
+================================================================================
+BƯỚC 4: NHẬN KẾT QUẢ
+================================================================================
+
+Output files trong thư mục PACKAGES\:
+
+✅ SYNS_Bot_Portable_Setup.exe     (~7.5 MB)
+   - Python + Code + Auto-install libraries
+   - KHUYẾN NGHỊ cho người mới!
+
+✅ SYNS_Bot_EXE_Setup.exe          (~15-20 MB)
+   - 4 .exe standalone
+   - Không cần Python
+
+================================================================================
+NẾU GẶP LỖI
+================================================================================
+
+LỖI: "Inno Setup not found"
+→ Chưa cài Inno Setup hoặc cài sai đường dẫn
+→ Giải pháp: Cài lại Inno Setup vào đường dẫn mặc định
+
+LỖI: "PyInstaller not found"
+→ Chưa cài PyInstaller
+→ Giải pháp: pip install pyinstaller
+
+LỖI: "Python not found"
+→ Chưa cài Python
+→ Giải pháp: Download Python 3.10+ từ python.org
+
+================================================================================
+BUILD THÀNH CÔNG!
+================================================================================
+
+Sau khi build xong, bạn có 2 file SETUP.exe chuyên nghiệp:
+
+📦 SYNS_Bot_Portable_Setup.exe
+   - Double-click để cài đặt
+   - Giao diện wizard đẹp
+   - Tự động cài thư viện
+   - Tạo shortcuts Start Menu + Desktop
+   - Có Uninstaller
+
+📦 SYNS_Bot_EXE_Setup.exe
+   - Double-click để cài đặt
+   - 4 .exe standalone
+   - Không cần Python
+
+================================================================================
+PHÂN PHỐI
+================================================================================
+
+Gửi file SETUP.exe cho người dùng:
+- Upload lên Google Drive / Dropbox
+- Hoặc gửi qua USB
+- Hoặc host trên website
+
+Người dùng chỉ cần:
+1. Download SETUP.exe
+2. Double-click
+3. Next → Install → Finish
+4. Chạy từ Start Menu
+
+NHƯ CÀI PHẦN MỀM THẬT! 🚀
+
+================================================================================
+HỖ TRỢ
+================================================================================
+
+Inno Setup Documentation: https://jrsoftware.org/ishelp/
+Inno Setup Forums: https://forum.jrsoftware.org/
+
+================================================================================
