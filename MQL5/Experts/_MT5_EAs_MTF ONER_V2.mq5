@@ -496,7 +496,16 @@ int OrderSend(string symbol, int cmd, double volume, double price, int slippage,
         return -1;
     }
 
-    return (int)result.order;
+    // CRITICAL FIX: For TRADE_ACTION_DEAL (market orders), server fills result.deal, NOT result.order!
+    // QUAN TRONG: Voi TRADE_ACTION_DEAL (lenh market), server dien result.deal, KHONG PHAI result.order!
+    // Prioritize deal ticket (actual execution) over order ticket (instruction)
+    // Uu tien deal ticket (thuc thi that) hon order ticket (chi thi)
+    if(result.deal > 0) {
+        return (int)result.deal;
+    } else if(result.order > 0) {
+        return (int)result.order;
+    }
+    return -1;
 }
 
 // RefreshRates() wrapper - Not needed in MT5, but keep for compatibility
