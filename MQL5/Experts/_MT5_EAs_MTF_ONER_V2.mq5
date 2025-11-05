@@ -251,6 +251,16 @@ datetime OrderCloseTime() {
     return 0;
 }
 
+double OrderSwap() {
+    return PositionGetDouble(POSITION_SWAP);
+}
+
+double OrderCommission() {
+    // MT5 stores commission in deals, not positions
+    // For simplicity, return 0 (commission is usually small)
+    return 0;
+}
+
 // Account functions - MT4 compatibility
 // MT4: AccountBalance(), AccountEquity(), etc.
 // MT5: AccountInfoDouble() with ACCOUNT_* constants
@@ -285,13 +295,14 @@ double MarketInfo(string symbol, int type) {
             return SymbolInfoDouble(symbol, SYMBOL_VOLUME_MAX);
         case MODE_LOTSTEP:
             return SymbolInfoDouble(symbol, SYMBOL_VOLUME_STEP);
-        case MODE_MARGINREQUIRED:
+        case MODE_MARGINREQUIRED: {
             // Calculate margin for 1 lot
             double margin = 0;
             if(!OrderCalcMargin(ORDER_TYPE_BUY, symbol, 1.0,
                                SymbolInfoDouble(symbol, SYMBOL_ASK), margin))
                 return 0;
             return margin;
+        }
         default:
             return 0;
     }
@@ -313,7 +324,7 @@ bool ObjectDelete(string name) {
 }
 
 bool ObjectSet(string name, int prop_id, double value) {
-    return ::ObjectSetInteger(0, name, prop_id, (long)value);
+    return ::ObjectSetInteger(0, name, (ENUM_OBJECT_PROPERTY_INTEGER)prop_id, (long)value);
 }
 
 bool ObjectSetText(string name, string text, int font_size,
@@ -1900,19 +1911,19 @@ void SmartTFReset() {
     Print("=======================================================");
 
     string current_symbol = _Symbol;
-    int current_period = Period();
+    ENUM_TIMEFRAMES current_period = (ENUM_TIMEFRAMES)Period();
     long current_chart_id = ChartID();
 
     // Step 1: Define FIXED reset order: M5→M15→M30→H1→H4→D1→M1 | Dinh nghia thu tu reset CO DINH: M5→M15→M30→H1→H4→D1→M1
     // D1 is MOST IMPORTANT (has SPY Bot), must reset BEFORE M1 | D1 QUAN TRONG NHAT (co SPY Bot), phai reset TRUOC M1
-    int reset_order[7] = {PERIOD_M5, PERIOD_M15, PERIOD_M30, PERIOD_H1, PERIOD_H4, PERIOD_D1, PERIOD_M1};
+    ENUM_TIMEFRAMES reset_order[7] = {PERIOD_M5, PERIOD_M15, PERIOD_M30, PERIOD_H1, PERIOD_H4, PERIOD_D1, PERIOD_M1};
 
     int step_count = 0;
     int total_reset = 0;
 
     // Step 2: Reset each TF in order (find chart by TF, then reset) | Reset tung TF theo thu tu (tim chart theo TF, roi reset)
     for(int tf_idx = 0; tf_idx < 7; tf_idx++) {
-        int target_period = reset_order[tf_idx];
+        ENUM_TIMEFRAMES target_period = reset_order[tf_idx];
 
         // Find chart with this TF | Tim chart co TF nay
         long temp_chart = ChartFirst();
@@ -2016,8 +2027,8 @@ void CheckSPYBotHealth() {
     // If diff > 8 hours (28800 seconds) ? SPY Bot frozen! | Neu chenh lech > 8 gio ? SPY Bot treo!
     if(diff_seconds > 28800) {
         Print("[HEALTH_CHECK] ? SPY Bot FROZEN!");
-        Print("[HEALTH_CHECK] Server time: ", TimeToStr(current_time, TIME_DATE|TIME_SECONDS));
-        Print("[HEALTH_CHECK] Last CSDL update: ", TimeToStr(m1_timestamp, TIME_DATE|TIME_SECONDS));
+        Print("[HEALTH_CHECK] Server time: ", TimeToString(current_time, TIME_DATE|TIME_SECONDS));
+        Print("[HEALTH_CHECK] Last CSDL update: ", TimeToString(m1_timestamp, TIME_DATE|TIME_SECONDS));
         Print("[HEALTH_CHECK] M1 chart triggering Smart TF Reset...");
 
         Alert("?? SPY Bot frozen! Auto-reset all ", g_ea.symbol_name, " charts!");
@@ -2348,7 +2359,7 @@ string FormatBonusStatus() {
     if(bonus_list == "") bonus_list = "None";
 
     // Format timestamp (last BONUS open time) | Dinh dang timestamp (lan cuoi mo BONUS)
-    string last_time = TimeToStr(TimeCurrent(), TIME_SECONDS);
+    string last_time = TimeToString(TimeCurrent(), TIME_SECONDS);
 
     // Build final status line | Xay dung dong trang thai cuoi cung
     string result = "BONUS: " + bonus_list + " | " + status + " | Last:" + last_time;
@@ -2553,7 +2564,9 @@ void CreateOrUpdateLabel(string name, string text, int x, int y, color clr, int 
 // GROUP 2 (ODD): Auxiliary - Stoploss + Dashboard + Health checks | Nhom 2 (LE): Phu tro - Cat lo + Bang dieu khien + Kiem tra suc khoe
 void OnTimer() {
     datetime current_time = TimeCurrent();
-    int current_second = TimeSeconds(current_time);
+    MqlDateTime dt;
+    TimeToStruct(current_time, dt);
+    int current_second = dt.sec;
 
     // Prevent duplicate execution in same second | Tranh chay trung trong cung 1 giay
     if(current_time == g_ea.timer_last_run_time) return;
