@@ -1519,7 +1519,7 @@ void OpenS1Order(int tf, int signal, string mode) {
     RefreshRates();
 
     int cmd = (signal == 1) ? OP_BUY : OP_SELL;
-    double price = (signal == 1) ? Ask : Bid;
+    double price = (signal == 1) ? SymbolInfoDouble(_Symbol, SYMBOL_ASK) : SymbolInfoDouble(_Symbol, SYMBOL_BID);
     color clr = (signal == 1) ? clrBlue : clrRed;
     string type_str = (signal == 1) ? "BUY" : "SELL";
 
@@ -1532,7 +1532,7 @@ void OpenS1Order(int tf, int signal, string mode) {
 
         string log_msg = ">>> [OPEN] S1_" + mode + " TF=" + G_TF_NAMES[tf] +
                          " | #" + IntegerToString(ticket) + " " + type_str + " " +
-                         DoubleToString(g_ea.lot_sizes[tf][0], 2) + " @" + DoubleToString(price, Digits) +
+                         DoubleToString(g_ea.lot_sizes[tf][0], 2) + " @" + DoubleToString(price, _Digits) +
                          " | Sig=" + IntegerToString(signal);
 
         if(mode == "NEWS") {
@@ -1638,15 +1638,16 @@ void ProcessS2Strategy(int tf) {
     
 
     if(current_signal == 1) {
+        double ask_price = SymbolInfoDouble(_Symbol, SYMBOL_ASK);
         int ticket = OrderSendSafe(tf, _Symbol, OP_BUY, g_ea.lot_sizes[tf][1],
-                                   Ask, 3,
+                                   ask_price, 3,
                                    "S2_" + G_TF_NAMES[tf], g_ea.magic_numbers[tf][1], clrBlue);
         if(ticket > 0) {
             g_ea.position_flags[tf][1] = 1;
             string trend_str = trend_to_follow == 1 ? "UP" : "DOWN";
             string mode_str = (S2_TrendMode == 0) ? "AUTO" : (S2_TrendMode == 1) ? "FBUY" : "FSELL";
             Print(">>> [OPEN] S2_TREND TF=", G_TF_NAMES[tf], " | #", ticket, " BUY ",
-                  DoubleToString(g_ea.lot_sizes[tf][1], 2), " @", DoubleToString(Ask, Digits),
+                  DoubleToString(g_ea.lot_sizes[tf][1], 2), " @", DoubleToString(ask_price, _Digits),
                   " | Sig=+1 Trend:", trend_str, " Mode:", mode_str, " | Timestamp:", IntegerToString(timestamp), " <<<");
         } else {
             g_ea.position_flags[tf][1] = 0;
@@ -1654,15 +1655,16 @@ void ProcessS2Strategy(int tf) {
         }
     }
     else if(current_signal == -1) {
+        double bid_price = SymbolInfoDouble(_Symbol, SYMBOL_BID);
         int ticket = OrderSendSafe(tf, _Symbol, OP_SELL, g_ea.lot_sizes[tf][1],
-                                   Bid, 3,
+                                   bid_price, 3,
                                    "S2_" + G_TF_NAMES[tf], g_ea.magic_numbers[tf][1], clrRed);
         if(ticket > 0) {
             g_ea.position_flags[tf][1] = 1;
             string trend_str = trend_to_follow == -1 ? "DOWN" : "UP";
             string mode_str = (S2_TrendMode == 0) ? "AUTO" : (S2_TrendMode == 1) ? "FBUY" : "FSELL";
             Print(">>> [OPEN] S2_TREND TF=", G_TF_NAMES[tf], " | #", ticket, " SELL ",
-                  DoubleToString(g_ea.lot_sizes[tf][1], 2), " @", DoubleToString(Bid, Digits),
+                  DoubleToString(g_ea.lot_sizes[tf][1], 2), " @", DoubleToString(bid_price, _Digits),
                   " | Sig=-1 Trend:", trend_str, " Mode:", mode_str, " | Timestamp:", IntegerToString(timestamp), " <<<");
         } else {
             g_ea.position_flags[tf][1] = 0;
@@ -1698,14 +1700,15 @@ void ProcessS3Strategy(int tf) {
     
 
     if(current_signal == 1) {
+        double ask_price = SymbolInfoDouble(_Symbol, SYMBOL_ASK);
         int ticket = OrderSendSafe(tf, _Symbol, OP_BUY, g_ea.lot_sizes[tf][2],
-                                   Ask, 3,
+                                   ask_price, 3,
                                    "S3_" + G_TF_NAMES[tf], g_ea.magic_numbers[tf][2], clrBlue);
         if(ticket > 0) {
             g_ea.position_flags[tf][2] = 1;
             string arrow = (news_direction > 0) ? "↑" : "↓";
             Print(">>> [OPEN] S3_NEWS TF=", G_TF_NAMES[tf], " | #", ticket, " BUY ",
-                  DoubleToString(g_ea.lot_sizes[tf][2], 2), " @", DoubleToString(Ask, Digits),
+                  DoubleToString(g_ea.lot_sizes[tf][2], 2), " @", DoubleToString(ask_price, _Digits),
                   " | Sig=+1 News=", news_direction > 0 ? "+" : "", IntegerToString(news_level), arrow,
                   " | Timestamp:", IntegerToString(timestamp), " <<<");
         } else {
@@ -1714,14 +1717,15 @@ void ProcessS3Strategy(int tf) {
         }
     }
     else if(current_signal == -1) {
+        double bid_price = SymbolInfoDouble(_Symbol, SYMBOL_BID);
         int ticket = OrderSendSafe(tf, _Symbol, OP_SELL, g_ea.lot_sizes[tf][2],
-                                   Bid, 3,
+                                   bid_price, 3,
                                    "S3_" + G_TF_NAMES[tf], g_ea.magic_numbers[tf][2], clrRed);
         if(ticket > 0) {
             g_ea.position_flags[tf][2] = 1;
             string arrow = (news_direction > 0) ? "↑" : "↓";
             Print(">>> [OPEN] S3_NEWS TF=", G_TF_NAMES[tf], " | #", ticket, " SELL ",
-                  DoubleToString(g_ea.lot_sizes[tf][2], 2), " @", DoubleToString(Bid, Digits),
+                  DoubleToString(g_ea.lot_sizes[tf][2], 2), " @", DoubleToString(bid_price, _Digits),
                   " | Sig=-1 News=", news_direction > 0 ? "+" : "", IntegerToString(news_level), arrow,
                   " | Timestamp:", IntegerToString(timestamp), " <<<");
         } else {
@@ -1766,26 +1770,29 @@ void ProcessBonusNews() {
         string ticket_list = "";
         double entry_price = 0;
 
+        double ask_price = SymbolInfoDouble(_Symbol, SYMBOL_ASK);
+        double bid_price = SymbolInfoDouble(_Symbol, SYMBOL_BID);
+
         for(int count = 0; count < BonusOrderCount; count++) {
             if(news_direction == 1) {
                 int ticket = OrderSendSafe(tf, _Symbol, OP_BUY, bonus_lot,
-                                           Ask, 3,
+                                           ask_price, 3,
                                            "BONUS_" + G_TF_NAMES[tf], g_ea.magic_numbers[tf][2], clrGold);
                 if(ticket > 0) {
                     opened_count++;
                     if(ticket_list != "") ticket_list = ticket_list + ",";
                     ticket_list = ticket_list + IntegerToString(ticket);
-                    if(entry_price == 0) entry_price = Ask;
+                    if(entry_price == 0) entry_price = ask_price;
                 }
             } else {
                 int ticket = OrderSendSafe(tf, _Symbol, OP_SELL, bonus_lot,
-                                           Bid, 3,
+                                           bid_price, 3,
                                            "BONUS_" + G_TF_NAMES[tf], g_ea.magic_numbers[tf][2], clrOrange);
                 if(ticket > 0) {
                     opened_count++;
                     if(ticket_list != "") ticket_list = ticket_list + ",";
                     ticket_list = ticket_list + IntegerToString(ticket);
-                    if(entry_price == 0) entry_price = Bid;
+                    if(entry_price == 0) entry_price = bid_price;
                 }
             }
         }
@@ -1796,7 +1803,7 @@ void ProcessBonusNews() {
             double total_lot = opened_count * bonus_lot;
             Print(">>> [OPEN] BONUS TF=", G_TF_NAMES[tf], " | ", opened_count, "×",
                   news_direction == 1 ? "BUY" : "SELL", " @", DoubleToString(bonus_lot, 2),
-                  " Total:", DoubleToString(total_lot, 2), " @", DoubleToString(entry_price, Digits),
+                  " Total:", DoubleToString(total_lot, 2), " @", DoubleToString(entry_price, _Digits),
                   " | News=", news_direction > 0 ? "+" : "", IntegerToString(news_level), arrow,
                   " | Multiplier:", DoubleToString(BonusLotMultiplier, 1), "x",
                   " Tickets:", ticket_list, " <<<");
