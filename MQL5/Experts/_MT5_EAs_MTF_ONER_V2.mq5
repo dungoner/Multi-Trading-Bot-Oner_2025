@@ -2079,6 +2079,20 @@ void CheckSPYBotHealth() {
 // EA initialization - setup all components | Khoi tao EA - cai dat tat ca thanh phan
 // OPTIMIZED V3.4: Struct-based data isolation for multi-symbol support | TOI UU: Cach ly du lieu theo struct cho da ky hieu
 int OnInit() {
+    // ========== CRITICAL: ONLY M1 CHART ALLOWED ==========
+    if(Period() != PERIOD_M1) {
+        Alert("❌ ERROR: EA chỉ được chạy trên chart M1!");
+        Alert("Hiện tại đang chạy trên: ", EnumToString((ENUM_TIMEFRAMES)Period()));
+        Print("========================================");
+        Print("❌ CRITICAL ERROR: Wrong timeframe!");
+        Print("Current chart: ", EnumToString((ENUM_TIMEFRAMES)Period()));
+        Print("Required: PERIOD_M1");
+        Print("Vui lòng XÓA EA khỏi chart này và chỉ load trên M1!");
+        Print("========================================");
+        return(INIT_FAILED);
+    }
+    Print("✅ Chart validation: M1 - OK");
+
     // PART 1: Symbol recognition | Nhan dien ky hieu
     if(!InitializeSymbolRecognition()) return(INIT_FAILED);
     InitializeSymbolPrefix();
