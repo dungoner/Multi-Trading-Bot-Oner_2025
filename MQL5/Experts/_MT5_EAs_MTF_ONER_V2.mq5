@@ -126,6 +126,10 @@ input bool DebugMode = false;      // Debug mode (verbose logging)
 #define SELECT_BY_POS 1
 #define MODE_TRADES 0
 
+// MT4-style order operation constants
+#define OP_BUY 0
+#define OP_SELL 1
+
 // OrderSend() wrapper - CRITICAL FUNCTION
 // IMPORTANT: Returns result.deal (NOT result.order) for market orders
 // IMPORTANT: Must set type_filling or trades will fail
@@ -209,13 +213,6 @@ bool OrderSelect(int index, int select, int pool=0) {
     return (symbol != "");
 }
 
-// OrdersTotal() wrapper
-// MT4: OrdersTotal() returns total orders
-// MT5: PositionsTotal() returns total positions
-int OrdersTotal() {
-    return PositionsTotal();
-}
-
 // Order property functions - MT4 compatibility
 // MT4: OrderTicket(), OrderType(), OrderLots(), etc.
 // MT5: PositionGet*() functions
@@ -238,7 +235,7 @@ double OrderProfit() {
     return PositionGetDouble(POSITION_PROFIT);
 }
 
-string Order_Symbol {
+string OrderSymbol() {
     return PositionGetString(POSITION_SYMBOL);
 }
 
@@ -1105,9 +1102,9 @@ void InitializeLotSizes() {
     }
 
     // Silent - only debug log | Im lang - chi log debug
-    DebugPrint("Lot M1: S1=" + DoubleToStr(g_ea.lot_sizes[0][0], 2) +
-               " S2=" + DoubleToStr(g_ea.lot_sizes[0][1], 2) +
-               " S3=" + DoubleToStr(g_ea.lot_sizes[0][2], 2));
+    DebugPrint("Lot M1: S1=" + DoubleToString(g_ea.lot_sizes[0][0], 2) +
+               " S2=" + DoubleToString(g_ea.lot_sizes[0][1], 2) +
+               " S3=" + DoubleToString(g_ea.lot_sizes[0][2], 2));
 }
 
 //=============================================================================
@@ -1131,9 +1128,9 @@ void InitializeLayer1Thresholds() {
     }
 
     // Silent - only debug log | Im lang - chi log debug
-    DebugPrint("Layer1 M1: S1=$" + DoubleToStr(g_ea.layer1_thresholds[0][0], 2) +
-               " S2=$" + DoubleToStr(g_ea.layer1_thresholds[0][1], 2) +
-               " S3=$" + DoubleToStr(g_ea.layer1_thresholds[0][2], 2));
+    DebugPrint("Layer1 M1: S1=$" + DoubleToString(g_ea.layer1_thresholds[0][0], 2) +
+               " S2=$" + DoubleToString(g_ea.layer1_thresholds[0][1], 2) +
+               " S3=$" + DoubleToString(g_ea.layer1_thresholds[0][2], 2));
 }
 
 //=============================================================================
@@ -1211,14 +1208,14 @@ bool RestoreOrCleanupPositions() {
     int closed_count = 0;
 
     // Step 2: Scan all open orders | Buoc 2: Quet tat ca lenh mo
-    for(int i = OrdersTotal() - 1; i >= 0; i--) {
+    for(int i = PositionsTotal() - 1; i >= 0; i--) {
         if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) continue;
 
         // Get order info | Lay thong tin lenh
         int magic = OrderMagicNumber();
         int ticket = OrderTicket();
         int order_type = OrderType();
-        string order_symbol = Order_Symbol;
+        string order_symbol = OrderSymbol();
 
         // Filter: Only this symbol | Loc: Chi lenh cua symbol nay
         if(order_symbol != _Symbol) continue;
@@ -1331,9 +1328,9 @@ void CloseAllStrategiesByMagicForTF(int tf) {
     int signal_new = g_ea.csdl_rows[tf].signal;
     datetime timestamp_new = (datetime)g_ea.csdl_rows[tf].timestamp;
 
-    for(int i = OrdersTotal() - 1; i >= 0; i--) {
+    for(int i = PositionsTotal() - 1; i >= 0; i--) {
         if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) continue;
-        if(Order_Symbol != _Symbol) continue;
+        if(OrderSymbol() != _Symbol) continue;
 
         int magic = OrderMagicNumber();
         int ticket = OrderTicket();
@@ -1353,8 +1350,8 @@ void CloseAllStrategiesByMagicForTF(int tf) {
         if(strategy_index >= 0) {
             string order_type_str = (order_type == OP_BUY) ? "BUY" : "SELL";
             Print(">> [CLOSE] SIGNAL_CHG TF=", G_TF_NAMES[tf], " S=", (strategy_index+1),
-                  " | #", ticket, " ", order_type_str, " ", DoubleToStr(order_lot, 2),
-                  " | Profit=$", DoubleToStr(order_profit, 2),
+                  " | #", ticket, " ", order_type_str, " ", DoubleToString(order_lot, 2),
+                  " | Profit=$", DoubleToString(order_profit, 2),
                   " | Old:", signal_old, " New:", signal_new,
                   " | Timestamp:", IntegerToString(timestamp_new), " <<");
 
@@ -1383,9 +1380,9 @@ void CloseAllBonusOrders() {
         double total_lot = 0;
 
         // Scan all orders on MT4 | Quet tat ca lenh tren MT4
-        for(int i = OrdersTotal() - 1; i >= 0; i--) {
+        for(int i = PositionsTotal() - 1; i >= 0; i--) {
             if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) continue;
-            if(Order_Symbol != _Symbol) continue;
+            if(OrderSymbol() != _Symbol) continue;
 
             // If magic matches, close it | Neu magic trung, dong no
             if(OrderMagicNumber() == target_magic) {
@@ -1404,8 +1401,8 @@ void CloseAllBonusOrders() {
         // Consolidated log | Log tong hop
         if(total_count > 0) {
             Print(">> [CLOSE] BONUS_M1 TF=", G_TF_NAMES[tf],
-                  " | ", total_count, " orders Total:", DoubleToStr(total_lot, 2),
-                  " | Profit=$", DoubleToStr(total_profit, 2),
+                  " | ", total_count, " orders Total:", DoubleToString(total_lot, 2),
+                  " | Profit=$", DoubleToString(total_profit, 2),
                   " | Closed:", closed_count, "/", total_count, " <<");
         }
 
@@ -1418,9 +1415,9 @@ void CloseS1OrdersByM1() {
     for(int tf = 0; tf < 7; tf++) {
         if(!IsTFEnabled(tf)) continue;
         int target_magic = g_ea.magic_numbers[tf][0];
-        for(int i = OrdersTotal() - 1; i >= 0; i--) {
+        for(int i = PositionsTotal() - 1; i >= 0; i--) {
             if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) continue;
-            if(Order_Symbol != _Symbol) continue;
+            if(OrderSymbol() != _Symbol) continue;
             if(OrderMagicNumber() == target_magic) {
                 CloseOrderSafely(OrderTicket(), "S1_M1_CLOSE");
             }
@@ -1434,9 +1431,9 @@ void CloseS2OrdersByM1() {
     for(int tf = 0; tf < 7; tf++) {
         if(!IsTFEnabled(tf)) continue;
         int target_magic = g_ea.magic_numbers[tf][1];
-        for(int i = OrdersTotal() - 1; i >= 0; i--) {
+        for(int i = PositionsTotal() - 1; i >= 0; i--) {
             if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) continue;
-            if(Order_Symbol != _Symbol) continue;
+            if(OrderSymbol() != _Symbol) continue;
             if(OrderMagicNumber() == target_magic) {
                 CloseOrderSafely(OrderTicket(), "S2_M1_CLOSE");
             }
@@ -1448,9 +1445,9 @@ void CloseS2OrdersByM1() {
 // Close only S3 for specific TF | Dong chi S3 cho TF cu the
 void CloseS3OrdersForTF(int tf) {
     int target_magic = g_ea.magic_numbers[tf][2];
-    for(int i = OrdersTotal() - 1; i >= 0; i--) {
+    for(int i = PositionsTotal() - 1; i >= 0; i--) {
         if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) continue;
-        if(Order_Symbol != _Symbol) continue;
+        if(OrderSymbol() != _Symbol) continue;
         if(OrderMagicNumber() == target_magic) {
             CloseOrderSafely(OrderTicket(), "S3_SIGNAL_CHG");
         }
@@ -1504,7 +1501,7 @@ void OpenS1Order(int tf, int signal, string mode) {
 
         string log_msg = ">>> [OPEN] S1_" + mode + " TF=" + G_TF_NAMES[tf] +
                          " | #" + IntegerToString(ticket) + " " + type_str + " " +
-                         DoubleToStr(g_ea.lot_sizes[tf][0], 2) + " @" + DoubleToStr(price, Digits) +
+                         DoubleToString(g_ea.lot_sizes[tf][0], 2) + " @" + DoubleToString(price, Digits) +
                          " | Sig=" + IntegerToString(signal);
 
         if(mode == "NEWS") {
@@ -1610,7 +1607,7 @@ void ProcessS2Strategy(int tf) {
             string trend_str = trend_to_follow == 1 ? "UP" : "DOWN";
             string mode_str = (S2_TrendMode == 0) ? "AUTO" : (S2_TrendMode == 1) ? "FBUY" : "FSELL";
             Print(">>> [OPEN] S2_TREND TF=", G_TF_NAMES[tf], " | #", ticket, " BUY ",
-                  DoubleToStr(g_ea.lot_sizes[tf][1], 2), " @", DoubleToStr(Ask, Digits),
+                  DoubleToString(g_ea.lot_sizes[tf][1], 2), " @", DoubleToString(Ask, Digits),
                   " | Sig=+1 Trend:", trend_str, " Mode:", mode_str, " | Timestamp:", IntegerToString(timestamp), " <<<");
         } else {
             g_ea.position_flags[tf][1] = 0;
@@ -1626,7 +1623,7 @@ void ProcessS2Strategy(int tf) {
             string trend_str = trend_to_follow == -1 ? "DOWN" : "UP";
             string mode_str = (S2_TrendMode == 0) ? "AUTO" : (S2_TrendMode == 1) ? "FBUY" : "FSELL";
             Print(">>> [OPEN] S2_TREND TF=", G_TF_NAMES[tf], " | #", ticket, " SELL ",
-                  DoubleToStr(g_ea.lot_sizes[tf][1], 2), " @", DoubleToStr(Bid, Digits),
+                  DoubleToString(g_ea.lot_sizes[tf][1], 2), " @", DoubleToString(Bid, Digits),
                   " | Sig=-1 Trend:", trend_str, " Mode:", mode_str, " | Timestamp:", IntegerToString(timestamp), " <<<");
         } else {
             g_ea.position_flags[tf][1] = 0;
@@ -1669,7 +1666,7 @@ void ProcessS3Strategy(int tf) {
             g_ea.position_flags[tf][2] = 1;
             string arrow = (news_direction > 0) ? "↑" : "↓";
             Print(">>> [OPEN] S3_NEWS TF=", G_TF_NAMES[tf], " | #", ticket, " BUY ",
-                  DoubleToStr(g_ea.lot_sizes[tf][2], 2), " @", DoubleToStr(Ask, Digits),
+                  DoubleToString(g_ea.lot_sizes[tf][2], 2), " @", DoubleToString(Ask, Digits),
                   " | Sig=+1 News=", news_direction > 0 ? "+" : "", IntegerToString(news_level), arrow,
                   " | Timestamp:", IntegerToString(timestamp), " <<<");
         } else {
@@ -1685,7 +1682,7 @@ void ProcessS3Strategy(int tf) {
             g_ea.position_flags[tf][2] = 1;
             string arrow = (news_direction > 0) ? "↑" : "↓";
             Print(">>> [OPEN] S3_NEWS TF=", G_TF_NAMES[tf], " | #", ticket, " SELL ",
-                  DoubleToStr(g_ea.lot_sizes[tf][2], 2), " @", DoubleToStr(Bid, Digits),
+                  DoubleToString(g_ea.lot_sizes[tf][2], 2), " @", DoubleToString(Bid, Digits),
                   " | Sig=-1 News=", news_direction > 0 ? "+" : "", IntegerToString(news_level), arrow,
                   " | Timestamp:", IntegerToString(timestamp), " <<<");
         } else {
@@ -1759,10 +1756,10 @@ void ProcessBonusNews() {
             string arrow = (news_direction > 0) ? "↑" : "↓";
             double total_lot = opened_count * bonus_lot;
             Print(">>> [OPEN] BONUS TF=", G_TF_NAMES[tf], " | ", opened_count, "×",
-                  news_direction == 1 ? "BUY" : "SELL", " @", DoubleToStr(bonus_lot, 2),
-                  " Total:", DoubleToStr(total_lot, 2), " @", DoubleToStr(entry_price, Digits),
+                  news_direction == 1 ? "BUY" : "SELL", " @", DoubleToString(bonus_lot, 2),
+                  " Total:", DoubleToString(total_lot, 2), " @", DoubleToString(entry_price, Digits),
                   " | News=", news_direction > 0 ? "+" : "", IntegerToString(news_level), arrow,
-                  " | Multiplier:", DoubleToStr(BonusLotMultiplier, 1), "x",
+                  " | Multiplier:", DoubleToString(BonusLotMultiplier, 1), "x",
                   " Tickets:", ticket_list, " <<<");
         }
     }
@@ -1776,12 +1773,12 @@ void ProcessBonusNews() {
 // Stoploss: 2 layers (LAYER1, LAYER2) | Cat lo: 2 tang
 // Take profit: 1 layer (based on max_loss × multiplier) | Chot loi: 1 tang (dua tren max_loss × he so)
 void CheckStoplossAndTakeProfit() {
-    if(OrdersTotal() == 0) return;
+    if(PositionsTotal() == 0) return;
 
     // Scan all orders once | Quet tat ca lenh 1 lan duy nhat
-    for(int i = OrdersTotal() - 1; i >= 0; i--) {
+    for(int i = PositionsTotal() - 1; i >= 0; i--) {
         if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) continue;
-        if(Order_Symbol != _Symbol) continue;
+        if(OrderSymbol() != _Symbol) continue;
 
         int magic = OrderMagicNumber();
         int ticket = OrderTicket();
@@ -1822,12 +1819,12 @@ void CheckStoplossAndTakeProfit() {
                             string margin_info = "";
                             if(mode_name == "LAYER2_SL") {
                                 double margin_usd = OrderLots() * MarketInfo(_Symbol, MODE_MARGINREQUIRED);
-                                margin_info = " Margin=$" + DoubleToStr(margin_usd, 2);
+                                margin_info = " Margin=$" + DoubleToString(margin_usd, 2);
                             }
                             Print(">> [CLOSE] ", short_mode, " TF=", G_TF_NAMES[tf], " S=", (s+1),
-                                  " | #", ticket, " ", order_type_str, " ", DoubleToStr(OrderLots(), 2),
-                                  " | Loss=$", DoubleToStr(profit, 2),
-                                  " | Threshold=$", DoubleToStr(sl_threshold, 2), margin_info, " <<");
+                                  " | #", ticket, " ", order_type_str, " ", DoubleToString(OrderLots(), 2),
+                                  " | Loss=$", DoubleToString(profit, 2),
+                                  " | Threshold=$", DoubleToString(sl_threshold, 2), margin_info, " <<");
 
                             if(CloseOrderSafely(ticket, mode_name)) {
                                 g_ea.position_flags[tf][s] = 0;
@@ -1851,10 +1848,10 @@ void CheckStoplossAndTakeProfit() {
                         if(profit >= tp_threshold) {
                             string order_type_str = (OrderType() == OP_BUY) ? "BUY" : "SELL";
                             Print(">> [CLOSE] TP TF=", G_TF_NAMES[tf], " S=", (s+1),
-                                  " | #", ticket, " ", order_type_str, " ", DoubleToStr(OrderLots(), 2),
-                                  " | Profit=$", DoubleToStr(profit, 2),
-                                  " | Threshold=$", DoubleToStr(tp_threshold, 2),
-                                  " Mult=", DoubleToStr(TakeProfit_Multiplier, 2), " <<");
+                                  " | #", ticket, " ", order_type_str, " ", DoubleToString(OrderLots(), 2),
+                                  " | Profit=$", DoubleToString(profit, 2),
+                                  " | Threshold=$", DoubleToString(tp_threshold, 2),
+                                  " Mult=", DoubleToString(TakeProfit_Multiplier, 2), " <<");
 
                             if(CloseOrderSafely(ticket, "TAKE_PROFIT")) {
                                 g_ea.position_flags[tf][s] = 0;
@@ -1884,7 +1881,7 @@ void CheckAllEmergencyConditions() {
         double drawdown_percent = ((balance - equity) / balance) * 100;
 
         if(drawdown_percent > 25.0) {
-            Print("[WARNING] Drawdown: ", DoubleToStr(drawdown_percent, 2), "%");
+            Print("[WARNING] Drawdown: ", DoubleToString(drawdown_percent, 2), "%");
         }
     }
 }
@@ -2111,7 +2108,7 @@ int OnInit() {
     if(S3_NEWS) { strat_status += "S3,"; strat_count++; }
     if(StringLen(strat_status) > 0) strat_status = StringSubstr(strat_status, 0, StringLen(strat_status) - 1);
 
-    string sl_mode = (StoplossMode == LAYER1_MAXLOSS) ? "L1" : ("L2/" + DoubleToStr(Layer2_Divisor, 0));
+    string sl_mode = (StoplossMode == LAYER1_MAXLOSS) ? "L1" : ("L2/" + DoubleToString(Layer2_Divisor, 0));
     string master_mode = (Period()==PERIOD_M1) ? "M1" : "M5-D1";
 
     // CSDL source name | Ten nguon CSDL
@@ -2128,7 +2125,7 @@ int OnInit() {
 
     g_ea.init_summary = "[INIT] " + g_ea.symbol_name + " | SL:" + sl_mode +
                         " News:7TF(" + news_str + ") Trend:" + trend_str +
-                        " | Lot:" + DoubleToStr(g_ea.lot_sizes[0][0], 2) + "-" + DoubleToStr(g_ea.lot_sizes[6][2], 2) +
+                        " | Lot:" + DoubleToString(g_ea.lot_sizes[0][0], 2) + "-" + DoubleToString(g_ea.lot_sizes[6][2], 2) +
                         " | TF:" + IntegerToString(tf_count) + " S:" + IntegerToString(strat_count) +
                         " | Folder:" + folder_name + " Master:" + master_mode +
                         " Magic:" + IntegerToString(g_ea.magic_numbers[0][0]) + "-" + IntegerToString(g_ea.magic_numbers[6][2]);
@@ -2153,16 +2150,16 @@ void OnDeinit(const int reason) {
     // ✅ FIX: Use g_ea.symbol_prefix to delete objects correctly | Su dung g_ea.symbol_prefix de xoa dung
     for(int i = 0; i <= 14; i++) {
         string obj_name = g_ea.symbol_prefix + "dash_" + IntegerToString(i);
-        if(ObjectFind(obj_name) >= 0) {
+        if(ObjectFind(0, obj_name) >= 0) {
             ObjectDelete(obj_name);
         }
     }
 
     // Delete all objects with symbol_prefix + "dash_" pattern (cleanup any orphaned objects)
     // Xoa tat ca object co pattern symbol_prefix + "dash_" (don dep cac object con sot lai)
-    int total = ObjectsTotal();
+    int total = ObjectsTotal(0);
     for(int i = total - 1; i >= 0; i--) {
-        string obj_name = ObjectName(i);
+        string obj_name = ObjectName(0, i);
         // Check if object name starts with symbol_prefix AND contains "dash_"
         // Kiem tra object bat dau bang symbol_prefix VA chua "dash_"
         if(StringFind(obj_name, g_ea.symbol_prefix) == 0 && StringFind(obj_name, "dash_") > 0) {
@@ -2193,9 +2190,9 @@ void ScanAllOrdersForDashboard(int &total_orders, double &total_profit, double &
     int s1_count = 0;
     int s2s3_count = 0;
 
-    for(int i = 0; i < OrdersTotal(); i++) {
+    for(int i = 0; i < PositionsTotal(); i++) {
         if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) continue;
-        if(Order_Symbol != _Symbol) continue;
+        if(OrderSymbol() != _Symbol) continue;
 
         int magic = OrderMagicNumber();
         double profit = OrderProfit() + OrderSwap() + OrderCommission();
@@ -2212,7 +2209,7 @@ void ScanAllOrdersForDashboard(int &total_orders, double &total_profit, double &
                 s1_count++;
                 if(s1_count <= 7) {  // Max 7 (all TF) | Toi da 7 (tat ca TF)
                     if(s1_count > 1) s1_summary += ", ";
-                    s1_summary += "S1_" + G_TF_NAMES[tf] + "[$" + DoubleToStr(margin_usd, 0) + "]";
+                    s1_summary += "S1_" + G_TF_NAMES[tf] + "[$" + DoubleToString(margin_usd, 0) + "]";
                 }
                 break;
             }
@@ -2226,7 +2223,7 @@ void ScanAllOrdersForDashboard(int &total_orders, double &total_profit, double &
                 if(s2s3_count <= 7) {  // Show first 7 | Chi hien 7 dau
                     string strategy = (magic == g_ea.magic_numbers[tf][1]) ? "S2" : "S3";
                     if(s2s3_count > 1) s2s3_summary += ", ";
-                    s2s3_summary += strategy + "_" + G_TF_NAMES[tf] + "[$" + DoubleToStr(margin_usd, 0) + "]";
+                    s2s3_summary += strategy + "_" + G_TF_NAMES[tf] + "[$" + DoubleToString(margin_usd, 0) + "]";
                 }
                 break;
             }
@@ -2270,9 +2267,9 @@ double CalculateTFPnL(int tf) {
         int target_magic = g_ea.magic_numbers[tf][s];
 
         // Scan all orders to find matching magic | Quet tat ca lenh de tim magic khop
-        for(int i = 0; i < OrdersTotal(); i++) {
+        for(int i = 0; i < PositionsTotal(); i++) {
             if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) continue;
-            if(Order_Symbol != _Symbol) continue;
+            if(OrderSymbol() != _Symbol) continue;
             if(OrderMagicNumber() == target_magic) {
                 total_pnl += OrderProfit() + OrderSwap() + OrderCommission();
             }
@@ -2286,9 +2283,9 @@ double CalculateTFPnL(int tf) {
 bool HasBonusOrders(int tf) {
     int target_magic = g_ea.magic_numbers[tf][2]; // S3 magic for this TF | Magic S3 cho TF nay
 
-    for(int i = 0; i < OrdersTotal(); i++) {
+    for(int i = 0; i < PositionsTotal(); i++) {
         if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) continue;
-        if(Order_Symbol != _Symbol) continue;
+        if(OrderSymbol() != _Symbol) continue;
         if(OrderMagicNumber() == target_magic) {
             // Check if comment contains "BONUS" | Kiem tra comment co chua "BONUS"
             string comment = OrderComment();
@@ -2396,9 +2393,9 @@ void UpdateDashboard() {
     ArrayInitialize(bonus_count_per_tf, 0);
     ArrayInitialize(bonus_lots_per_tf, 0.0);
 
-    for(int i = 0; i < OrdersTotal(); i++) {
+    for(int i = 0; i < PositionsTotal(); i++) {
         if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) continue;
-        if(Order_Symbol != _Symbol) continue;
+        if(OrderSymbol() != _Symbol) continue;
 
         double order_pnl = OrderProfit() + OrderSwap() + OrderCommission();
         int magic = OrderMagicNumber();
@@ -2430,7 +2427,7 @@ void UpdateDashboard() {
 
     // ===== LINE 0: HEADER (YELLOW) | TIEU DE (VANG)
     string header = "[" + g_ea.symbol_name + "] " + folder + " | 7TFx3S | D1:" + trend +
-                    " | $" + DoubleToStr(equity, 0) + " DD:" + DoubleToStr(dd, 1) + "% | " +
+                    " | $" + DoubleToString(equity, 0) + " DD:" + DoubleToString(dd, 1) + "% | " +
                     IntegerToString(total_orders) + "/21";
     CreateOrUpdateLabel(g_ea.symbol_prefix + "dash_0", header, 10, y_pos, clrYellow, 9);
     y_pos += line_height;
@@ -2472,15 +2469,15 @@ void UpdateDashboard() {
         else sig = "-";                             // NONE | Khong co
 
         // S1/S2/S3 positions | Vi the S1/S2/S3
-        string s1 = (g_ea.position_flags[tf][0] == 1) ? "*" + DoubleToStr(g_ea.lot_sizes[tf][0], 2) : "o";
-        string s2 = (g_ea.position_flags[tf][1] == 1) ? "*" + DoubleToStr(g_ea.lot_sizes[tf][1], 2) : "o";
-        string s3 = (g_ea.position_flags[tf][2] == 1) ? "*" + DoubleToStr(g_ea.lot_sizes[tf][2], 2) : "o";
+        string s1 = (g_ea.position_flags[tf][0] == 1) ? "*" + DoubleToString(g_ea.lot_sizes[tf][0], 2) : "o";
+        string s2 = (g_ea.position_flags[tf][1] == 1) ? "*" + DoubleToString(g_ea.lot_sizes[tf][1], 2) : "o";
+        string s3 = (g_ea.position_flags[tf][2] == 1) ? "*" + DoubleToString(g_ea.lot_sizes[tf][2], 2) : "o";
 
         // P&L for this TF (all strategies) | Lai lo cho TF nay (tat ca chien luoc)
         double tf_pnl = CalculateTFPnL(tf);
         string pnl_str = "";
-        if(tf_pnl > 0) pnl_str = "+" + DoubleToStr(tf_pnl, 2);
-        else if(tf_pnl < 0) pnl_str = DoubleToStr(tf_pnl, 2);
+        if(tf_pnl > 0) pnl_str = "+" + DoubleToString(tf_pnl, 2);
+        else if(tf_pnl < 0) pnl_str = DoubleToString(tf_pnl, 2);
         else pnl_str = "+0.00";
 
         // News with sign | Tin tuc voi dau
@@ -2491,7 +2488,7 @@ void UpdateDashboard() {
         string bonus_str = "-";
         if(bonus_count_per_tf[tf] > 0) {
             bonus_str = IntegerToString(bonus_count_per_tf[tf]) + "|" +
-                        DoubleToStr(bonus_lots_per_tf[tf], 2);
+                        DoubleToString(bonus_lots_per_tf[tf], 2);
         }
 
         // Build row with fixed-width columns | Xay dung dong voi cot co dinh
@@ -2516,12 +2513,12 @@ void UpdateDashboard() {
 
     // ===== LINE 13: NET SUMMARY (Yellow) | TOM TAT NET (Vang)
     double net = total_profit + total_loss;
-    string net_summary = "NET:$" + DoubleToStr(net, 2);
+    string net_summary = "NET:$" + DoubleToString(net, 2);
 
     // Add strategy breakdown if there are orders | Them phan tich chien luoc neu co lenh
-    if(s1_count > 0) net_summary += " | S1:" + IntegerToString(s1_count) + "x$" + DoubleToStr(s1_pnl, 0);
-    if(s2_count > 0) net_summary += " | S2:" + IntegerToString(s2_count) + "x$" + DoubleToStr(s2_pnl, 0);
-    if(s3_count > 0) net_summary += " | S3:" + IntegerToString(s3_count) + "x$" + DoubleToStr(s3_pnl, 1);
+    if(s1_count > 0) net_summary += " | S1:" + IntegerToString(s1_count) + "x$" + DoubleToString(s1_pnl, 0);
+    if(s2_count > 0) net_summary += " | S2:" + IntegerToString(s2_count) + "x$" + DoubleToString(s2_pnl, 0);
+    if(s3_count > 0) net_summary += " | S3:" + IntegerToString(s3_count) + "x$" + DoubleToString(s3_pnl, 1);
 
     net_summary += " | " + IntegerToString(total_orders) + "/21";
 
@@ -2541,7 +2538,7 @@ void UpdateDashboard() {
 
 // Create or update OBJ_LABEL | Tao hoac cap nhat OBJ_LABEL
 void CreateOrUpdateLabel(string name, string text, int x, int y, color clr, int font_size) {
-    if(ObjectFind(name) < 0) {
+    if(ObjectFind(0, name) < 0) {
         ObjectCreate(name, OBJ_LABEL, 0, 0, 0);
         ObjectSet(name, OBJPROP_CORNER, CORNER_LEFT_UPPER);
         ObjectSet(name, OBJPROP_XDISTANCE, x);
@@ -2592,9 +2589,9 @@ void OnTimer() {
                 if(S1_CloseByM1 && S2_CloseByM1) {
                     CloseS3OrdersForTF(tf);
                 } else if(S1_CloseByM1) {
-                    for(int i = OrdersTotal() - 1; i >= 0; i--) {
+                    for(int i = PositionsTotal() - 1; i >= 0; i--) {
                         if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) continue;
-                        if(Order_Symbol != _Symbol) continue;
+                        if(OrderSymbol() != _Symbol) continue;
                         int magic = OrderMagicNumber();
                         if(magic == g_ea.magic_numbers[tf][1] || magic == g_ea.magic_numbers[tf][2]) {
                             CloseOrderSafely(OrderTicket(), "SIGNAL_CHANGE");
@@ -2603,9 +2600,9 @@ void OnTimer() {
                     g_ea.position_flags[tf][1] = 0;
                     g_ea.position_flags[tf][2] = 0;
                 } else if(S2_CloseByM1) {
-                    for(int j = OrdersTotal() - 1; j >= 0; j--) {
+                    for(int j = PositionsTotal() - 1; j >= 0; j--) {
                         if(!OrderSelect(j, SELECT_BY_POS, MODE_TRADES)) continue;
-                        if(Order_Symbol != _Symbol) continue;
+                        if(OrderSymbol() != _Symbol) continue;
                         int order_magic = OrderMagicNumber();
                         if(order_magic == g_ea.magic_numbers[tf][0] || order_magic == g_ea.magic_numbers[tf][2]) {
                             CloseOrderSafely(OrderTicket(), "SIGNAL_CHANGE");
