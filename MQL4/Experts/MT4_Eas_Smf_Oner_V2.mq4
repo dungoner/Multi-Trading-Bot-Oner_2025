@@ -1652,50 +1652,64 @@ void CheckAllEmergencyConditions() {
 //=============================================================================
 
 // Smart TF reset for all charts of current symbol (learned from SPY Bot) | Reset thong minh cho tat ca chart cung symbol (hoc tu SPY Bot)
-// Resets OTHER charts first, then CURRENT chart last (important for D1 SPY Bot recognition) | Reset cac chart KHAC truoc, chart HIEN TAI cuoi (quan trong cho SPY Bot nhan dien)
+// Resets in FIXED ORDER: M5→M15→M30→H1→H4→D1→M1 (D1 is MOST IMPORTANT, M1 LAST) | Reset theo THU TU CO DINH: M5→M15→M30→H1→H4→D1→M1 (D1 QUAN TRONG NHAT, M1 CUOI CUNG)
+// IMPORTANT: D1 must reset BEFORE M1 (D1 has SPY Bot), M1 is LAST (EA runs on M1) | QUAN TRONG: D1 phai reset TRUOC M1 (D1 co SPY Bot), M1 la CUOI CUNG (EA chay tren M1)
 void SmartTFReset() {
     Print("=======================================================");
     Print("[SMART_TF_RESET] Resetting all charts of ", g_ea.symbol_name, "...");
+    Print("[SMART_TF_RESET] Order: M5→M15→M30→H1→H4→D1→M1 (D1 before M1, M1 LAST)");
     Print("=======================================================");
 
     string current_symbol = Symbol();
     int current_period = Period();
     long current_chart_id = ChartID();
 
-    // Step 1: Find all OTHER charts of SAME symbol (not including current chart) | Tim tat ca chart KHAC cung symbol (khong bao gom chart hien tai)
-    int total_charts = 0;
-    long chart_ids[10];
-    ArrayInitialize(chart_ids, 0);
+    // Step 1: Define FIXED reset order: M5→M15→M30→H1→H4→D1→M1 | Dinh nghia thu tu reset CO DINH: M5→M15→M30→H1→H4→D1→M1
+    // D1 is MOST IMPORTANT (has SPY Bot), must reset BEFORE M1 | D1 QUAN TRONG NHAT (co SPY Bot), phai reset TRUOC M1
+    int reset_order[7] = {PERIOD_M5, PERIOD_M15, PERIOD_M30, PERIOD_H1, PERIOD_H4, PERIOD_D1, PERIOD_M1};
 
-    long temp_chart = ChartFirst();
-    while(temp_chart >= 0) {
-        // ONLY reset charts with SAME symbol (important for multi-symbol setup!) | CHI reset chart CUNG symbol (quan trong cho nhieu symbol!)
-        if(ChartSymbol(temp_chart) == current_symbol && temp_chart != current_chart_id) {
-            chart_ids[total_charts] = temp_chart;
-            total_charts++;
+    int step_count = 0;
+    int total_reset = 0;
+
+    // Step 2: Reset each TF in order (find chart by TF, then reset) | Reset tung TF theo thu tu (tim chart theo TF, roi reset)
+    for(int tf_idx = 0; tf_idx < 7; tf_idx++) {
+        int target_period = reset_order[tf_idx];
+
+        // Find chart with this TF | Tim chart co TF nay
+        long temp_chart = ChartFirst();
+        while(temp_chart >= 0) {
+            // Match: same symbol AND same period | Khop: cung symbol VA cung period
+            if(ChartSymbol(temp_chart) == current_symbol && ChartPeriod(temp_chart) == target_period) {
+                step_count++;
+
+                // Get TF name for log | Lay ten TF cho log
+                string tf_name = "M1";
+                if(target_period == PERIOD_M5) tf_name = "M5";
+                else if(target_period == PERIOD_M15) tf_name = "M15";
+                else if(target_period == PERIOD_M30) tf_name = "M30";
+                else if(target_period == PERIOD_H1) tf_name = "H1";
+                else if(target_period == PERIOD_H4) tf_name = "H4";
+                else if(target_period == PERIOD_D1) tf_name = "D1";
+
+                // If this is M1 (last), add special marker | Neu la M1 (cuoi), them dau hieu dac biet
+                string last_marker = (target_period == PERIOD_M1) ? " (M1 - LAST - EA CHART)" : "";
+
+                Print("[RESET] Step ", step_count, "/7: Chart ", tf_name, last_marker, " (via W1)...");
+
+                // Reset via W1 | Reset qua W1
+                ChartSetSymbolPeriod(temp_chart, current_symbol, PERIOD_W1);
+                Sleep(1000);
+                ChartSetSymbolPeriod(temp_chart, current_symbol, target_period);
+                Sleep(1000);
+
+                total_reset++;
+                break;  // Found and reset this TF, move to next | Da tim va reset TF nay, chuyen sang TF tiep theo
+            }
+            temp_chart = ChartNext(temp_chart);
         }
-        temp_chart = ChartNext(temp_chart);
     }
 
-    // Step 2: Reset OTHER charts FIRST (6 charts: M1/M5/M15/M30/H1/H4 or M5/M15/M30/H1/H4/D1) | Reset cac chart KHAC TRUOC
-    for(int i = 0; i < total_charts; i++) {
-        int other_period = ChartPeriod(chart_ids[i]);
-        Print("[RESET] Step ", (i+1), "/", total_charts, ": Chart TF ", other_period, " (via W1)...");
-
-        ChartSetSymbolPeriod(chart_ids[i], current_symbol, PERIOD_W1);
-        Sleep(1000);
-        ChartSetSymbolPeriod(chart_ids[i], current_symbol, other_period);
-        Sleep(1000);
-    }
-
-    // Step 3: Reset CURRENT chart LAST (important: D1 chart with SPY Bot must be last!) | Reset chart HIEN TAI CUOI CUNG (quan trong: D1 co SPY Bot phai cuoi!)
-    Print("[RESET] Step ", (total_charts+1), "/", (total_charts+1), ": Current chart TF ", current_period, " (LAST - via W1)...");
-    ChartSetSymbolPeriod(current_chart_id, current_symbol, PERIOD_W1);
-    Sleep(1000);
-    ChartSetSymbolPeriod(current_chart_id, current_symbol, current_period);
-    Sleep(1000);
-
-    Print("[SMART_TF_RESET] ? Completed! ", (total_charts + 1), " charts reset");
+    Print("[SMART_TF_RESET] ✅ Completed! ", total_reset, " charts reset in order: M5→M15→M30→H1→H4→D1→M1");
     Print("=======================================================");
 }
 
