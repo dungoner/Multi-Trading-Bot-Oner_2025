@@ -1,10 +1,10 @@
 //+------------------------------------------------------------------+
-//| MT4_EAs_MTF ONER_V2
+//| MT4_EAs_M7TF ONER_v2
 //| Multi Timeframe Expert Advisor for MT4 | EA nhieu khung thoi gian cho MT4
 //| 7 TF × 3 Strategies = 21 orders | 7 khung x 3 chien luoc = 21 lenh
 //| Version: API_V2 (MT4) - Added HTTP API support | Phien ban: API_V2 - Them ho tro HTTP API
 //+------------------------------------------------------------------+
-#property copyright "_MT4_EAs_MTF ONER"
+#property copyright "MT4_EAs_M7TF ONER_v2"
 #property strict
 
 //=============================================================================
@@ -27,7 +27,7 @@ input bool S1_HOME = true;   // S1: Binary (Home_7TF > B1:S1_NewsFilter=false)
 input bool S2_TREND = true;  // S2: Trend (Follow D1)
 input bool S3_NEWS = true;   // S3: News (High compact)
 //--- A.3 Close Mode Configuration (2) | Che do dong lenh
-input bool S1_CloseByM1 = false;   // S1: Close by M1 (TRUE=fast M1, FALSE=own TF)
+input bool S1_CloseByM1 = true;   // S1: Close by M1 (TRUE=fast M1, FALSE=own TF)
 input bool S2_CloseByM1 = false;   // S2: Close by M1 (TRUE=fast M1, FALSE=own TF)
 
 //--- A.4 Risk management (2) | Quan ly rui ro
@@ -46,7 +46,8 @@ input CSDL_SOURCE_ENUM CSDL_Source = FOLDER_2;  // CSDL folder (signal source)
 //--- A.6 HTTP API settings (only used if CSDL_Source = HTTP_API) | Cau hinh HTTP API
 // IMPORTANT: MT4 must allow URL in Tools->Options->Expert Advisors | QUAN TRONG: MT4 phai cho phep URL
 // NOTE: MT4 WebRequest automatically uses port 80 for http:// | LUU Y: MT4 WebRequest tu dong dung port 80
-input string HTTP_Server_IP = "147.189.173.121";  // HTTP Server IP (Bot Python VPS)
+// DuckDNS domain for easy IP management (update IP at duckdns.org only) | Domain DuckDNS de quan ly IP de dang
+input string HTTP_Server_IP = "dungalading.duckdns.org";  // HTTP Server domain/IP (Bot Python VPS)
 input string HTTP_API_Key = "";            // API Key (empty = no auth | de trong)
 input bool EnableSymbolNormal = false;     // symbol name (LTCUSDc.xyz -> FALSE =use LTCUSD)
 
@@ -60,8 +61,8 @@ input bool S1_RequireNewsDirection = true;   // S1: Match NEWS direction (signal
 //--- B.2 S2 TREND Mode (1) | Che do xu huong
 enum S2_TREND_MODE {
     S2_FOLLOW_D1 = 0,    // Follow D1 (Auto)
-    S2_FORCE_BUY = 1,    // Force BUY (manual override)
-    S2_FORCE_SELL = -1   // Force SELL (manual override)
+    S2_FORCE_BUY = 1,    // Force BUY (override=1)
+    S2_FORCE_SELL = -1   // Force SELL (override=-1)
 };
 input S2_TREND_MODE S2_TrendMode = S2_FOLLOW_D1;  // S2: Trend (D1 auto/manual)
 
@@ -93,8 +94,8 @@ input string ___Sep_D___ = "___D. AUXILIARY SETTINGS ______";  //
 input bool UseEvenOddMode = true;  // Even/odd split mode (load balancing)
 
 //--- D.2 Health check & reset (2) | Kiem tra suc khoe
-input bool EnableWeekendReset = true;   // Weekend reset (auto close Friday 23:50)
-input bool EnableHealthCheck = true;    // Health check (8h/16h SPY bot status)
+input bool EnableWeekendReset = false;   // Weekend reset (auto close Friday 23:50)
+input bool EnableHealthCheck = false;    // Health check (8h/16h SPY bot status)
 
 //--- D.3 Display (2) | Hien thi
 input bool ShowDashboard = true;  // Show dashboard (on-chart info)
@@ -1651,50 +1652,64 @@ void CheckAllEmergencyConditions() {
 //=============================================================================
 
 // Smart TF reset for all charts of current symbol (learned from SPY Bot) | Reset thong minh cho tat ca chart cung symbol (hoc tu SPY Bot)
-// Resets OTHER charts first, then CURRENT chart last (important for D1 SPY Bot recognition) | Reset cac chart KHAC truoc, chart HIEN TAI cuoi (quan trong cho SPY Bot nhan dien)
+// Resets in FIXED ORDER: M5→M15→M30→H1→H4→D1→M1 (D1 is MOST IMPORTANT, M1 LAST) | Reset theo THU TU CO DINH: M5→M15→M30→H1→H4→D1→M1 (D1 QUAN TRONG NHAT, M1 CUOI CUNG)
+// IMPORTANT: D1 must reset BEFORE M1 (D1 has SPY Bot), M1 is LAST (EA runs on M1) | QUAN TRONG: D1 phai reset TRUOC M1 (D1 co SPY Bot), M1 la CUOI CUNG (EA chay tren M1)
 void SmartTFReset() {
     Print("=======================================================");
     Print("[SMART_TF_RESET] Resetting all charts of ", g_ea.symbol_name, "...");
+    Print("[SMART_TF_RESET] Order: M5→M15→M30→H1→H4→D1→M1 (D1 before M1, M1 LAST)");
     Print("=======================================================");
 
     string current_symbol = Symbol();
     int current_period = Period();
     long current_chart_id = ChartID();
 
-    // Step 1: Find all OTHER charts of SAME symbol (not including current chart) | Tim tat ca chart KHAC cung symbol (khong bao gom chart hien tai)
-    int total_charts = 0;
-    long chart_ids[10];
-    ArrayInitialize(chart_ids, 0);
+    // Step 1: Define FIXED reset order: M5→M15→M30→H1→H4→D1→M1 | Dinh nghia thu tu reset CO DINH: M5→M15→M30→H1→H4→D1→M1
+    // D1 is MOST IMPORTANT (has SPY Bot), must reset BEFORE M1 | D1 QUAN TRONG NHAT (co SPY Bot), phai reset TRUOC M1
+    int reset_order[7] = {PERIOD_M5, PERIOD_M15, PERIOD_M30, PERIOD_H1, PERIOD_H4, PERIOD_D1, PERIOD_M1};
 
-    long temp_chart = ChartFirst();
-    while(temp_chart >= 0) {
-        // ONLY reset charts with SAME symbol (important for multi-symbol setup!) | CHI reset chart CUNG symbol (quan trong cho nhieu symbol!)
-        if(ChartSymbol(temp_chart) == current_symbol && temp_chart != current_chart_id) {
-            chart_ids[total_charts] = temp_chart;
-            total_charts++;
+    int step_count = 0;
+    int total_reset = 0;
+
+    // Step 2: Reset each TF in order (find chart by TF, then reset) | Reset tung TF theo thu tu (tim chart theo TF, roi reset)
+    for(int tf_idx = 0; tf_idx < 7; tf_idx++) {
+        int target_period = reset_order[tf_idx];
+
+        // Find chart with this TF | Tim chart co TF nay
+        long temp_chart = ChartFirst();
+        while(temp_chart >= 0) {
+            // Match: same symbol AND same period | Khop: cung symbol VA cung period
+            if(ChartSymbol(temp_chart) == current_symbol && ChartPeriod(temp_chart) == target_period) {
+                step_count++;
+
+                // Get TF name for log | Lay ten TF cho log
+                string tf_name = "M1";
+                if(target_period == PERIOD_M5) tf_name = "M5";
+                else if(target_period == PERIOD_M15) tf_name = "M15";
+                else if(target_period == PERIOD_M30) tf_name = "M30";
+                else if(target_period == PERIOD_H1) tf_name = "H1";
+                else if(target_period == PERIOD_H4) tf_name = "H4";
+                else if(target_period == PERIOD_D1) tf_name = "D1";
+
+                // If this is M1 (last), add special marker | Neu la M1 (cuoi), them dau hieu dac biet
+                string last_marker = (target_period == PERIOD_M1) ? " (M1 - LAST - EA CHART)" : "";
+
+                Print("[RESET] Step ", step_count, "/7: Chart ", tf_name, last_marker, " (via W1)...");
+
+                // Reset via W1 | Reset qua W1
+                ChartSetSymbolPeriod(temp_chart, current_symbol, PERIOD_W1);
+                Sleep(1000);
+                ChartSetSymbolPeriod(temp_chart, current_symbol, target_period);
+                Sleep(1000);
+
+                total_reset++;
+                break;  // Found and reset this TF, move to next | Da tim va reset TF nay, chuyen sang TF tiep theo
+            }
+            temp_chart = ChartNext(temp_chart);
         }
-        temp_chart = ChartNext(temp_chart);
     }
 
-    // Step 2: Reset OTHER charts FIRST (6 charts: M1/M5/M15/M30/H1/H4 or M5/M15/M30/H1/H4/D1) | Reset cac chart KHAC TRUOC
-    for(int i = 0; i < total_charts; i++) {
-        int other_period = ChartPeriod(chart_ids[i]);
-        Print("[RESET] Step ", (i+1), "/", total_charts, ": Chart TF ", other_period, " (via W1)...");
-
-        ChartSetSymbolPeriod(chart_ids[i], current_symbol, PERIOD_W1);
-        Sleep(1000);
-        ChartSetSymbolPeriod(chart_ids[i], current_symbol, other_period);
-        Sleep(1000);
-    }
-
-    // Step 3: Reset CURRENT chart LAST (important: D1 chart with SPY Bot must be last!) | Reset chart HIEN TAI CUOI CUNG (quan trong: D1 co SPY Bot phai cuoi!)
-    Print("[RESET] Step ", (total_charts+1), "/", (total_charts+1), ": Current chart TF ", current_period, " (LAST - via W1)...");
-    ChartSetSymbolPeriod(current_chart_id, current_symbol, PERIOD_W1);
-    Sleep(1000);
-    ChartSetSymbolPeriod(current_chart_id, current_symbol, current_period);
-    Sleep(1000);
-
-    Print("[SMART_TF_RESET] ? Completed! ", (total_charts + 1), " charts reset");
+    Print("[SMART_TF_RESET] ✅ Completed! ", total_reset, " charts reset in order: M5→M15→M30→H1→H4→D1→M1");
     Print("=======================================================");
 }
 
@@ -1893,20 +1908,22 @@ void OnDeinit(const int reason) {
     Comment("");  // Clear Comment | Xoa Comment
 
     // Delete all dashboard labels (15 labels: dash_0 to dash_14) | Xoa tat ca label dashboard
+    // ✅ FIX: Use g_ea.symbol_prefix to delete objects correctly | Su dung g_ea.symbol_prefix de xoa dung
     for(int i = 0; i <= 14; i++) {
-        string obj_name = "dash_" + IntegerToString(i);
+        string obj_name = g_ea.symbol_prefix + "dash_" + IntegerToString(i);
         if(ObjectFind(obj_name) >= 0) {
             ObjectDelete(obj_name);
         }
     }
 
-    // Delete all objects with "dash_" prefix (cleanup any orphaned objects)
-    // Xoa tat ca object co tien to "dash_" (don dep cac object con sot lai)
+    // Delete all objects with symbol_prefix + "dash_" pattern (cleanup any orphaned objects)
+    // Xoa tat ca object co pattern symbol_prefix + "dash_" (don dep cac object con sot lai)
     int total = ObjectsTotal();
     for(int i = total - 1; i >= 0; i--) {
         string obj_name = ObjectName(i);
-        // Check if object name starts with "dash_" prefix
-        if(StringFind(obj_name, "dash_") == 0) {
+        // Check if object name starts with symbol_prefix AND contains "dash_"
+        // Kiem tra object bat dau bang symbol_prefix VA chua "dash_"
+        if(StringFind(obj_name, g_ea.symbol_prefix) == 0 && StringFind(obj_name, "dash_") > 0) {
             ObjectDelete(obj_name);
         }
     }
@@ -2402,3 +2419,4 @@ void OnTimer() {
         CheckSPYBotHealth();
     }
 }
+
