@@ -615,10 +615,10 @@ int OrderSendSafe(int tf, string symbol, int cmd, double lot_smart,
         return -1;
     }
 
-    // Case 2: Context busy OR Requote ? Retry 1 time
-    // TH 2: MT4 ban HOAC Gia thay doi ? Thu lai 1 lan
-    if(error == 146 || error == 138) {
-        Print("[ORDER_FAIL] ", comment, " Err:", error, " (Retry 1x)");
+    // Case 2: Context busy (4756) OR MT4 errors (146, 138) ? Retry with delay
+    // TH 2: Trade context ban (4756) HOAC loi MT4 (146, 138) ? Thu lai voi delay
+    if(error == 4756 || error == 146 || error == 138) {
+        Print("[ORDER_FAIL] ", comment, " Err:", error, " (Retry 1x after 100ms)");
         Sleep(100);
         RefreshRates();
 
