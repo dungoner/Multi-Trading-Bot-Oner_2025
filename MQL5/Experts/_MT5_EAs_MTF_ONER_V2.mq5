@@ -1,10 +1,11 @@
 //+------------------------------------------------------------------+
-//| _MT5_EAs_MTF ONER_v2
+//| MT5_EAs_M7TF ONER_v2
 //| Multi Timeframe Expert Advisor for MT5 | EA nhieu khung thoi gian cho MT5
 //| 7 TF × 3 Strategies = 21 orders | 7 khung x 3 chien luoc = 21 lenh
-//| Version: API_V2 (MT5) - Added HTTP API + MT4 fixes | Phien ban: API_V2 - Them HTTP API + MT4
+//| Version: API_V2 (MT5) - Converted from MT4 | Phien ban: API_V2 - Chuyen doi tu MT4
 //+------------------------------------------------------------------+
-#property copyright "_MT5_EAs_MTF ONER_v2"
+#property copyright "MT5_EAs_M7TF ONER_v2"
+// #property strict removed - not supported in MT5
 
 //=============================================================================
 //  PART 1: USER INPUTS (30 inputs + 4 separators) | CAU HINH NGUOI DUNG
@@ -43,17 +44,17 @@ enum CSDL_SOURCE_ENUM {
 input CSDL_SOURCE_ENUM CSDL_Source = FOLDER_2;  // CSDL folder (signal source)
 
 //--- A.6 HTTP API settings (only used if CSDL_Source = HTTP_API) | Cau hinh HTTP API
-// IMPORTANT: MT5 must allow URL in Tools->Options->Expert Advisors | QUAN TRONG: MT5 phai cho phep URL
-// NOTE: MT5 WebRequest automatically uses port 80 for http:// | LUU Y: MT5 WebRequest tu dong dung port 80
+// IMPORTANT: MT4 must allow URL in Tools->Options->Expert Advisors | QUAN TRONG: MT4 phai cho phep URL
+// NOTE: MT4 WebRequest automatically uses port 80 for http:// | LUU Y: MT4 WebRequest tu dong dung port 80
 // DuckDNS domain for easy IP management (update IP at duckdns.org only) | Domain DuckDNS de quan ly IP de dang
 input string HTTP_Server_IP = "dungalading.duckdns.org";  // HTTP Server domain/IP (Bot Python VPS)
-input string HTTP_API_Key = "";                    // API Key (empty = no auth | de trong = khong xac thuc)
-input bool EnableSymbolNormalization = true;       // Normalize symbol name (LTCUSDC→LTCUSD, FALSE=use exact name)
+input string HTTP_API_Key = "";            // API Key (empty = no auth | de trong)
+input bool EnableSymbolNormal = false;     // symbol name (LTCUSDc.xyz -> FALSE =use LTCUSD)
 
 input string ___Sep_B___ = "___B. STRATEGY CONFIG ________";  //
 
 //--- B.1 S1 NEWS Filter (3) | Loc tin tuc cho S1
-input bool S1_UseNewsFilter = true;         // S1: Use NEWS filter (TRUE=strict, FALSE=basic)
+input bool S1_UseNewsFilter = false;         // S1: Use NEWS filter (TRUE=strict, FALSE=basic)
 input int MinNewsLevelS1 = 2;                // S1: Min NEWS level (2-70, higher=stricter)
 input bool S1_RequireNewsDirection = true;   // S1: Match NEWS direction (signal==news!)
 
@@ -69,7 +70,7 @@ input S2_TREND_MODE S2_TrendMode = S2_FOLLOW_D1;  // S2: Trend (D1 auto/manual)
 input int MinNewsLevelS3 = 20;         // S3: Min NEWS level (2-70)
 input bool EnableBonusNews = true;     // S3: Enable Bonus (extra on high NEWS)
 input int BonusOrderCount = 1;         // S3: Bonus count (1-5 orders)
-input int MinNewsLevelBonus = 2;      // S3: Min NEWS for Bonus (threshold)
+input int MinNewsLevelBonus = 2;       // S3: Min NEWS for Bonus (threshold)
 input double BonusLotMultiplier = 1.2; // S3: Bonus lot multiplier (1.0-10.0)
 
 input string ___Sep_C___ = "___C. RISK PROTECTION _________";  //
@@ -99,6 +100,248 @@ input bool EnableHealthCheck = false;    // Health check (8h/16h SPY bot status)
 //--- D.3 Display (2) | Hien thi
 input bool ShowDashboard = true;  // Show dashboard (on-chart info)
 input bool DebugMode = false;      // Debug mode (verbose logging)
+
+//=============================================================================
+//  MT5 COMPATIBILITY LAYER - Wrapper functions for MT4→MT5 conversion
+//=============================================================================
+// This layer provides MT4-style API on top of MT5 engine
+// ALL core logic remains 100% unchanged - only API translation
+// CRITICAL: Do NOT modify unless you understand MT5 trade system
+//=============================================================================
+
+// MT4-style global variables - converted to MT5 equivalents
+#define Ask SymbolInfoDouble(_Symbol, SYMBOL_ASK)
+#define Bid SymbolInfoDouble(_Symbol, SYMBOL_BID)
+#define Point SymbolInfoDouble(_Symbol, SYMBOL_POINT)
+#define Digits (int)SymbolInfoInteger(_Symbol, SYMBOL_DIGITS)
+
+// MT4-style constants for MarketInfo()
+#define MODE_MINLOT 3
+#define MODE_MAXLOT 4
+#define MODE_LOTSTEP 5
+#define MODE_MARGINREQUIRED 19
+
+// MT4-style constants for OrderSelect()
+#define SELECT_BY_TICKET 0
+#define SELECT_BY_POS 1
+#define MODE_TRADES 0
+
+// OrderSend() wrapper - CRITICAL FUNCTION
+// IMPORTANT: Returns result.deal (NOT result.order) for market orders
+// IMPORTANT: Must set type_filling or trades will fail
+int OrderSend(string symbol, int cmd, double volume, double price,
+              int slippage, double stoploss, double takeprofit,
+              string comment, int magic, datetime expiration, color arrow_color) {
+    MqlTradeRequest request = {};
+    MqlTradeResult result = {};
+
+    request.action = TRADE_ACTION_DEAL;
+    request.symbol = symbol;
+    request.volume = volume;
+    request.deviation = slippage;
+    request.magic = magic;
+    request.comment = comment;
+    request.sl = stoploss;
+    request.tp = takeprofit;
+
+    // CRITICAL: Set type_filling (required in MT5, or trade fails)
+    request.type_filling = ORDER_FILLING_FOK;
+
+    if(cmd == OP_BUY) {
+        request.type = ORDER_TYPE_BUY;
+        request.price = SymbolInfoDouble(symbol, SYMBOL_ASK);
+    } else if(cmd == OP_SELL) {
+        request.type = ORDER_TYPE_SELL;
+        request.price = SymbolInfoDouble(symbol, SYMBOL_BID);
+    } else {
+        return -1;
+    }
+
+    if(!::OrderSend(request, result)) {
+        return -1;
+    }
+
+    // CRITICAL: Return result.deal for market orders (NOT result.order)
+    // MT5 creates deal ticket (position), MT4 uses order ticket
+    if(result.deal > 0) return (int)result.deal;
+    else if(result.order > 0) return (int)result.order;
+    return -1;
+}
+
+// OrderClose() wrapper - CRITICAL FUNCTION
+// IMPORTANT: Must set type_filling or close will fail
+bool OrderClose(int ticket, double lots, double price, int slippage, color arrow_color) {
+    if(!PositionSelectByTicket(ticket)) return false;
+
+    MqlTradeRequest request = {};
+    MqlTradeResult result = {};
+
+    request.action = TRADE_ACTION_DEAL;
+    request.position = ticket;
+    request.symbol = PositionGetString(POSITION_SYMBOL);
+    request.volume = lots;
+    request.deviation = slippage;
+
+    // CRITICAL: Set type_filling (required in MT5, or close fails)
+    request.type_filling = ORDER_FILLING_FOK;
+
+    long pos_type = PositionGetInteger(POSITION_TYPE);
+    if(pos_type == POSITION_TYPE_BUY) {
+        request.type = ORDER_TYPE_SELL;
+        request.price = SymbolInfoDouble(request.symbol, SYMBOL_BID);
+    } else {
+        request.type = ORDER_TYPE_BUY;
+        request.price = SymbolInfoDouble(request.symbol, SYMBOL_ASK);
+    }
+
+    return ::OrderSend(request, result);
+}
+
+// OrderSelect() wrapper
+// MT4: OrderSelect(ticket, SELECT_BY_TICKET) or OrderSelect(i, SELECT_BY_POS)
+// MT5: Uses PositionSelectByTicket() or PositionGet_Symbol
+bool OrderSelect(int index, int select, int pool=0) {
+    if(select == SELECT_BY_TICKET) {
+        return PositionSelectByTicket(index);
+    }
+    // SELECT_BY_POS mode
+    string symbol = PositionGetSymbol(index);
+    return (symbol != "");
+}
+
+// OrdersTotal() wrapper
+// MT4: OrdersTotal() returns total orders
+// MT5: PositionsTotal() returns total positions
+int OrdersTotal() {
+    return PositionsTotal();
+}
+
+// Order property functions - MT4 compatibility
+// MT4: OrderTicket(), OrderType(), OrderLots(), etc.
+// MT5: PositionGet*() functions
+int OrderTicket() {
+    return (int)PositionGetInteger(POSITION_TICKET);
+}
+
+int OrderType() {
+    long type = PositionGetInteger(POSITION_TYPE);
+    if(type == POSITION_TYPE_BUY) return OP_BUY;
+    if(type == POSITION_TYPE_SELL) return OP_SELL;
+    return -1;
+}
+
+double OrderLots() {
+    return PositionGetDouble(POSITION_VOLUME);
+}
+
+double OrderProfit() {
+    return PositionGetDouble(POSITION_PROFIT);
+}
+
+string Order_Symbol {
+    return PositionGetString(POSITION_SYMBOL);
+}
+
+int OrderMagicNumber() {
+    return (int)PositionGetInteger(POSITION_MAGIC);
+}
+
+// OrderCloseTime() - MT5 doesn't have this for positions
+// MT4: if(OrderCloseTime() != 0) return false; (check if closed)
+// MT5: Positions are always open (no closed position concept)
+// Return 0 to indicate position is still open (backward compatibility)
+datetime OrderCloseTime() {
+    return 0;
+}
+
+// Account functions - MT4 compatibility
+// MT4: AccountBalance(), AccountEquity(), etc.
+// MT5: AccountInfoDouble() with ACCOUNT_* constants
+double AccountBalance() {
+    return AccountInfoDouble(ACCOUNT_BALANCE);
+}
+
+double AccountEquity() {
+    return AccountInfoDouble(ACCOUNT_EQUITY);
+}
+
+double AccountProfit() {
+    return AccountInfoDouble(ACCOUNT_PROFIT);
+}
+
+double AccountMargin() {
+    return AccountInfoDouble(ACCOUNT_MARGIN);
+}
+
+double AccountFreeMargin() {
+    return AccountInfoDouble(ACCOUNT_MARGIN_FREE);
+}
+
+// MarketInfo() wrapper
+// MT4: MarketInfo(symbol, MODE_MINLOT), MarketInfo(symbol, MODE_MAXLOT), etc.
+// MT5: SymbolInfoDouble() with SYMBOL_* constants
+double MarketInfo(string symbol, int type) {
+    switch(type) {
+        case MODE_MINLOT:
+            return SymbolInfoDouble(symbol, SYMBOL_VOLUME_MIN);
+        case MODE_MAXLOT:
+            return SymbolInfoDouble(symbol, SYMBOL_VOLUME_MAX);
+        case MODE_LOTSTEP:
+            return SymbolInfoDouble(symbol, SYMBOL_VOLUME_STEP);
+        case MODE_MARGINREQUIRED:
+            // Calculate margin for 1 lot
+            double margin = 0;
+            if(!OrderCalcMargin(ORDER_TYPE_BUY, symbol, 1.0,
+                               SymbolInfoDouble(symbol, SYMBOL_ASK), margin))
+                return 0;
+            return margin;
+        default:
+            return 0;
+    }
+}
+
+// Object functions - MT4 compatibility
+// MT4: ObjectCreate(name, type, ...) - chart_id implicit
+// MT5: ObjectCreate(chart_id, name, type, ...) - chart_id explicit (0 = current)
+bool ObjectCreate(string name, int type, int sub_window,
+                  datetime time1, double price1,
+                  datetime time2=0, double price2=0,
+                  datetime time3=0, double price3=0) {
+    return ::ObjectCreate(0, name, (ENUM_OBJECT)type, sub_window,
+                          time1, price1, time2, price2, time3, price3);
+}
+
+bool ObjectDelete(string name) {
+    return ::ObjectDelete(0, name);
+}
+
+bool ObjectSet(string name, int prop_id, double value) {
+    return ::ObjectSetInteger(0, name, prop_id, (long)value);
+}
+
+bool ObjectSetText(string name, string text, int font_size,
+                   string font="", color clr=clrNONE) {
+    bool result = ::ObjectSetString(0, name, OBJPROP_TEXT, text);
+    if(font_size > 0)
+        result = result && ::ObjectSetInteger(0, name, OBJPROP_FONTSIZE, font_size);
+    if(font != "")
+        result = result && ::ObjectSetString(0, name, OBJPROP_FONT, font);
+    if(clr != clrNONE)
+        result = result && ::ObjectSetInteger(0, name, OBJPROP_COLOR, clr);
+    return result;
+}
+
+// RefreshRates() - MT5 doesn't need this
+// MT4: RefreshRates() updates price data
+// MT5: Prices are always updated automatically
+// Keep empty function for backward compatibility
+bool RefreshRates() {
+    return true;
+}
+
+//=============================================================================
+//  END MT5 COMPATIBILITY LAYER
+//=============================================================================
 
 //=============================================================================
 //  PART 2: DATA STRUCTURES (1 struct) | CAU TRUC DU LIEU
@@ -216,387 +459,11 @@ string SignalToString(int signal) {
     return "NONE";
 }
 
-//=============================================================================
-//  MT4-COMPATIBLE WRAPPER FUNCTIONS FOR MT5 | HAM BAO TƯƠNG THÍCH MT4 CHO MT5
-//=============================================================================
-// These wrappers allow using MT4 syntax in MT5 code | Cac ham nay cho phep dung cu phap MT4 trong code MT5
-
-// Global variables for OrderSelect compatibility
-static int g_selected_ticket = -1;
-
-// NOTE: MT5 separates orders and positions (different from MT4):
-// - OrdersTotal() returns PENDING orders only (buy limit, sell stop, etc.)
-// - PositionsTotal() returns OPEN positions (active buy/sell trades)
-// MT4's OrdersTotal() returned ALL orders, so we use PositionsTotal() in MT5
-
-// Define MT4 constants for MT5 (needed before OrderSend wrapper)
-#define SELECT_BY_POS 0
-#define SELECT_BY_TICKET 1
-#define MODE_TRADES 0
-#define MODE_MARGINREQUIRED 16
-#define OP_BUY 0
-#define OP_SELL 1
-
-// OrderSelect() wrapper - MT4 compatible for MT5
-bool OrderSelect(int index, int select, int pool=0) {
-    // SELECT_BY_POS = 0, SELECT_BY_TICKET = 1
-    if(select == 0) {  // SELECT_BY_POS
-        if(index < 0 || index >= PositionsTotal()) {
-            g_selected_ticket = -1;
-            return false;
-        }
-        ulong ticket = PositionGetTicket(index);
-        if(ticket > 0 && PositionSelectByTicket(ticket)) {
-            g_selected_ticket = (int)ticket;
-            return true;
-        }
-        g_selected_ticket = -1;
-        return false;
-    } else {  // SELECT_BY_TICKET
-        if(PositionSelectByTicket(index)) {
-            g_selected_ticket = index;
-            return true;
-        }
-        g_selected_ticket = -1;
-        return false;
-    }
-}
-
-// OrderSymbol() wrapper
-string OrderSymbol() {
-    return PositionGetString(POSITION_SYMBOL);
-}
-
-// OrderMagicNumber() wrapper
-int OrderMagicNumber() {
-    return (int)PositionGetInteger(POSITION_MAGIC);
-}
-
-// OrderTicket() wrapper
-int OrderTicket() {
-    return (int)PositionGetInteger(POSITION_TICKET);
-}
-
-// OrderType() wrapper
-int OrderType() {
-    ENUM_POSITION_TYPE type = (ENUM_POSITION_TYPE)PositionGetInteger(POSITION_TYPE);
-    return (type == POSITION_TYPE_BUY) ? 0 : 1;  // 0=OP_BUY, 1=OP_SELL
-}
-
-// OrderLots() wrapper
-double OrderLots() {
-    return PositionGetDouble(POSITION_VOLUME);
-}
-
-// OrderProfit() wrapper
-double OrderProfit() {
-    return PositionGetDouble(POSITION_PROFIT);
-}
-
-// OrderOpenPrice() wrapper
-double OrderOpenPrice() {
-    return PositionGetDouble(POSITION_PRICE_OPEN);
-}
-
-// OrderStopLoss() wrapper
-double OrderStopLoss() {
-    return PositionGetDouble(POSITION_SL);
-}
-
-// OrderTakeProfit() wrapper
-double OrderTakeProfit() {
-    return PositionGetDouble(POSITION_TP);
-}
-
-// OrderComment() wrapper
-string OrderComment() {
-    return PositionGetString(POSITION_COMMENT);
-}
-
-// TimeSeconds() wrapper - MT5 doesn't have this
-int TimeSeconds(datetime time) {
-    MqlDateTime dt;
-    TimeToStruct(time, dt);
-    return dt.sec;
-}
-
-// TimeHour() wrapper - MT5 doesn't have this MT4 function
-int TimeHour(datetime time) {
-    MqlDateTime dt;
-    TimeToStruct(time, dt);
-    return dt.hour;
-}
-
-// TimeMinute() wrapper - MT5 doesn't have this MT4 function
-int TimeMinute(datetime time) {
-    MqlDateTime dt;
-    TimeToStruct(time, dt);
-    return dt.min;
-}
-
-// TimeDay() wrapper - MT5 doesn't have this MT4 function
-int TimeDay(datetime time) {
-    MqlDateTime dt;
-    TimeToStruct(time, dt);
-    return dt.day;
-}
-
-// TimeDayOfWeek() wrapper - MT5 doesn't have this MT4 function
-int TimeDayOfWeek(datetime time) {
-    MqlDateTime dt;
-    TimeToStruct(time, dt);
-    return dt.day_of_week;
-}
-
-// TimeToStr() wrapper - MT5 uses TimeToString
-string TimeToStr(datetime time, int mode=TIME_DATE|TIME_MINUTES) {
-    return TimeToString(time, mode);
-}
-
-// Account functions wrappers - MT5 uses AccountInfo*
-double AccountBalance() {
-    return AccountInfoDouble(ACCOUNT_BALANCE);
-}
-
-double AccountEquity() {
-    return AccountInfoDouble(ACCOUNT_EQUITY);
-}
-
-double AccountProfit() {
-    return AccountInfoDouble(ACCOUNT_PROFIT);
-}
-
-double AccountFreeMargin() {
-    return AccountInfoDouble(ACCOUNT_MARGIN_FREE);
-}
-
-string AccountCompany() {
-    return AccountInfoString(ACCOUNT_COMPANY);
-}
-
-string AccountName() {
-    return AccountInfoString(ACCOUNT_NAME);
-}
-
-string AccountServer() {
-    return AccountInfoString(ACCOUNT_SERVER);
-}
-
-int AccountLeverage() {
-    return (int)AccountInfoInteger(ACCOUNT_LEVERAGE);
-}
-
-// OrderSwap() wrapper
-double OrderSwap() {
-    return PositionGetDouble(POSITION_SWAP);
-}
-
-// OrderCommission() wrapper
-double OrderCommission() {
-    // MT5 doesn't have commission in position, only in deal history
-    // For simplicity, return 0 (commission is typically small and included in spread)
-    return 0.0;
-}
-
-// OrderCloseTime() wrapper - MT5 doesn't have this for positions
-// Returns 0 for open positions (positions don't have close time)
-datetime OrderCloseTime() {
-    // In MT5, positions are always open. To check if closed, position won't exist.
-    // This function is used to check if order is already closed
-    // If we can't select the position, it means it's closed
-    return 0;  // Always return 0 for open positions
-}
-
-// OrderClose() wrapper - MT5 uses CTrade or MqlTradeRequest
-bool OrderClose(int ticket, double lots, double price, int slippage, color arrow_color) {
-    // Use PositionClose for MT5
-    MqlTradeRequest request;
-    MqlTradeResult result;
-
-    // Select position first
-    if(!PositionSelectByTicket(ticket)) {
-        return false;  // Position doesn't exist
-    }
-
-    ZeroMemory(request);
-    ZeroMemory(result);
-
-    request.action = TRADE_ACTION_DEAL;
-    request.position = ticket;
-    request.symbol = PositionGetString(POSITION_SYMBOL);
-    request.volume = lots;
-    request.deviation = slippage;
-    request.magic = (int)PositionGetInteger(POSITION_MAGIC);
-
-    // CRITICAL: Set type_filling (MANDATORY in MT5!)
-    request.type_filling = ORDER_FILLING_FOK;
-
-    // Determine if position is BUY or SELL
-    ENUM_POSITION_TYPE pos_type = (ENUM_POSITION_TYPE)PositionGetInteger(POSITION_TYPE);
-    if(pos_type == POSITION_TYPE_BUY) {
-        request.type = ORDER_TYPE_SELL;  // Close BUY with SELL
-        request.price = SymbolInfoDouble(request.symbol, SYMBOL_BID);
-    } else {
-        request.type = ORDER_TYPE_BUY;   // Close SELL with BUY
-        request.price = SymbolInfoDouble(request.symbol, SYMBOL_ASK);
-    }
-
-    return ::OrderSend(request, result);
-}
-
-// OrderModify() wrapper - MT5 uses MqlTradeRequest
-bool OrderModify(int ticket, double price, double sl, double tp, datetime expiration, color arrow_color) {
-    MqlTradeRequest request;
-    MqlTradeResult result;
-
-    if(!PositionSelectByTicket(ticket)) {
-        return false;
-    }
-
-    ZeroMemory(request);
-    ZeroMemory(result);
-
-    request.action = TRADE_ACTION_SLTP;
-    request.position = ticket;
-    request.symbol = PositionGetString(POSITION_SYMBOL);
-    request.sl = sl;
-    request.tp = tp;
-
-    return ::OrderSend(request, result);
-}
-
-// OrderSend() wrapper - MT5 uses MqlTradeRequest structure
-int OrderSend(string symbol, int cmd, double volume, double price, int slippage,
-              double stoploss, double takeprofit, string comment, int magic,
-              datetime expiration, color arrow_color) {
-    MqlTradeRequest request;
-    MqlTradeResult result;
-
-    ZeroMemory(request);
-    ZeroMemory(result);
-
-    request.action = TRADE_ACTION_DEAL;
-    request.symbol = symbol;
-    request.volume = volume;
-    request.deviation = slippage;
-    request.magic = magic;
-    request.comment = comment;
-    request.sl = stoploss;
-    request.tp = takeprofit;
-
-    // CRITICAL: Set type_filling (MANDATORY in MT5!)
-    request.type_filling = ORDER_FILLING_FOK;
-
-    // Convert MT4 order type to MT5
-    if(cmd == OP_BUY) {
-        request.type = ORDER_TYPE_BUY;
-        request.price = SymbolInfoDouble(symbol, SYMBOL_ASK);
-    } else if(cmd == OP_SELL) {
-        request.type = ORDER_TYPE_SELL;
-        request.price = SymbolInfoDouble(symbol, SYMBOL_BID);
-    } else {
-        return -1;  // Only market orders supported
-    }
-
-    if(!::OrderSend(request, result)) {
-        return -1;
-    }
-
-    // CRITICAL FIX: For TRADE_ACTION_DEAL (market orders), server fills result.deal, NOT result.order!
-    // QUAN TRONG: Voi TRADE_ACTION_DEAL (lenh market), server dien result.deal, KHONG PHAI result.order!
-    // Prioritize deal ticket (actual execution) over order ticket (instruction)
-    // Uu tien deal ticket (thuc thi that) hon order ticket (chi thi)
-    if(result.deal > 0) {
-        return (int)result.deal;
-    } else if(result.order > 0) {
-        return (int)result.order;
-    }
-    return -1;
-}
-
-// RefreshRates() wrapper - Not needed in MT5, but keep for compatibility
-void RefreshRates() {
-    // MT5 automatically updates rates, no action needed
-    return;
-}
-
-// MarketInfo() wrapper - MT5 uses SymbolInfoDouble/SymbolInfoInteger
-double MarketInfo(string symbol, int type) {
-    switch(type) {
-        case 16: {  // MODE_MARGINREQUIRED
-            // In MT5, we need to calculate margin requirement
-            // For simplicity, use contract size * current price / leverage
-            double contract_size = SymbolInfoDouble(symbol, SYMBOL_TRADE_CONTRACT_SIZE);
-            double tick_value = SymbolInfoDouble(symbol, SYMBOL_TRADE_TICK_VALUE);
-            double tick_size = SymbolInfoDouble(symbol, SYMBOL_TRADE_TICK_SIZE);
-            double bid = SymbolInfoDouble(symbol, SYMBOL_BID);
-
-            // Simplified margin calculation
-            // This is an approximation - actual margin depends on account leverage and broker settings
-            long leverage = AccountInfoInteger(ACCOUNT_LEVERAGE);
-            if(leverage == 0) leverage = 100;  // Default leverage
-
-            return (contract_size * bid) / leverage;
-        }
-        default:
-            return 0.0;
-    }
-}
-
-// ObjectCreate() wrapper - MT5 requires chart_id
-bool ObjectCreate(string name, int object_type, int sub_window, datetime time1, double price1,
-                  datetime time2=0, double price2=0, datetime time3=0, double price3=0) {
-    return ::ObjectCreate(0, name, (ENUM_OBJECT)object_type, sub_window, time1, price1, time2, price2, time3, price3);
-}
-
-// ObjectSet() wrapper - MT5 uses ObjectSetInteger/ObjectSetDouble
-bool ObjectSet(string name, int prop_id, double value) {
-    // Most common properties are integer-based
-    return ::ObjectSetInteger(0, name, (ENUM_OBJECT_PROPERTY_INTEGER)prop_id, (long)value);
-}
-
-// ObjectSetText() wrapper - MT5 uses ObjectSetString and ObjectSetInteger
-bool ObjectSetText(string name, string text, int font_size, string font_name="", color text_color=clrNONE) {
-    bool result = true;
-    result = result && ::ObjectSetString(0, name, OBJPROP_TEXT, text);
-    if(font_size > 0) {
-        result = result && ::ObjectSetInteger(0, name, OBJPROP_FONTSIZE, font_size);
-    }
-    if(font_name != "") {
-        result = result && ::ObjectSetString(0, name, OBJPROP_FONT, font_name);
-    }
-    if(text_color != clrNONE) {
-        result = result && ::ObjectSetInteger(0, name, OBJPROP_COLOR, text_color);
-    }
-    return result;
-}
-
-// ObjectFind() wrapper - MT5 requires chart_id
-int ObjectFind(string name) {
-    return (int)::ObjectFind(0, name);
-}
-
-// ObjectDelete() wrapper - MT5 requires chart_id
-bool ObjectDelete(string name) {
-    return ::ObjectDelete(0, name);
-}
-
-// Bid and Ask predefined variables - MT5 uses SymbolInfoDouble
-#define Bid SymbolInfoDouble(_Symbol, SYMBOL_BID)
-#define Ask SymbolInfoDouble(_Symbol, SYMBOL_ASK)
-
-// Digits predefined variable - MT5 uses _Digits
-#define Digits _Digits
-
-//=============================================================================
-//  END OF MT4 COMPATIBILITY LAYER | KẾT THÚC LỚP TƯƠNG THÍCH MT4
-//=============================================================================
-
 // Normalize lot size to broker requirements | Chuan hoa khoi luong theo yeu cau san
 double NormalizeLotSize(double lot_size) {
-    double min_lot = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MIN);
-    double max_lot = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MAX);
-    double lot_step = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_STEP);
+    double min_lot = MarketInfo(_Symbol, MODE_MINLOT);
+    double max_lot = MarketInfo(_Symbol, MODE_MAXLOT);
+    double lot_step = MarketInfo(_Symbol, MODE_LOTSTEP);
 
     if(lot_size < min_lot) lot_size = min_lot;
     if(lot_size > max_lot) lot_size = max_lot;
@@ -802,7 +669,7 @@ bool InitializeSymbolRecognition() {
 // Initialize symbol prefix with underscore | Khoi tao tien to ky hieu voi gach duoi
 void InitializeSymbolPrefix() {
     // Set normalized symbol name for API calls (optional, can be disabled)
-    if(EnableSymbolNormalization) {
+    if(EnableSymbolNormal) {
         g_ea.normalized_symbol_name = NormalizeSymbolName(g_ea.symbol_name);
     } else {
         // Use exact symbol name from broker (no normalization)
@@ -1047,8 +914,7 @@ bool ReadCSDLFromHTTP() {
 
     // Send HTTP GET request (timeout 500ms = 0.5s)
     // Timeout 500ms is suitable for LAN/VPS (typically <100ms)
-    // MT5 syntax: WebRequest(method, url, headers, timeout, data[], result[], result_headers)
-    int res = WebRequest("GET", url, headers, 500, post_data, result, result_headers);
+    int res = WebRequest("GET", url, "", headers, 500, post_data, 0, result, result_headers);
 
     // Check for errors
     if(res == -1) {
@@ -1056,10 +922,10 @@ bool ReadCSDLFromHTTP() {
         DebugPrint("[HTTP_ERROR] Cannot connect to API: " + url + " Error:" + IntegerToString(error));
 
         // Common errors:
-        // 4060 = URL not allowed (need to add URL in MT5 settings)
+        // 4060 = URL not allowed (need to add URL in MT4 settings)
         // 4014 = WebRequest not allowed
         if(error == 4060) {
-            DebugPrint("[HTTP_ERROR] URL not allowed! Add URL in MT5: Tools > Options > Expert Advisors > Allow WebRequest");
+            DebugPrint("[HTTP_ERROR] URL not allowed! Add URL in MT4: Tools > Options > Expert Advisors > Allow WebRequest");
         }
 
         return false;
@@ -1101,13 +967,14 @@ void ReadCSDLFile() {
         success = ReadCSDLFromHTTP();
 
         if(!success) {
-            // TRY 2: Wait 100ms and retry HTTP | Lan 2: Cho 100ms va thu lai HTTP
+            // TRY 2: Retry HTTP after 100ms | Lan 2: Thu lai HTTP sau 100ms
             Sleep(100);
             success = ReadCSDLFromHTTP();
         }
 
         // NO FALLBACK to local file - If HTTP fails, something is seriously wrong
-        // Khong fallback sang file local - Neu HTTP loi thi co van de nghiem trong
+        // KHONG fallback sang file local - Neu HTTP loi, co van de nghiem trong
+        // User should check: 1) Python Bot running? 2) Network OK? 3) API Key correct?
     }
     // ========== MODE 2: LOCAL FILE (FOLDER_1 / FOLDER_2 / FOLDER_3) ==========
     else {
@@ -1238,9 +1105,9 @@ void InitializeLotSizes() {
     }
 
     // Silent - only debug log | Im lang - chi log debug
-    DebugPrint("Lot M1: S1=" + DoubleToString(g_ea.lot_sizes[0][0], 2) +
-               " S2=" + DoubleToString(g_ea.lot_sizes[0][1], 2) +
-               " S3=" + DoubleToString(g_ea.lot_sizes[0][2], 2));
+    DebugPrint("Lot M1: S1=" + DoubleToStr(g_ea.lot_sizes[0][0], 2) +
+               " S2=" + DoubleToStr(g_ea.lot_sizes[0][1], 2) +
+               " S3=" + DoubleToStr(g_ea.lot_sizes[0][2], 2));
 }
 
 //=============================================================================
@@ -1264,9 +1131,9 @@ void InitializeLayer1Thresholds() {
     }
 
     // Silent - only debug log | Im lang - chi log debug
-    DebugPrint("Layer1 M1: S1=$" + DoubleToString(g_ea.layer1_thresholds[0][0], 2) +
-               " S2=$" + DoubleToString(g_ea.layer1_thresholds[0][1], 2) +
-               " S3=$" + DoubleToString(g_ea.layer1_thresholds[0][2], 2));
+    DebugPrint("Layer1 M1: S1=$" + DoubleToStr(g_ea.layer1_thresholds[0][0], 2) +
+               " S2=$" + DoubleToStr(g_ea.layer1_thresholds[0][1], 2) +
+               " S3=$" + DoubleToStr(g_ea.layer1_thresholds[0][2], 2));
 }
 
 //=============================================================================
@@ -1344,14 +1211,14 @@ bool RestoreOrCleanupPositions() {
     int closed_count = 0;
 
     // Step 2: Scan all open orders | Buoc 2: Quet tat ca lenh mo
-    for(int i = PositionsTotal() - 1; i >= 0; i--) {
+    for(int i = OrdersTotal() - 1; i >= 0; i--) {
         if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) continue;
 
         // Get order info | Lay thong tin lenh
         int magic = OrderMagicNumber();
         int ticket = OrderTicket();
         int order_type = OrderType();
-        string order_symbol = OrderSymbol();
+        string order_symbol = Order_Symbol;
 
         // Filter: Only this symbol | Loc: Chi lenh cua symbol nay
         if(order_symbol != _Symbol) continue;
@@ -1464,9 +1331,9 @@ void CloseAllStrategiesByMagicForTF(int tf) {
     int signal_new = g_ea.csdl_rows[tf].signal;
     datetime timestamp_new = (datetime)g_ea.csdl_rows[tf].timestamp;
 
-    for(int i = PositionsTotal() - 1; i >= 0; i--) {
+    for(int i = OrdersTotal() - 1; i >= 0; i--) {
         if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) continue;
-        if(OrderSymbol() != _Symbol) continue;
+        if(Order_Symbol != _Symbol) continue;
 
         int magic = OrderMagicNumber();
         int ticket = OrderTicket();
@@ -1486,8 +1353,8 @@ void CloseAllStrategiesByMagicForTF(int tf) {
         if(strategy_index >= 0) {
             string order_type_str = (order_type == OP_BUY) ? "BUY" : "SELL";
             Print(">> [CLOSE] SIGNAL_CHG TF=", G_TF_NAMES[tf], " S=", (strategy_index+1),
-                  " | #", ticket, " ", order_type_str, " ", DoubleToString(order_lot, 2),
-                  " | Profit=$", DoubleToString(order_profit, 2),
+                  " | #", ticket, " ", order_type_str, " ", DoubleToStr(order_lot, 2),
+                  " | Profit=$", DoubleToStr(order_profit, 2),
                   " | Old:", signal_old, " New:", signal_new,
                   " | Timestamp:", IntegerToString(timestamp_new), " <<");
 
@@ -1516,9 +1383,9 @@ void CloseAllBonusOrders() {
         double total_lot = 0;
 
         // Scan all orders on MT4 | Quet tat ca lenh tren MT4
-        for(int i = PositionsTotal() - 1; i >= 0; i--) {
+        for(int i = OrdersTotal() - 1; i >= 0; i--) {
             if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) continue;
-            if(OrderSymbol() != _Symbol) continue;
+            if(Order_Symbol != _Symbol) continue;
 
             // If magic matches, close it | Neu magic trung, dong no
             if(OrderMagicNumber() == target_magic) {
@@ -1537,8 +1404,8 @@ void CloseAllBonusOrders() {
         // Consolidated log | Log tong hop
         if(total_count > 0) {
             Print(">> [CLOSE] BONUS_M1 TF=", G_TF_NAMES[tf],
-                  " | ", total_count, " orders Total:", DoubleToString(total_lot, 2),
-                  " | Profit=$", DoubleToString(total_profit, 2),
+                  " | ", total_count, " orders Total:", DoubleToStr(total_lot, 2),
+                  " | Profit=$", DoubleToStr(total_profit, 2),
                   " | Closed:", closed_count, "/", total_count, " <<");
         }
 
@@ -1551,9 +1418,9 @@ void CloseS1OrdersByM1() {
     for(int tf = 0; tf < 7; tf++) {
         if(!IsTFEnabled(tf)) continue;
         int target_magic = g_ea.magic_numbers[tf][0];
-        for(int i = PositionsTotal() - 1; i >= 0; i--) {
+        for(int i = OrdersTotal() - 1; i >= 0; i--) {
             if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) continue;
-            if(OrderSymbol() != _Symbol) continue;
+            if(Order_Symbol != _Symbol) continue;
             if(OrderMagicNumber() == target_magic) {
                 CloseOrderSafely(OrderTicket(), "S1_M1_CLOSE");
             }
@@ -1567,9 +1434,9 @@ void CloseS2OrdersByM1() {
     for(int tf = 0; tf < 7; tf++) {
         if(!IsTFEnabled(tf)) continue;
         int target_magic = g_ea.magic_numbers[tf][1];
-        for(int i = PositionsTotal() - 1; i >= 0; i--) {
+        for(int i = OrdersTotal() - 1; i >= 0; i--) {
             if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) continue;
-            if(OrderSymbol() != _Symbol) continue;
+            if(Order_Symbol != _Symbol) continue;
             if(OrderMagicNumber() == target_magic) {
                 CloseOrderSafely(OrderTicket(), "S2_M1_CLOSE");
             }
@@ -1581,9 +1448,9 @@ void CloseS2OrdersByM1() {
 // Close only S3 for specific TF | Dong chi S3 cho TF cu the
 void CloseS3OrdersForTF(int tf) {
     int target_magic = g_ea.magic_numbers[tf][2];
-    for(int i = PositionsTotal() - 1; i >= 0; i--) {
+    for(int i = OrdersTotal() - 1; i >= 0; i--) {
         if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) continue;
-        if(OrderSymbol() != _Symbol) continue;
+        if(Order_Symbol != _Symbol) continue;
         if(OrderMagicNumber() == target_magic) {
             CloseOrderSafely(OrderTicket(), "S3_SIGNAL_CHG");
         }
@@ -1637,7 +1504,7 @@ void OpenS1Order(int tf, int signal, string mode) {
 
         string log_msg = ">>> [OPEN] S1_" + mode + " TF=" + G_TF_NAMES[tf] +
                          " | #" + IntegerToString(ticket) + " " + type_str + " " +
-                         DoubleToString(g_ea.lot_sizes[tf][0], 2) + " @" + DoubleToString(price, Digits) +
+                         DoubleToStr(g_ea.lot_sizes[tf][0], 2) + " @" + DoubleToStr(price, Digits) +
                          " | Sig=" + IntegerToString(signal);
 
         if(mode == "NEWS") {
@@ -1743,7 +1610,7 @@ void ProcessS2Strategy(int tf) {
             string trend_str = trend_to_follow == 1 ? "UP" : "DOWN";
             string mode_str = (S2_TrendMode == 0) ? "AUTO" : (S2_TrendMode == 1) ? "FBUY" : "FSELL";
             Print(">>> [OPEN] S2_TREND TF=", G_TF_NAMES[tf], " | #", ticket, " BUY ",
-                  DoubleToString(g_ea.lot_sizes[tf][1], 2), " @", DoubleToString(Ask, Digits),
+                  DoubleToStr(g_ea.lot_sizes[tf][1], 2), " @", DoubleToStr(Ask, Digits),
                   " | Sig=+1 Trend:", trend_str, " Mode:", mode_str, " | Timestamp:", IntegerToString(timestamp), " <<<");
         } else {
             g_ea.position_flags[tf][1] = 0;
@@ -1759,7 +1626,7 @@ void ProcessS2Strategy(int tf) {
             string trend_str = trend_to_follow == -1 ? "DOWN" : "UP";
             string mode_str = (S2_TrendMode == 0) ? "AUTO" : (S2_TrendMode == 1) ? "FBUY" : "FSELL";
             Print(">>> [OPEN] S2_TREND TF=", G_TF_NAMES[tf], " | #", ticket, " SELL ",
-                  DoubleToString(g_ea.lot_sizes[tf][1], 2), " @", DoubleToString(Bid, Digits),
+                  DoubleToStr(g_ea.lot_sizes[tf][1], 2), " @", DoubleToStr(Bid, Digits),
                   " | Sig=-1 Trend:", trend_str, " Mode:", mode_str, " | Timestamp:", IntegerToString(timestamp), " <<<");
         } else {
             g_ea.position_flags[tf][1] = 0;
@@ -1802,7 +1669,7 @@ void ProcessS3Strategy(int tf) {
             g_ea.position_flags[tf][2] = 1;
             string arrow = (news_direction > 0) ? "↑" : "↓";
             Print(">>> [OPEN] S3_NEWS TF=", G_TF_NAMES[tf], " | #", ticket, " BUY ",
-                  DoubleToString(g_ea.lot_sizes[tf][2], 2), " @", DoubleToString(Ask, Digits),
+                  DoubleToStr(g_ea.lot_sizes[tf][2], 2), " @", DoubleToStr(Ask, Digits),
                   " | Sig=+1 News=", news_direction > 0 ? "+" : "", IntegerToString(news_level), arrow,
                   " | Timestamp:", IntegerToString(timestamp), " <<<");
         } else {
@@ -1818,7 +1685,7 @@ void ProcessS3Strategy(int tf) {
             g_ea.position_flags[tf][2] = 1;
             string arrow = (news_direction > 0) ? "↑" : "↓";
             Print(">>> [OPEN] S3_NEWS TF=", G_TF_NAMES[tf], " | #", ticket, " SELL ",
-                  DoubleToString(g_ea.lot_sizes[tf][2], 2), " @", DoubleToString(Bid, Digits),
+                  DoubleToStr(g_ea.lot_sizes[tf][2], 2), " @", DoubleToStr(Bid, Digits),
                   " | Sig=-1 News=", news_direction > 0 ? "+" : "", IntegerToString(news_level), arrow,
                   " | Timestamp:", IntegerToString(timestamp), " <<<");
         } else {
@@ -1892,10 +1759,10 @@ void ProcessBonusNews() {
             string arrow = (news_direction > 0) ? "↑" : "↓";
             double total_lot = opened_count * bonus_lot;
             Print(">>> [OPEN] BONUS TF=", G_TF_NAMES[tf], " | ", opened_count, "×",
-                  news_direction == 1 ? "BUY" : "SELL", " @", DoubleToString(bonus_lot, 2),
-                  " Total:", DoubleToString(total_lot, 2), " @", DoubleToString(entry_price, Digits),
+                  news_direction == 1 ? "BUY" : "SELL", " @", DoubleToStr(bonus_lot, 2),
+                  " Total:", DoubleToStr(total_lot, 2), " @", DoubleToStr(entry_price, Digits),
                   " | News=", news_direction > 0 ? "+" : "", IntegerToString(news_level), arrow,
-                  " | Multiplier:", DoubleToString(BonusLotMultiplier, 1), "x",
+                  " | Multiplier:", DoubleToStr(BonusLotMultiplier, 1), "x",
                   " Tickets:", ticket_list, " <<<");
         }
     }
@@ -1909,12 +1776,12 @@ void ProcessBonusNews() {
 // Stoploss: 2 layers (LAYER1, LAYER2) | Cat lo: 2 tang
 // Take profit: 1 layer (based on max_loss × multiplier) | Chot loi: 1 tang (dua tren max_loss × he so)
 void CheckStoplossAndTakeProfit() {
-    if(PositionsTotal() == 0) return;
+    if(OrdersTotal() == 0) return;
 
     // Scan all orders once | Quet tat ca lenh 1 lan duy nhat
-    for(int i = PositionsTotal() - 1; i >= 0; i--) {
+    for(int i = OrdersTotal() - 1; i >= 0; i--) {
         if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) continue;
-        if(OrderSymbol() != _Symbol) continue;
+        if(Order_Symbol != _Symbol) continue;
 
         int magic = OrderMagicNumber();
         int ticket = OrderTicket();
@@ -1955,12 +1822,12 @@ void CheckStoplossAndTakeProfit() {
                             string margin_info = "";
                             if(mode_name == "LAYER2_SL") {
                                 double margin_usd = OrderLots() * MarketInfo(_Symbol, MODE_MARGINREQUIRED);
-                                margin_info = " Margin=$" + DoubleToString(margin_usd, 2);
+                                margin_info = " Margin=$" + DoubleToStr(margin_usd, 2);
                             }
                             Print(">> [CLOSE] ", short_mode, " TF=", G_TF_NAMES[tf], " S=", (s+1),
-                                  " | #", ticket, " ", order_type_str, " ", DoubleToString(OrderLots(), 2),
-                                  " | Loss=$", DoubleToString(profit, 2),
-                                  " | Threshold=$", DoubleToString(sl_threshold, 2), margin_info, " <<");
+                                  " | #", ticket, " ", order_type_str, " ", DoubleToStr(OrderLots(), 2),
+                                  " | Loss=$", DoubleToStr(profit, 2),
+                                  " | Threshold=$", DoubleToStr(sl_threshold, 2), margin_info, " <<");
 
                             if(CloseOrderSafely(ticket, mode_name)) {
                                 g_ea.position_flags[tf][s] = 0;
@@ -1984,10 +1851,10 @@ void CheckStoplossAndTakeProfit() {
                         if(profit >= tp_threshold) {
                             string order_type_str = (OrderType() == OP_BUY) ? "BUY" : "SELL";
                             Print(">> [CLOSE] TP TF=", G_TF_NAMES[tf], " S=", (s+1),
-                                  " | #", ticket, " ", order_type_str, " ", DoubleToString(OrderLots(), 2),
-                                  " | Profit=$", DoubleToString(profit, 2),
-                                  " | Threshold=$", DoubleToString(tp_threshold, 2),
-                                  " Mult=", DoubleToString(TakeProfit_Multiplier, 2), " <<");
+                                  " | #", ticket, " ", order_type_str, " ", DoubleToStr(OrderLots(), 2),
+                                  " | Profit=$", DoubleToStr(profit, 2),
+                                  " | Threshold=$", DoubleToStr(tp_threshold, 2),
+                                  " Mult=", DoubleToStr(TakeProfit_Multiplier, 2), " <<");
 
                             if(CloseOrderSafely(ticket, "TAKE_PROFIT")) {
                                 g_ea.position_flags[tf][s] = 0;
@@ -2017,7 +1884,7 @@ void CheckAllEmergencyConditions() {
         double drawdown_percent = ((balance - equity) / balance) * 100;
 
         if(drawdown_percent > 25.0) {
-            Print("[WARNING] Drawdown: ", DoubleToString(drawdown_percent, 2), "%");
+            Print("[WARNING] Drawdown: ", DoubleToStr(drawdown_percent, 2), "%");
         }
     }
 }
@@ -2036,7 +1903,7 @@ void SmartTFReset() {
     Print("=======================================================");
 
     string current_symbol = _Symbol;
-    int current_period = _Period;
+    int current_period = Period();
     long current_chart_id = ChartID();
 
     // Step 1: Define FIXED reset order: M5→M15→M30→H1→H4→D1→M1 | Dinh nghia thu tu reset CO DINH: M5→M15→M30→H1→H4→D1→M1
@@ -2074,7 +1941,7 @@ void SmartTFReset() {
                 // Reset via W1 | Reset qua W1
                 ChartSetSymbolPeriod(temp_chart, current_symbol, PERIOD_W1);
                 Sleep(1000);
-                ChartSetSymbolPeriod(temp_chart, current_symbol, (ENUM_TIMEFRAMES)target_period);
+                ChartSetSymbolPeriod(temp_chart, current_symbol, target_period);
                 Sleep(1000);
 
                 total_reset++;
@@ -2096,7 +1963,7 @@ void CheckWeekendReset() {
     if(!EnableWeekendReset) return;
 
     // ONLY M1 chart can trigger reset (to avoid conflict) | CHI chart M1 moi duoc trigger reset (tranh xung dot)
-    if(_Period != PERIOD_M1) return;
+    if(Period() != PERIOD_M1) return;
 
     datetime current_time = TimeCurrent();
     int day_of_week = TimeDayOfWeek(current_time);
@@ -2127,7 +1994,7 @@ void CheckSPYBotHealth() {
     if(!EnableHealthCheck) return;
 
     // ONLY M1 chart can check health (to avoid conflict) | CHI chart M1 moi duoc kiem tra (tranh xung dot)
-    if(_Period != PERIOD_M1) return;
+    if(Period() != PERIOD_M1) return;
 
     datetime current_time = TimeCurrent();
     int hour = TimeHour(current_time);
@@ -2244,8 +2111,8 @@ int OnInit() {
     if(S3_NEWS) { strat_status += "S3,"; strat_count++; }
     if(StringLen(strat_status) > 0) strat_status = StringSubstr(strat_status, 0, StringLen(strat_status) - 1);
 
-    string sl_mode = (StoplossMode == LAYER1_MAXLOSS) ? "L1" : ("L2/" + DoubleToString(Layer2_Divisor, 0));
-    string master_mode = (_Period==PERIOD_M1) ? "M1" : "M5-D1";
+    string sl_mode = (StoplossMode == LAYER1_MAXLOSS) ? "L1" : ("L2/" + DoubleToStr(Layer2_Divisor, 0));
+    string master_mode = (Period()==PERIOD_M1) ? "M1" : "M5-D1";
 
     // CSDL source name | Ten nguon CSDL
     string folder_name = "";
@@ -2261,7 +2128,7 @@ int OnInit() {
 
     g_ea.init_summary = "[INIT] " + g_ea.symbol_name + " | SL:" + sl_mode +
                         " News:7TF(" + news_str + ") Trend:" + trend_str +
-                        " | Lot:" + DoubleToString(g_ea.lot_sizes[0][0], 2) + "-" + DoubleToString(g_ea.lot_sizes[6][2], 2) +
+                        " | Lot:" + DoubleToStr(g_ea.lot_sizes[0][0], 2) + "-" + DoubleToStr(g_ea.lot_sizes[6][2], 2) +
                         " | TF:" + IntegerToString(tf_count) + " S:" + IntegerToString(strat_count) +
                         " | Folder:" + folder_name + " Master:" + master_mode +
                         " Magic:" + IntegerToString(g_ea.magic_numbers[0][0]) + "-" + IntegerToString(g_ea.magic_numbers[6][2]);
@@ -2284,23 +2151,22 @@ void OnDeinit(const int reason) {
 
     // Delete all dashboard labels (15 labels: dash_0 to dash_14) | Xoa tat ca label dashboard
     // ✅ FIX: Use g_ea.symbol_prefix to delete objects correctly | Su dung g_ea.symbol_prefix de xoa dung
-    // IMPORTANT: Use direct MT5 call (not wrapper) to ensure objects are deleted
     for(int i = 0; i <= 14; i++) {
         string obj_name = g_ea.symbol_prefix + "dash_" + IntegerToString(i);
-        if(::ObjectFind(0, obj_name) >= 0) {
-            ::ObjectDelete(0, obj_name);
+        if(ObjectFind(obj_name) >= 0) {
+            ObjectDelete(obj_name);
         }
     }
 
     // Delete all objects with symbol_prefix + "dash_" pattern (cleanup any orphaned objects)
     // Xoa tat ca object co pattern symbol_prefix + "dash_" (don dep cac object con sot lai)
-    int total = ::ObjectsTotal(0);
+    int total = ObjectsTotal();
     for(int i = total - 1; i >= 0; i--) {
-        string obj_name = ::ObjectName(0, i);
+        string obj_name = ObjectName(i);
         // Check if object name starts with symbol_prefix AND contains "dash_"
         // Kiem tra object bat dau bang symbol_prefix VA chua "dash_"
         if(StringFind(obj_name, g_ea.symbol_prefix) == 0 && StringFind(obj_name, "dash_") > 0) {
-            ::ObjectDelete(0, obj_name);
+            ObjectDelete(obj_name);
         }
     }
 
@@ -2327,9 +2193,9 @@ void ScanAllOrdersForDashboard(int &total_orders, double &total_profit, double &
     int s1_count = 0;
     int s2s3_count = 0;
 
-    for(int i = 0; i < PositionsTotal(); i++) {
+    for(int i = 0; i < OrdersTotal(); i++) {
         if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) continue;
-        if(OrderSymbol() != _Symbol) continue;
+        if(Order_Symbol != _Symbol) continue;
 
         int magic = OrderMagicNumber();
         double profit = OrderProfit() + OrderSwap() + OrderCommission();
@@ -2346,7 +2212,7 @@ void ScanAllOrdersForDashboard(int &total_orders, double &total_profit, double &
                 s1_count++;
                 if(s1_count <= 7) {  // Max 7 (all TF) | Toi da 7 (tat ca TF)
                     if(s1_count > 1) s1_summary += ", ";
-                    s1_summary += "S1_" + G_TF_NAMES[tf] + "[$" + DoubleToString(margin_usd, 0) + "]";
+                    s1_summary += "S1_" + G_TF_NAMES[tf] + "[$" + DoubleToStr(margin_usd, 0) + "]";
                 }
                 break;
             }
@@ -2360,7 +2226,7 @@ void ScanAllOrdersForDashboard(int &total_orders, double &total_profit, double &
                 if(s2s3_count <= 7) {  // Show first 7 | Chi hien 7 dau
                     string strategy = (magic == g_ea.magic_numbers[tf][1]) ? "S2" : "S3";
                     if(s2s3_count > 1) s2s3_summary += ", ";
-                    s2s3_summary += strategy + "_" + G_TF_NAMES[tf] + "[$" + DoubleToString(margin_usd, 0) + "]";
+                    s2s3_summary += strategy + "_" + G_TF_NAMES[tf] + "[$" + DoubleToStr(margin_usd, 0) + "]";
                 }
                 break;
             }
@@ -2404,9 +2270,9 @@ double CalculateTFPnL(int tf) {
         int target_magic = g_ea.magic_numbers[tf][s];
 
         // Scan all orders to find matching magic | Quet tat ca lenh de tim magic khop
-        for(int i = 0; i < PositionsTotal(); i++) {
+        for(int i = 0; i < OrdersTotal(); i++) {
             if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) continue;
-            if(OrderSymbol() != _Symbol) continue;
+            if(Order_Symbol != _Symbol) continue;
             if(OrderMagicNumber() == target_magic) {
                 total_pnl += OrderProfit() + OrderSwap() + OrderCommission();
             }
@@ -2420,9 +2286,9 @@ double CalculateTFPnL(int tf) {
 bool HasBonusOrders(int tf) {
     int target_magic = g_ea.magic_numbers[tf][2]; // S3 magic for this TF | Magic S3 cho TF nay
 
-    for(int i = 0; i < PositionsTotal(); i++) {
+    for(int i = 0; i < OrdersTotal(); i++) {
         if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) continue;
-        if(OrderSymbol() != _Symbol) continue;
+        if(Order_Symbol != _Symbol) continue;
         if(OrderMagicNumber() == target_magic) {
             // Check if comment contains "BONUS" | Kiem tra comment co chua "BONUS"
             string comment = OrderComment();
@@ -2530,9 +2396,9 @@ void UpdateDashboard() {
     ArrayInitialize(bonus_count_per_tf, 0);
     ArrayInitialize(bonus_lots_per_tf, 0.0);
 
-    for(int i = 0; i < PositionsTotal(); i++) {
+    for(int i = 0; i < OrdersTotal(); i++) {
         if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) continue;
-        if(OrderSymbol() != _Symbol) continue;
+        if(Order_Symbol != _Symbol) continue;
 
         double order_pnl = OrderProfit() + OrderSwap() + OrderCommission();
         int magic = OrderMagicNumber();
@@ -2564,7 +2430,7 @@ void UpdateDashboard() {
 
     // ===== LINE 0: HEADER (YELLOW) | TIEU DE (VANG)
     string header = "[" + g_ea.symbol_name + "] " + folder + " | 7TFx3S | D1:" + trend +
-                    " | $" + DoubleToString(equity, 0) + " DD:" + DoubleToString(dd, 1) + "% | " +
+                    " | $" + DoubleToStr(equity, 0) + " DD:" + DoubleToStr(dd, 1) + "% | " +
                     IntegerToString(total_orders) + "/21";
     CreateOrUpdateLabel(g_ea.symbol_prefix + "dash_0", header, 10, y_pos, clrYellow, 9);
     y_pos += line_height;
@@ -2606,15 +2472,15 @@ void UpdateDashboard() {
         else sig = "-";                             // NONE | Khong co
 
         // S1/S2/S3 positions | Vi the S1/S2/S3
-        string s1 = (g_ea.position_flags[tf][0] == 1) ? "*" + DoubleToString(g_ea.lot_sizes[tf][0], 2) : "o";
-        string s2 = (g_ea.position_flags[tf][1] == 1) ? "*" + DoubleToString(g_ea.lot_sizes[tf][1], 2) : "o";
-        string s3 = (g_ea.position_flags[tf][2] == 1) ? "*" + DoubleToString(g_ea.lot_sizes[tf][2], 2) : "o";
+        string s1 = (g_ea.position_flags[tf][0] == 1) ? "*" + DoubleToStr(g_ea.lot_sizes[tf][0], 2) : "o";
+        string s2 = (g_ea.position_flags[tf][1] == 1) ? "*" + DoubleToStr(g_ea.lot_sizes[tf][1], 2) : "o";
+        string s3 = (g_ea.position_flags[tf][2] == 1) ? "*" + DoubleToStr(g_ea.lot_sizes[tf][2], 2) : "o";
 
         // P&L for this TF (all strategies) | Lai lo cho TF nay (tat ca chien luoc)
         double tf_pnl = CalculateTFPnL(tf);
         string pnl_str = "";
-        if(tf_pnl > 0) pnl_str = "+" + DoubleToString(tf_pnl, 2);
-        else if(tf_pnl < 0) pnl_str = DoubleToString(tf_pnl, 2);
+        if(tf_pnl > 0) pnl_str = "+" + DoubleToStr(tf_pnl, 2);
+        else if(tf_pnl < 0) pnl_str = DoubleToStr(tf_pnl, 2);
         else pnl_str = "+0.00";
 
         // News with sign | Tin tuc voi dau
@@ -2625,7 +2491,7 @@ void UpdateDashboard() {
         string bonus_str = "-";
         if(bonus_count_per_tf[tf] > 0) {
             bonus_str = IntegerToString(bonus_count_per_tf[tf]) + "|" +
-                        DoubleToString(bonus_lots_per_tf[tf], 2);
+                        DoubleToStr(bonus_lots_per_tf[tf], 2);
         }
 
         // Build row with fixed-width columns | Xay dung dong voi cot co dinh
@@ -2650,12 +2516,12 @@ void UpdateDashboard() {
 
     // ===== LINE 13: NET SUMMARY (Yellow) | TOM TAT NET (Vang)
     double net = total_profit + total_loss;
-    string net_summary = "NET:$" + DoubleToString(net, 2);
+    string net_summary = "NET:$" + DoubleToStr(net, 2);
 
     // Add strategy breakdown if there are orders | Them phan tich chien luoc neu co lenh
-    if(s1_count > 0) net_summary += " | S1:" + IntegerToString(s1_count) + "x$" + DoubleToString(s1_pnl, 0);
-    if(s2_count > 0) net_summary += " | S2:" + IntegerToString(s2_count) + "x$" + DoubleToString(s2_pnl, 0);
-    if(s3_count > 0) net_summary += " | S3:" + IntegerToString(s3_count) + "x$" + DoubleToString(s3_pnl, 1);
+    if(s1_count > 0) net_summary += " | S1:" + IntegerToString(s1_count) + "x$" + DoubleToStr(s1_pnl, 0);
+    if(s2_count > 0) net_summary += " | S2:" + IntegerToString(s2_count) + "x$" + DoubleToStr(s2_pnl, 0);
+    if(s3_count > 0) net_summary += " | S3:" + IntegerToString(s3_count) + "x$" + DoubleToStr(s3_pnl, 1);
 
     net_summary += " | " + IntegerToString(total_orders) + "/21";
 
@@ -2726,9 +2592,9 @@ void OnTimer() {
                 if(S1_CloseByM1 && S2_CloseByM1) {
                     CloseS3OrdersForTF(tf);
                 } else if(S1_CloseByM1) {
-                    for(int i = PositionsTotal() - 1; i >= 0; i--) {
+                    for(int i = OrdersTotal() - 1; i >= 0; i--) {
                         if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) continue;
-                        if(OrderSymbol() != _Symbol) continue;
+                        if(Order_Symbol != _Symbol) continue;
                         int magic = OrderMagicNumber();
                         if(magic == g_ea.magic_numbers[tf][1] || magic == g_ea.magic_numbers[tf][2]) {
                             CloseOrderSafely(OrderTicket(), "SIGNAL_CHANGE");
@@ -2737,9 +2603,9 @@ void OnTimer() {
                     g_ea.position_flags[tf][1] = 0;
                     g_ea.position_flags[tf][2] = 0;
                 } else if(S2_CloseByM1) {
-                    for(int j = PositionsTotal() - 1; j >= 0; j--) {
+                    for(int j = OrdersTotal() - 1; j >= 0; j--) {
                         if(!OrderSelect(j, SELECT_BY_POS, MODE_TRADES)) continue;
-                        if(OrderSymbol() != _Symbol) continue;
+                        if(Order_Symbol != _Symbol) continue;
                         int order_magic = OrderMagicNumber();
                         if(order_magic == g_ea.magic_numbers[tf][0] || order_magic == g_ea.magic_numbers[tf][2]) {
                             CloseOrderSafely(OrderTicket(), "SIGNAL_CHANGE");
