@@ -3,7 +3,7 @@
   "quiet_mode": true,
   "sender": {
     "api_key": "",
-    "vps_ip": "147.189.173.121",
+    "vps_ip": "dungalading.duckdns.org",
     "api_port": 80,
     "dashboard_port": 9070,
     "server_ip": "0.0.0.0",
@@ -44,7 +44,7 @@
     "mt_platforms": []
   },
   "server": {
-    "vps_ip": "147.189.173.121",
+    "vps_ip": "dungalading.duckdns.org",
     "csdl_folder": "E:/PRO_ONER/MQL4/Files/DataAutoOner3/",
     "history_folder": "E:/PRO_ONER/MQL4/Files/DataAutoOner/HISTORY/",
     "polling_interval": 1,
