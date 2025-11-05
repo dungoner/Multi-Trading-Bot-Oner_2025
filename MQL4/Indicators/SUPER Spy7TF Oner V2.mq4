@@ -1,7 +1,7 @@
 //+-----------------------------------------------------------------------------------+
-// SUPER SPY BOT V2 - Multi-Timeframe Signal Monitor | BOT GIAM SAT TIN HIEU NHIEU KHUNG THOI GIAN V2
+//  Super_Spy7mtf Oner_V2 - Multi-Timeframe Signal Monitor | BOT GIAM SAT TIN HIEU NHIEU KHUNG THOI GIAN V2
 //+-----------------------------------------------------------------------------------+
-#property copyright "SUPER_Spy7TF_Oner V2 - Multi-Timeframe Signal Spy with NEWS CASCADE Analysis"
+#property copyright "Super_Spy7mtf Oner_V2 - Multi-Timeframe Signal Spy with NEWS CASCADE Analysis"
 
 #property link      "CSDL1: 8 Columns + CSDL3: 2 Strategies Only"
 #property strict
@@ -34,7 +34,7 @@ input double NewsBaseLiveDiff = 1.5;                         // L1 Base Live Dif
 input double NewsLiveDiffStep = 0.5;                         // Live Diff increment per level (USD) | Tang Live Diff moi cap
 input int    NewsBaseTimeMinutes = 2;                        // Category 2 Base Time (minutes) 2^level | Thoi gian co so Category 2
 input bool   EnableCategoryUser = true;                      // Enable Category 2 (User Reference) | Bat Category 2 (tham khao)
-input double NewsCascadeMultiplier = 0.3;                    // Category 2 USD Threshold Base (0.1->0.7 for L1-L7) | He so nguong USD Category 2
+input double NewsCascadeMultiplier = 0.3;                    // Category 2 USD Threshold Base (0.1->0.7 for L1-L7) | Nguong USD Category 2
 
 //==============================================================================
 //  SECTION 2: DATA STRUCTURES (3 structs) | PHAN 2: CAU TRUC DU LIEU
