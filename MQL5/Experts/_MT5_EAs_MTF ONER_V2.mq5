@@ -428,6 +428,9 @@ bool OrderClose(int ticket, double lots, double price, int slippage, color arrow
     request.deviation = slippage;
     request.magic = (int)PositionGetInteger(POSITION_MAGIC);
 
+    // CRITICAL: Set type_filling (MANDATORY in MT5!)
+    request.type_filling = ORDER_FILLING_FOK;
+
     // Determine if position is BUY or SELL
     ENUM_POSITION_TYPE pos_type = (ENUM_POSITION_TYPE)PositionGetInteger(POSITION_TYPE);
     if(pos_type == POSITION_TYPE_BUY) {
@@ -480,6 +483,9 @@ int OrderSend(string symbol, int cmd, double volume, double price, int slippage,
     request.comment = comment;
     request.sl = stoploss;
     request.tp = takeprofit;
+
+    // CRITICAL: Set type_filling (MANDATORY in MT5!)
+    request.type_filling = ORDER_FILLING_FOK;
 
     // Convert MT4 order type to MT5
     if(cmd == OP_BUY) {
