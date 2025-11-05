@@ -1,10 +1,10 @@
 //+------------------------------------------------------------------+
-//| _MT5_EAs_MTF ONER_V2
+//| _MT5_EAs_MTF ONER_v2
 //| Multi Timeframe Expert Advisor for MT5 | EA nhieu khung thoi gian cho MT5
 //| 7 TF × 3 Strategies = 21 orders | 7 khung x 3 chien luoc = 21 lenh
 //| Version: API_V2 (MT5) - Added HTTP API + MT4 fixes | Phien ban: API_V2 - Them HTTP API + MT4
 //+------------------------------------------------------------------+
-#property copyright "_MT5_EAs_MTF ONER"
+#property copyright "_MT5_EAs_MTF ONER_v2"
 
 //=============================================================================
 //  PART 1: USER INPUTS (30 inputs + 4 separators) | CAU HINH NGUOI DUNG
@@ -19,14 +19,14 @@ input bool TF_M15 = true;  // M15 (Signal Symbol_M15)
 input bool TF_M30 = true;  // M30 (Buy/Sell Symbol_M30)
 input bool TF_H1 = true;   // H1 (Signal Symbol_H1)
 input bool TF_H4 = true;   // H4 (Buy/Sell Symbol_H4)
-input bool TF_D1 = false;   // D1 (Signal Symbol_D1)
+input bool TF_D1 = false;  // D1 (Signal Symbol_D1)
 
 //--- A.2 Strategy toggles (3) | Bat/tat chien luoc
 input bool S1_HOME = true;   // S1: Binary (Home_7TF > B1:S1_NewsFilter=false)
 input bool S2_TREND = true;  // S2: Trend (Follow D1)
 input bool S3_NEWS = true;   // S3: News (High compact)
 //--- A.3 Close Mode Configuration (2) | Che do dong lenh
-input bool S1_CloseByM1 = false;   // S1: Close by M1 (TRUE=fast M1, FALSE=own TF)
+input bool S1_CloseByM1 = true;   // S1: Close by M1 (TRUE=fast M1, FALSE=own TF)
 input bool S2_CloseByM1 = false;   // S2: Close by M1 (TRUE=fast M1, FALSE=own TF)
 
 //--- A.4 Risk management (2) | Quan ly rui ro
@@ -53,15 +53,15 @@ input bool EnableSymbolNormalization = true;       // Normalize symbol name (LTC
 input string ___Sep_B___ = "___B. STRATEGY CONFIG ________";  //
 
 //--- B.1 S1 NEWS Filter (3) | Loc tin tuc cho S1
-input bool S1_UseNewsFilter = false;         // S1: Use NEWS filter (TRUE=strict, FALSE=basic)
-input int MinNewsLevelS1 = 20;                // S1: Min NEWS level (2-70, higher=stricter)
+input bool S1_UseNewsFilter = true;         // S1: Use NEWS filter (TRUE=strict, FALSE=basic)
+input int MinNewsLevelS1 = 2;                // S1: Min NEWS level (2-70, higher=stricter)
 input bool S1_RequireNewsDirection = true;   // S1: Match NEWS direction (signal==news!)
 
 //--- B.2 S2 TREND Mode (1) | Che do xu huong
 enum S2_TREND_MODE {
     S2_FOLLOW_D1 = 0,    // Follow D1 (Auto)
-    S2_FORCE_BUY = 1,    // Force BUY (manual override)
-    S2_FORCE_SELL = -1   // Force SELL (manual override)
+    S2_FORCE_BUY = 1,    // Force BUY (override=1)
+    S2_FORCE_SELL = -1   // Force SELL (override=-1)
 };
 input S2_TREND_MODE S2_TrendMode = S2_FOLLOW_D1;  // S2: Trend (D1 auto/manual)
 
@@ -69,7 +69,7 @@ input S2_TREND_MODE S2_TrendMode = S2_FOLLOW_D1;  // S2: Trend (D1 auto/manual)
 input int MinNewsLevelS3 = 20;         // S3: Min NEWS level (2-70)
 input bool EnableBonusNews = true;     // S3: Enable Bonus (extra on high NEWS)
 input int BonusOrderCount = 1;         // S3: Bonus count (1-5 orders)
-input int MinNewsLevelBonus = 20;      // S3: Min NEWS for Bonus (threshold)
+input int MinNewsLevelBonus = 2;      // S3: Min NEWS for Bonus (threshold)
 input double BonusLotMultiplier = 1.2; // S3: Bonus lot multiplier (1.0-10.0)
 
 input string ___Sep_C___ = "___C. RISK PROTECTION _________";  //
@@ -93,8 +93,8 @@ input string ___Sep_D___ = "___D. AUXILIARY SETTINGS ______";  //
 input bool UseEvenOddMode = true;  // Even/odd split mode (load balancing)
 
 //--- D.2 Health check & reset (2) | Kiem tra suc khoe
-input bool EnableWeekendReset = true;   // Weekend reset (auto close Friday 23:50)
-input bool EnableHealthCheck = true;    // Health check (8h/16h SPY bot status)
+input bool EnableWeekendReset = false;   // Weekend reset (auto close Friday 23:50)
+input bool EnableHealthCheck = false;    // Health check (8h/16h SPY bot status)
 
 //--- D.3 Display (2) | Hien thi
 input bool ShowDashboard = true;  // Show dashboard (on-chart info)
@@ -2780,3 +2780,4 @@ void OnTimer() {
         CheckSPYBotHealth();
     }
 }
+
