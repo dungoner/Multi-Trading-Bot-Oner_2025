@@ -83,21 +83,20 @@ except:
 # Suppress Flask development server request logs
 log = logging.getLogger('werkzeug')
 
-# ✅ CUSTOM FILTER: Suppress TimeoutError and Bad request from scanners
-# BUT: Keep important errors (500, crashes, etc.)
+# ✅ CUSTOM FILTER: Suppress slow client warnings and scanner spam
+# IMPORTANT: These are NOT errors - just network slowness warnings
 class SmartLogFilter(logging.Filter):
     def filter(self, record):
-        """Filter out spam logs while keeping important errors
+        """Filter out spam logs while keeping real errors
 
         SUPPRESS (when QUIET_MODE=ON):
-        - TimeoutError (network timeout from slow clients)
-        - Bad request syntax (malicious scanners)
-        - Bad request version (malicious scanners)
+        - ⏱️ TimeoutError: SLOW CLIENT warning (client kết nối chậm, KHÔNG phải lỗi server)
+        - 🤖 Bad request: Scanner bots (bot quét tự động, KHÔNG phải EA của bạn)
 
         KEEP (always show):
-        - 500 Internal Server Error (real bugs)
-        - Connection errors (server issues)
-        - Other critical errors
+        - ❌ 500 Internal Server Error (lỗi thật trong code)
+        - ❌ Connection errors (lỗi kết nối server)
+        - ❌ Other critical errors (lỗi nghiêm trọng khác)
         """
         # Get quiet_mode from temp config
         quiet = bot_config_temp.get('quiet_mode', False)
@@ -108,15 +107,15 @@ class SmartLogFilter(logging.Filter):
         # QUIET MODE: Filter spam logs
         msg = record.getMessage()
 
-        # Suppress TimeoutError (client timeout, not our fault)
+        # ⏱️ SUPPRESS: Slow client warning (client chậm, KHÔNG phải lỗi)
         if 'TimeoutError' in msg or 'Request timed out' in msg:
-            return False  # SUPPRESS
+            return False  # SUPPRESS (chỉ là cảnh báo client chậm)
 
-        # Suppress "Bad request" from malicious scanners
+        # 🤖 SUPPRESS: Scanner bots (bot quét port 80, KHÔNG phải EA/Bot2)
         if 'code 400' in msg or 'Bad request syntax' in msg or 'Bad request version' in msg:
-            return False  # SUPPRESS
+            return False  # SUPPRESS (chỉ là bot quét, không phải lỗi)
 
-        # Keep all other logs (500 errors, crashes, etc.)
+        # ✅ KEEP: Real errors (500, crashes, etc.)
         return True
 
 log.addFilter(SmartLogFilter())

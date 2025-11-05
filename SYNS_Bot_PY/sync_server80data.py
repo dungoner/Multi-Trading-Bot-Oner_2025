@@ -119,21 +119,20 @@ if mode == 0:
     # Suppress Flask development server request logs
     log = logging.getLogger('werkzeug')
 
-    # ✅ CUSTOM FILTER: Suppress TimeoutError and Bad request from scanners
-    # BUT: Keep important errors (500, crashes, etc.)
+    # ✅ CUSTOM FILTER: Suppress slow client warnings and scanner spam
+    # IMPORTANT: These are NOT errors - just network slowness warnings
     class SmartLogFilter(logging.Filter):
         def filter(self, record):
-            """Filter out spam logs while keeping important errors
+            """Filter out spam logs while keeping real errors
 
             SUPPRESS (when QUIET_MODE=ON):
-            - TimeoutError (network timeout from slow clients)
-            - Bad request syntax (malicious scanners)
-            - Bad request version (malicious scanners)
+            - ⏱️ TimeoutError: SLOW CLIENT warning (client kết nối chậm, KHÔNG phải lỗi server)
+            - 🤖 Bad request: Scanner bots (bot quét tự động, KHÔNG phải EA của bạn)
 
             KEEP (always show):
-            - 500 Internal Server Error (real bugs)
-            - Connection errors (server issues)
-            - Other critical errors
+            - ❌ 500 Internal Server Error (lỗi thật trong code)
+            - ❌ Connection errors (lỗi kết nối server)
+            - ❌ Other critical errors (lỗi nghiêm trọng khác)
             """
             # Get the global QUIET_MODE variable
             # Note: bot_config is loaded at line 36-37
@@ -145,15 +144,15 @@ if mode == 0:
             # QUIET MODE: Filter spam logs
             msg = record.getMessage()
 
-            # Suppress TimeoutError (client timeout, not our fault)
+            # ⏱️ SUPPRESS: Slow client warning (client chậm, KHÔNG phải lỗi)
             if 'TimeoutError' in msg or 'Request timed out' in msg:
-                return False  # SUPPRESS
+                return False  # SUPPRESS (chỉ là cảnh báo client chậm)
 
-            # Suppress "Bad request" from malicious scanners
+            # 🤖 SUPPRESS: Scanner bots (bot quét port 80, KHÔNG phải EA/Bot2)
             if 'code 400' in msg or 'Bad request syntax' in msg or 'Bad request version' in msg:
-                return False  # SUPPRESS
+                return False  # SUPPRESS (chỉ là bot quét, không phải lỗi)
 
-            # Keep all other logs (500 errors, crashes, etc.)
+            # ✅ KEEP: Real errors (500, crashes, etc.)
             return True
 
     log.addFilter(SmartLogFilter())
@@ -3665,21 +3664,27 @@ elif mode == 1:
     # Suppress Flask development server request logs
     log = logging.getLogger('werkzeug')
 
-    # ✅ CUSTOM FILTER: Suppress TimeoutError and Bad request from scanners
+    # ✅ CUSTOM FILTER: Suppress slow client warnings and scanner spam
+    # IMPORTANT: These are NOT errors - just network slowness warnings
     class SmartLogFilter(logging.Filter):
         def filter(self, record):
-            """Filter out spam logs while keeping important errors"""
+            """Filter out spam logs while keeping real errors
+
+            SUPPRESS: ⏱️ Slow client warnings, 🤖 Scanner bots (KHÔNG phải lỗi)
+            KEEP: ❌ Real errors (500, crashes, etc.)
+            """
             quiet = bot_config.get('quiet_mode', False)
             if not quiet:
                 return True
 
             msg = record.getMessage()
-            # Suppress TimeoutError and Bad requests
+            # ⏱️ SUPPRESS: Slow client warning (client chậm, KHÔNG phải lỗi)
             if 'TimeoutError' in msg or 'Request timed out' in msg:
-                return False
+                return False  # SUPPRESS (chỉ là cảnh báo client chậm)
+            # 🤖 SUPPRESS: Scanner bots (KHÔNG phải EA/Bot2)
             if 'code 400' in msg or 'Bad request syntax' in msg or 'Bad request version' in msg:
-                return False
-            return True
+                return False  # SUPPRESS (chỉ là bot quét, không phải lỗi)
+            return True  # ✅ KEEP: Real errors
 
     log.addFilter(SmartLogFilter())
     log.setLevel(logging.ERROR)  # Only show errors, not every request

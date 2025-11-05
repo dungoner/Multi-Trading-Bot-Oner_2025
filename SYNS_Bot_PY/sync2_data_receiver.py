@@ -100,21 +100,27 @@ CORS(app_dashboard)
 # Suppress Flask development server request logs
 log = logging.getLogger('werkzeug')
 
-# ✅ CUSTOM FILTER: Suppress TimeoutError and Bad request from scanners
+# ✅ CUSTOM FILTER: Suppress slow client warnings and scanner spam
+# IMPORTANT: These are NOT errors - just network slowness warnings
 class SmartLogFilter(logging.Filter):
     def filter(self, record):
-        """Filter out spam logs while keeping important errors"""
+        """Filter out spam logs while keeping real errors
+
+        SUPPRESS: ⏱️ Slow client warnings, 🤖 Scanner bots (KHÔNG phải lỗi)
+        KEEP: ❌ Real errors (500, crashes, etc.)
+        """
         quiet = bot_config.get('quiet_mode', False)
         if not quiet:
             return True
 
         msg = record.getMessage()
-        # Suppress TimeoutError and Bad requests
+        # ⏱️ SUPPRESS: Slow client warning (client chậm, KHÔNG phải lỗi)
         if 'TimeoutError' in msg or 'Request timed out' in msg:
-            return False
+            return False  # SUPPRESS (chỉ là cảnh báo client chậm)
+        # 🤖 SUPPRESS: Scanner bots (KHÔNG phải EA/Bot2)
         if 'code 400' in msg or 'Bad request syntax' in msg or 'Bad request version' in msg:
-            return False
-        return True
+            return False  # SUPPRESS (chỉ là bot quét, không phải lỗi)
+        return True  # ✅ KEEP: Real errors
 
 log.addFilter(SmartLogFilter())
 log.setLevel(logging.ERROR)  # Only show errors, not every request
