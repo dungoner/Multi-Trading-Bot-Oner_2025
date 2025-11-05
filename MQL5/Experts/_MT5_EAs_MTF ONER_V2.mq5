@@ -399,12 +399,15 @@ double OrderCommission() {
 }
 
 // OrderCloseTime() wrapper - MT5 doesn't have this for positions
-// Returns 0 for open positions (positions don't have close time)
+// NOTE: In MT5, positions are ALWAYS open. When closed, they disappear from PositionsTotal().
+// This wrapper exists for MT4 compatibility, but always returns 0 for MT5.
+// LOGIC: If OrderSelect() succeeds, position is OPEN → return 0
+//        If OrderSelect() fails, position is CLOSED or doesn't exist → handled before calling this
 datetime OrderCloseTime() {
-    // In MT5, positions are always open. To check if closed, position won't exist.
-    // This function is used to check if order is already closed
-    // If we can't select the position, it means it's closed
-    return 0;  // Always return 0 for open positions
+    // IMPORTANT: This function is kept for MT4 compatibility
+    // In practice, CloseOrderSafely() already handles closed positions via OrderSelect() failure
+    // So this check (OrderCloseTime() != 0) in CloseOrderSafely() is redundant but safe
+    return 0;  // Always 0 for open positions in MT5
 }
 
 // OrderClose() wrapper - MT5 uses CTrade or MqlTradeRequest
@@ -496,7 +499,27 @@ int OrderSend(string symbol, int cmd, double volume, double price, int slippage,
         return -1;
     }
 
-    return (int)result.order;
+    // IMPORTANT: Return position ticket
+    // MT5 TRADE_ACTION_DEAL creates a position, result.order should contain the position ticket
+    // However, some brokers may return 0, so we have a fallback
+    if(result.order > 0) {
+        return (int)result.order;
+    }
+
+    // FALLBACK: Find position by magic number (some brokers don't populate result.order)
+    // This searches for the most recently opened position with matching magic and symbol
+    for(int i = PositionsTotal() - 1; i >= 0; i--) {
+        ulong ticket = PositionGetTicket(i);
+        if(ticket > 0 && PositionSelectByTicket(ticket)) {
+            if(PositionGetInteger(POSITION_MAGIC) == magic &&
+               PositionGetString(POSITION_SYMBOL) == symbol) {
+                return (int)ticket;
+            }
+        }
+    }
+
+    // Should rarely reach here - order was sent but we can't find the position
+    return -1;
 }
 
 // RefreshRates() wrapper - Not needed in MT5, but keep for compatibility
