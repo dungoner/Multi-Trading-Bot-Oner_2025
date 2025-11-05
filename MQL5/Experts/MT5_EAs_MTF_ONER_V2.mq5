@@ -45,7 +45,8 @@ input CSDL_SOURCE_ENUM CSDL_Source = FOLDER_2;  // CSDL folder (signal source)
 //--- A.6 HTTP API settings (only used if CSDL_Source = HTTP_API) | Cau hinh HTTP API
 // IMPORTANT: MT5 must allow URL in Tools->Options->Expert Advisors | QUAN TRONG: MT5 phai cho phep URL
 // NOTE: MT5 WebRequest automatically uses port 80 for http:// | LUU Y: MT5 WebRequest tu dong dung port 80
-input string HTTP_Server_IP = "147.189.173.121";  // HTTP Server IP (Bot Python VPS)
+// DuckDNS domain for easy IP management (update IP at duckdns.org only) | Domain DuckDNS de quan ly IP de dang
+input string HTTP_Server_IP = "dungalading.duckdns.org";  // HTTP Server domain/IP (Bot Python VPS)
 input string HTTP_API_Key = "";                    // API Key (empty = no auth | de trong = khong xac thuc)
 input bool EnableSymbolNormalization = true;       // Normalize symbol name (LTCUSDC→LTCUSD, FALSE=use exact name)
 
