@@ -524,10 +524,11 @@ bool CloseOrderSafely(int ticket, string reason) {
 
     // Try 1: Close order | Lan 1: Dong lenh
     bool result = false;
+    string symbol = OrderSymbol();
     if(OrderType() == OP_BUY) {
-        result = OrderClose(ticket, OrderLots(), Bid, 3, clrRed);
+        result = OrderClose(ticket, OrderLots(), SymbolInfoDouble(symbol, SYMBOL_BID), 3, clrRed);
     } else if(OrderType() == OP_SELL) {
-        result = OrderClose(ticket, OrderLots(), Ask, 3, clrRed);
+        result = OrderClose(ticket, OrderLots(), SymbolInfoDouble(symbol, SYMBOL_ASK), 3, clrRed);
     }
 
     if(result) {
@@ -550,10 +551,11 @@ bool CloseOrderSafely(int ticket, string reason) {
             return false;
         }
 
+        symbol = OrderSymbol();
         if(OrderType() == OP_BUY) {
-            result = OrderClose(ticket, OrderLots(), Bid, 3, clrRed);
+            result = OrderClose(ticket, OrderLots(), SymbolInfoDouble(symbol, SYMBOL_BID), 3, clrRed);
         } else if(OrderType() == OP_SELL) {
-            result = OrderClose(ticket, OrderLots(), Ask, 3, clrRed);
+            result = OrderClose(ticket, OrderLots(), SymbolInfoDouble(symbol, SYMBOL_ASK), 3, clrRed);
         }
 
         if(result) {
@@ -584,8 +586,8 @@ int OrderSendSafe(int tf, string symbol, int cmd, double lot_smart,
     RefreshRates();
 
     // Update price | Cap nhat gia
-    if(cmd == OP_BUY) price = Ask;
-    else if(cmd == OP_SELL) price = Bid;
+    if(cmd == OP_BUY) price = SymbolInfoDouble(symbol, SYMBOL_ASK);
+    else if(cmd == OP_SELL) price = SymbolInfoDouble(symbol, SYMBOL_BID);
 
     // Try 1: Smart lot | Lan 1: Lot thong minh
     int ticket = OrderSend(symbol, cmd, lot_smart, price, slippage, 0, 0, comment, magic, 0, clrNONE);
@@ -622,8 +624,8 @@ int OrderSendSafe(int tf, string symbol, int cmd, double lot_smart,
         Sleep(100);
         RefreshRates();
 
-        if(cmd == OP_BUY) price = Ask;
-        else if(cmd == OP_SELL) price = Bid;
+        if(cmd == OP_BUY) price = SymbolInfoDouble(symbol, SYMBOL_ASK);
+        else if(cmd == OP_SELL) price = SymbolInfoDouble(symbol, SYMBOL_BID);
 
         ticket = OrderSend(symbol, cmd, lot_smart, price, slippage, 0, 0, comment, magic, 0, clrNONE);
 
