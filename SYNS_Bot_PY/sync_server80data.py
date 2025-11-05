@@ -112,9 +112,52 @@ if mode == 0:
                 print("Please run this script as Administrator manually.")
                 input("Press Enter to exit...")
                 sys.exit(1)
+
+    # ==============================================================================
+    # ADVANCED LOG SUPPRESSION (Reduce CMD spam while keeping important errors)
+    # ==============================================================================
     # Suppress Flask development server request logs
     log = logging.getLogger('werkzeug')
+
+    # ✅ CUSTOM FILTER: Suppress slow client warnings and scanner spam
+    # IMPORTANT: These are NOT errors - just network slowness warnings
+    class SmartLogFilter(logging.Filter):
+        def filter(self, record):
+            """Filter out spam logs while keeping real errors
+
+            SUPPRESS (when QUIET_MODE=ON):
+            - ⏱️ TimeoutError: SLOW CLIENT warning (client kết nối chậm, KHÔNG phải lỗi server)
+            - 🤖 Bad request: Scanner bots (bot quét tự động, KHÔNG phải EA của bạn)
+
+            KEEP (always show):
+            - ❌ 500 Internal Server Error (lỗi thật trong code)
+            - ❌ Connection errors (lỗi kết nối server)
+            - ❌ Other critical errors (lỗi nghiêm trọng khác)
+            """
+            # Get the global QUIET_MODE variable
+            # Note: bot_config is loaded at line 36-37
+            quiet = bot_config.get('quiet_mode', False)
+
+            if not quiet:
+                return True  # Normal mode: show all logs
+
+            # QUIET MODE: Filter spam logs
+            msg = record.getMessage()
+
+            # ⏱️ SUPPRESS: Slow client warning (client chậm, KHÔNG phải lỗi)
+            if 'TimeoutError' in msg or 'Request timed out' in msg:
+                return False  # SUPPRESS (chỉ là cảnh báo client chậm)
+
+            # 🤖 SUPPRESS: Scanner bots (bot quét port 80, KHÔNG phải EA/Bot2)
+            if 'code 400' in msg or 'Bad request syntax' in msg or 'Bad request version' in msg:
+                return False  # SUPPRESS (chỉ là bot quét, không phải lỗi)
+
+            # ✅ KEEP: Real errors (500, crashes, etc.)
+            return True
+
+    log.addFilter(SmartLogFilter())
     log.setLevel(logging.ERROR)  # Only show errors, not every request
+
     # ==============================================================================
     # CONFIGURATION
     # ==============================================================================
@@ -308,7 +351,8 @@ if mode == 0:
     # QUIET MODE LOGGING (Reduce console spam for VPS 24/7)
     # ==============================================================================
 
-    bot_config = load_bot_config()
+    # Use bot_config from global scope (already loaded at line 36-37)
+    # Optimization: Avoid loading config file multiple times
     QUIET_MODE = bot_config.get('quiet_mode', False)
 
     def log_print(message, level="INFO"):
@@ -331,7 +375,9 @@ if mode == 0:
         else:
             print(message)  # Normal mode: print all
 
-    config = load_config()
+    # Extract sender config from global bot_config (already loaded at line 36-37)
+    # Optimization: Avoid loading config file multiple times
+    config = bot_config.get('sender', {})
     # Global variables
     file_cache = {}      # Cache CSDL live files {symbol: {data, mtime, updates, size}}
     history_cache = {}   # Cache CSDL history files {symbol: {data, mtime, filepath}}
@@ -1029,7 +1075,8 @@ if mode == 0:
             "count": len(symbols),
             "timestamp": int(time.time())
         }
-        log_print(f"[API] Symbols list requested: {len(symbols)} symbols available", "INFO")
+        # ✅ SUPPRESSED: No need to log every 60s request (spam reduction)
+        # log_print(f"[API] Symbols list requested: {len(symbols)} symbols available", "INFO")
         return jsonify(response), 200
     @app_api.route('/api/health', methods=['GET'])
     def health_check():
@@ -3611,8 +3658,35 @@ elif mode == 1:
     from flask import Flask, request, jsonify
     from flask_cors import CORS
 
+    # ==============================================================================
+    # ADVANCED LOG SUPPRESSION (Bot 2 - Same as Bot 1)
+    # ==============================================================================
     # Suppress Flask development server request logs
     log = logging.getLogger('werkzeug')
+
+    # ✅ CUSTOM FILTER: Suppress slow client warnings and scanner spam
+    # IMPORTANT: These are NOT errors - just network slowness warnings
+    class SmartLogFilter(logging.Filter):
+        def filter(self, record):
+            """Filter out spam logs while keeping real errors
+
+            SUPPRESS: ⏱️ Slow client warnings, 🤖 Scanner bots (KHÔNG phải lỗi)
+            KEEP: ❌ Real errors (500, crashes, etc.)
+            """
+            quiet = bot_config.get('quiet_mode', False)
+            if not quiet:
+                return True
+
+            msg = record.getMessage()
+            # ⏱️ SUPPRESS: Slow client warning (client chậm, KHÔNG phải lỗi)
+            if 'TimeoutError' in msg or 'Request timed out' in msg:
+                return False  # SUPPRESS (chỉ là cảnh báo client chậm)
+            # 🤖 SUPPRESS: Scanner bots (KHÔNG phải EA/Bot2)
+            if 'code 400' in msg or 'Bad request syntax' in msg or 'Bad request version' in msg:
+                return False  # SUPPRESS (chỉ là bot quét, không phải lỗi)
+            return True  # ✅ KEEP: Real errors
+
+    log.addFilter(SmartLogFilter())
     log.setLevel(logging.ERROR)  # Only show errors, not every request
 
     # ============================================
@@ -3636,8 +3710,8 @@ elif mode == 1:
             print(f"❌ ERROR: Cannot load {BOT_CONFIG_FILE}: {e}")
             sys.exit(1)
 
-    # Load config
-    bot_config = load_bot_config()
+    # Use bot_config from global scope (already loaded at line 36-37)
+    # Optimization: Avoid loading config file multiple times
 
     # Extract receiver config with fallback defaults
     RECEIVER_CONFIG = bot_config.get('receiver', {
@@ -3665,6 +3739,10 @@ elif mode == 1:
         "last_data_time": 0,
         "symbols_received": {},  # {symbol: {count, last_update, last_mtime}}
     }
+
+    # Health check: Track last error log time per symbol (1h interval)
+    # Purpose: Reduce log spam (similar to EA's CheckSPYBotHealth)
+    error_log_tracker = {}  # {symbol: {"last_log_time": timestamp, "error_count": count}}
     # Flask app (Dashboard only)
     app_dashboard = Flask(__name__)
     CORS(app_dashboard)
@@ -3741,10 +3819,14 @@ elif mode == 1:
                 log_message("ERROR", f"Failed to fetch symbols: HTTP {response.status_code}")
                 return False
         except requests.exceptions.Timeout:
-            log_message("ERROR", "Timeout while fetching symbols from Bot 1")
+            if should_log_error("global", "timeout"):
+                error_count = error_log_tracker.get("global_timeout", {}).get("error_count", 0)
+                log_message("ERROR", f"Timeout while fetching symbols from Bot 1 (errors in last 1h: {error_count})")
             return False
         except requests.exceptions.ConnectionError:
-            log_message("ERROR", "Connection error: Bot 1 offline or wrong URL")
+            if should_log_error("global", "connection"):
+                error_count = error_log_tracker.get("global_connection", {}).get("error_count", 0)
+                log_message("ERROR", f"Connection error: Bot 1 offline or wrong URL (errors in last 1h: {error_count})")
             return False
         except Exception as e:
             log_message("ERROR", f"fetch_symbols_from_bot1 failed: {e}")
@@ -3754,6 +3836,49 @@ elif mode == 1:
         if ts == 0:
             return "Never"
         return datetime.fromtimestamp(ts).strftime("%Y-%m-%d %H:%M:%S")
+
+    def should_log_error(symbol, error_type="timeout"):
+        """Check if error should be logged (1h interval health check)
+
+        Similar to EA's CheckSPYBotHealth (8h/16h), but 1h interval here.
+        Purpose: Reduce log spam for transient network errors.
+
+        Args:
+            symbol: Symbol name or "global" for non-symbol errors
+            error_type: Type of error ("timeout", "connection", "http_500", etc.)
+
+        Returns:
+            bool: True if error should be logged, False to suppress
+
+        Example:
+            if should_log_error("EURUSD", "timeout"):
+                log_message("ERROR", f"Timeout pulling EURUSD...")
+        """
+        current_time = time.time()
+        tracker_key = f"{symbol}_{error_type}"
+
+        # First time seeing this error
+        if tracker_key not in error_log_tracker:
+            error_log_tracker[tracker_key] = {
+                "last_log_time": current_time,
+                "error_count": 1
+            }
+            return True
+
+        # Check time since last log
+        last_log_time = error_log_tracker[tracker_key]["last_log_time"]
+        time_since_last_log = current_time - last_log_time
+
+        # Increment error count
+        error_log_tracker[tracker_key]["error_count"] += 1
+
+        # Log if 1 hour (3600s) has passed
+        if time_since_last_log >= 3600:
+            error_log_tracker[tracker_key]["last_log_time"] = current_time
+            return True
+
+        return False
+
     def log_message(level, message):
         """Write log to console only (file writing removed for simplification)
         Args:
@@ -3874,15 +3999,24 @@ elif mode == 1:
                                 receiver_state["last_bot1_contact"] = int(time.time())
                         else:
                             receiver_state["total_errors"] += 1
-                            log_message("ERROR", f"Bot 1 API error: {symbol} (HTTP {response.status_code})")
+
+                            if should_log_error(symbol, f"http_{response.status_code}"):
+                                error_count = error_log_tracker.get(f"{symbol}_http_{response.status_code}", {}).get("error_count", 0)
+                                log_message("ERROR", f"Bot 1 API error: {symbol} (HTTP {response.status_code}) (errors in last 1h: {error_count})")
                     except requests.exceptions.Timeout:
                         receiver_state["total_errors"] += 1
                         receiver_state["bot1_status"] = "offline"
-                        log_message("ERROR", f"Timeout pulling {symbol} from Bot 1")
+
+                        if should_log_error(symbol, "timeout"):
+                            error_count = error_log_tracker.get(f"{symbol}_timeout", {}).get("error_count", 0)
+                            log_message("ERROR", f"Timeout pulling {symbol} from Bot 1 (errors in last 1h: {error_count})")
                     except requests.exceptions.ConnectionError:
                         receiver_state["total_errors"] += 1
                         receiver_state["bot1_status"] = "offline"
-                        log_message("ERROR", f"Connection error to Bot 1 (pulling {symbol})")
+
+                        if should_log_error(symbol, "connection"):
+                            error_count = error_log_tracker.get(f"{symbol}_connection", {}).get("error_count", 0)
+                            log_message("ERROR", f"Connection error to Bot 1 (pulling {symbol}) (errors in last 1h: {error_count})")
                     except Exception as e:
                         receiver_state["total_errors"] += 1
                         log_message("ERROR", f"Failed to pull {symbol}: {e}")

@@ -61,8 +61,64 @@ def request_admin():
             input("Press Enter to exit...")
             sys.exit(1)
 
+# ==============================================================================
+# LOAD CONFIG FIRST (needed for SmartLogFilter)
+# ==============================================================================
+# Need to load bot_config.json early to check quiet_mode
+# This is a temporary load - will be reloaded later at line 280
+import json as json_temp
+BOT_CONFIG_FILE_TEMP = "bot_config.json"
+try:
+    if os.path.exists(BOT_CONFIG_FILE_TEMP):
+        with open(BOT_CONFIG_FILE_TEMP, 'r', encoding='utf-8') as f:
+            bot_config_temp = json_temp.load(f)
+    else:
+        bot_config_temp = {"quiet_mode": False}
+except:
+    bot_config_temp = {"quiet_mode": False}
+
+# ==============================================================================
+# ADVANCED LOG SUPPRESSION (Reduce CMD spam while keeping important errors)
+# ==============================================================================
 # Suppress Flask development server request logs
 log = logging.getLogger('werkzeug')
+
+# ✅ CUSTOM FILTER: Suppress slow client warnings and scanner spam
+# IMPORTANT: These are NOT errors - just network slowness warnings
+class SmartLogFilter(logging.Filter):
+    def filter(self, record):
+        """Filter out spam logs while keeping real errors
+
+        SUPPRESS (when QUIET_MODE=ON):
+        - ⏱️ TimeoutError: SLOW CLIENT warning (client kết nối chậm, KHÔNG phải lỗi server)
+        - 🤖 Bad request: Scanner bots (bot quét tự động, KHÔNG phải EA của bạn)
+
+        KEEP (always show):
+        - ❌ 500 Internal Server Error (lỗi thật trong code)
+        - ❌ Connection errors (lỗi kết nối server)
+        - ❌ Other critical errors (lỗi nghiêm trọng khác)
+        """
+        # Get quiet_mode from temp config
+        quiet = bot_config_temp.get('quiet_mode', False)
+
+        if not quiet:
+            return True  # Normal mode: show all logs
+
+        # QUIET MODE: Filter spam logs
+        msg = record.getMessage()
+
+        # ⏱️ SUPPRESS: Slow client warning (client chậm, KHÔNG phải lỗi)
+        if 'TimeoutError' in msg or 'Request timed out' in msg:
+            return False  # SUPPRESS (chỉ là cảnh báo client chậm)
+
+        # 🤖 SUPPRESS: Scanner bots (bot quét port 80, KHÔNG phải EA/Bot2)
+        if 'code 400' in msg or 'Bad request syntax' in msg or 'Bad request version' in msg:
+            return False  # SUPPRESS (chỉ là bot quét, không phải lỗi)
+
+        # ✅ KEEP: Real errors (500, crashes, etc.)
+        return True
+
+log.addFilter(SmartLogFilter())
 log.setLevel(logging.ERROR)  # Only show errors, not every request
 
 # ==============================================================================
@@ -273,13 +329,20 @@ def reload_config():
     config = load_config()
     print(f"[CONFIG] Configuration reloaded")
 
-config = load_config()
+# ==============================================================================
+# LOAD CONFIG ONCE AT STARTUP (Optimization)
+# ==============================================================================
+# Load unified bot_config.json ONCE at startup
+bot_config = load_bot_config()
+
+# Extract sender config from bot_config
+config = bot_config.get('sender', {})
 
 # ==============================================================================
 # QUIET MODE LOGGING (Reduce console spam for VPS 24/7)
 # ==============================================================================
 
-bot_config = load_bot_config()
+# Use global bot_config (already loaded above)
 QUIET_MODE = bot_config.get('quiet_mode', False)
 
 def log_print(message, level="INFO"):
@@ -737,7 +800,7 @@ def check_weekly_restart():
 
 def load_symlink_config():
     """Load symlink configuration (backward compatible wrapper)"""
-    bot_config = load_bot_config()
+    # Use global bot_config (already loaded at startup)
     return bot_config.get('symlink', {})
 
 def save_symlink_config(symlink_config):
@@ -1013,7 +1076,7 @@ def get_folder_status(mql_path, folder_name):
 
 def load_autostart_config():
     """Load auto-start configuration (backward compatible wrapper)"""
-    bot_config = load_bot_config()
+    # Use global bot_config (already loaded at startup)
     autostart_config = bot_config.get('autostart', {})
 
     # Ensure mt_platforms exists
@@ -1338,7 +1401,8 @@ def get_symbols():
         "timestamp": int(time.time())
     }
 
-    print(f"[API] Symbols list requested: {len(symbols)} symbols available")
+    # ✅ SUPPRESSED: No need to log every 60s request (spam reduction)
+    # print(f"[API] Symbols list requested: {len(symbols)} symbols available")
 
     return jsonify(response), 200
 
@@ -3943,3 +4007,4 @@ def main():
 
 if __name__ == "__main__":
     main()
+
