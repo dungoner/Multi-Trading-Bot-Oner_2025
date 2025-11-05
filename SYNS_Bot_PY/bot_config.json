@@ -17,7 +17,7 @@
     "vietnam_timezone_offset": 7
   },
   "receiver": {
-    "bot1_url": "http://dungalading.duckdns.org:80",
+    "bot1_url": "http://147.189.173.121:80",
     "polling_interval": 1,
     "output_folder": "C:/PRO_ONER/MQL4/Files/DataAutoOner3/",
     "output_folder2": "C:/PRO_ONER/MQL4/Files/DataAutoOner2/",
@@ -39,7 +39,7 @@
   },
   "autostart": {
     "bot_folder": "E:\\PRO_ONER\\SYNS_Bot_PY",
-    "start_script": "START_BOT.bat",
+    "start_script": "START_0123_BOT.bat",
     "task_name": "SYNS_Bot_AutoStart",
     "mt_platforms": []
   },
