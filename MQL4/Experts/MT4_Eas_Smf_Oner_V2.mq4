@@ -1,10 +1,10 @@
 //+------------------------------------------------------------------+
-//| MT4_EAs_MTF ONER_V2
+//| MT4_EAs_M7TF ONER_v2
 //| Multi Timeframe Expert Advisor for MT4 | EA nhieu khung thoi gian cho MT4
 //| 7 TF × 3 Strategies = 21 orders | 7 khung x 3 chien luoc = 21 lenh
 //| Version: API_V2 (MT4) - Added HTTP API support | Phien ban: API_V2 - Them ho tro HTTP API
 //+------------------------------------------------------------------+
-#property copyright "_MT4_EAs_MTF ONER"
+#property copyright "MT4_EAs_M7TF ONER_v2"
 #property strict
 
 //=============================================================================
@@ -27,7 +27,7 @@ input bool S1_HOME = true;   // S1: Binary (Home_7TF > B1:S1_NewsFilter=false)
 input bool S2_TREND = true;  // S2: Trend (Follow D1)
 input bool S3_NEWS = true;   // S3: News (High compact)
 //--- A.3 Close Mode Configuration (2) | Che do dong lenh
-input bool S1_CloseByM1 = false;   // S1: Close by M1 (TRUE=fast M1, FALSE=own TF)
+input bool S1_CloseByM1 = true;   // S1: Close by M1 (TRUE=fast M1, FALSE=own TF)
 input bool S2_CloseByM1 = false;   // S2: Close by M1 (TRUE=fast M1, FALSE=own TF)
 
 //--- A.4 Risk management (2) | Quan ly rui ro
@@ -61,8 +61,8 @@ input bool S1_RequireNewsDirection = true;   // S1: Match NEWS direction (signal
 //--- B.2 S2 TREND Mode (1) | Che do xu huong
 enum S2_TREND_MODE {
     S2_FOLLOW_D1 = 0,    // Follow D1 (Auto)
-    S2_FORCE_BUY = 1,    // Force BUY (manual override)
-    S2_FORCE_SELL = -1   // Force SELL (manual override)
+    S2_FORCE_BUY = 1,    // Force BUY (override=1)
+    S2_FORCE_SELL = -1   // Force SELL (override=-1)
 };
 input S2_TREND_MODE S2_TrendMode = S2_FOLLOW_D1;  // S2: Trend (D1 auto/manual)
 
@@ -94,8 +94,8 @@ input string ___Sep_D___ = "___D. AUXILIARY SETTINGS ______";  //
 input bool UseEvenOddMode = true;  // Even/odd split mode (load balancing)
 
 //--- D.2 Health check & reset (2) | Kiem tra suc khoe
-input bool EnableWeekendReset = true;   // Weekend reset (auto close Friday 23:50)
-input bool EnableHealthCheck = true;    // Health check (8h/16h SPY bot status)
+input bool EnableWeekendReset = false;   // Weekend reset (auto close Friday 23:50)
+input bool EnableHealthCheck = false;    // Health check (8h/16h SPY bot status)
 
 //--- D.3 Display (2) | Hien thi
 input bool ShowDashboard = true;  // Show dashboard (on-chart info)
@@ -2419,3 +2419,4 @@ void OnTimer() {
         CheckSPYBotHealth();
     }
 }
+
