@@ -654,6 +654,83 @@ def log_request(symbol, ip, status):
         })
         stats[symbol]["last_requests"] = history[:config["log_history_limit"]]
 
+def get_stats_summary():
+    """Get statistics summary for all symbols"""
+    with stats_lock:
+        summary = {}
+        for symbol, data in stats.items():
+            summary[symbol] = {
+                "request_count": data["request_count"],
+                "unique_ips": len(data["unique_ips"]),
+                "last_requests": data["last_requests"][:10]  # Last 10
+            }
+        return summary
+
+def save_stats_to_file():
+    """Save stats to file (DISABLED - user requested no JSON log files)"""
+    # This function is intentionally disabled to avoid creating JSON log files
+    # Stats are kept in memory only
+    pass
+
+def load_stats_from_file():
+    """Load stats from file (DISABLED - user requested no JSON log files)"""
+    # This function is intentionally disabled
+    # Stats start fresh on each boot
+    pass
+
+# ==============================================================================
+# HTML TABLE HELPERS (for CSDL data display)
+# ==============================================================================
+
+def build_signal_badge(signal):
+    """Build colored signal badge"""
+    if signal == 1:
+        return '<span style="background: #4caf50; color: white; padding: 4px 12px; border-radius: 3px; font-weight: bold;">🟢 BUY</span>'
+    elif signal == -1:
+        return '<span style="background: #f44336; color: white; padding: 4px 12px; border-radius: 3px; font-weight: bold;">🔴 SELL</span>'
+    else:
+        return '<span style="background: #9e9e9e; color: white; padding: 4px 12px; border-radius: 3px; font-weight: bold;">⚪ NEUTRAL</span>'
+
+def format_timestamp(ts):
+    """Format timestamp to readable datetime"""
+    if ts and ts > 0:
+        return datetime.fromtimestamp(ts).strftime('%Y-%m-%d %H:%M:%S')
+    return '<span style="color: #999;">No cross</span>'
+
+def build_ea_live_table(data):
+    """Build HTML table for EA LIVE data (6 columns only - matching actual JSON structure)"""
+    if not data or not isinstance(data, list):
+        return '<p>No data available</p>'
+
+    html = '<div style="overflow-x: auto;"><table style="width: 100%; border-collapse: collapse; font-size: 13px; background: white;"><thead><tr style="background: #00A651; color: white; text-transform: uppercase; font-size: 11px; letter-spacing: 1px;">'
+    html += '<th style="padding: 12px; text-align: center; border: 1px solid #d0d0d0;">Signal</th>'
+    html += '<th style="padding: 12px; text-align: center; border: 1px solid #d0d0d0;">Timestamp</th>'
+    html += '<th style="padding: 12px; text-align: right; border: 1px solid #d0d0d0;">Price Diff</th>'
+    html += '<th style="padding: 12px; text-align: right; border: 1px solid #d0d0d0;">Time Diff</th>'
+    html += '<th style="padding: 12px; text-align: center; border: 1px solid #d0d0d0;">News</th>'
+    html += '<th style="padding: 12px; text-align: right; border: 1px solid #d0d0d0;">Max Loss</th>'
+    html += '</tr></thead><tbody>'
+
+    for row in data:
+        html += '<tr style="border-bottom: 1px solid #e0e0e0;">'
+        html += f'<td style="padding: 10px; border: 1px solid #e0e0e0; text-align: center;">{build_signal_badge(row.get("signal", 0))}</td>'
+        html += f'<td style="padding: 10px; border: 1px solid #e0e0e0; text-align: center; font-size: 11px;">{format_timestamp(row.get("timestamp", 0))}</td>'
+        html += f'<td style="padding: 10px; border: 1px solid #e0e0e0; text-align: right; font-family: monospace;">{row.get("pricediff", 0):.2f}</td>'
+        html += f'<td style="padding: 10px; border: 1px solid #e0e0e0; text-align: right;">{row.get("timediff", 0)}</td>'
+        html += f'<td style="padding: 10px; border: 1px solid #e0e0e0; text-align: center;">{row.get("news", 0)}</td>'
+        html += f'<td style="padding: 10px; border: 1px solid #e0e0e0; text-align: right; font-family: monospace; color: #f44336;">{row.get("max_loss", 0):.2f}</td>'
+        html += '</tr>'
+
+    html += '</tbody></table></div>'
+    return html
+
+# ==============================================================================
+# FLASK APP - PORT 80 (API for EA)
+# ==============================================================================
+
+app_api = Flask(__name__)
+
+# CORS support - allow Dashboard to call API from different port
 @app_api.after_request
 def add_cors_headers(response):
     """Add CORS headers to all API responses"""
@@ -703,6 +780,12 @@ def sync_csdl(symbol):
     }
 
     log_print(f"[API] Sent {clean_symbol} to Bot 2 at {client_ip} (mtime: {mtime})", "INFO")
+
+    # Track EA/Bot2 activity for dashboard monitoring
+    track_ea_activity(clean_symbol, client_ip)
+
+    # Log request for statistics
+    log_request(clean_symbol, client_ip, 200)
 
     # ✅ CRITICAL: Use json.dumps(sort_keys=False) instead of jsonify()
     # jsonify() sorts keys alphabetically, breaking column order!
