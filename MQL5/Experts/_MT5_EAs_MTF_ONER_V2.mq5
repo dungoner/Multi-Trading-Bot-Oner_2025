@@ -203,14 +203,19 @@ bool OrderClose(int ticket, double lots, double price, int slippage, color arrow
 
 // OrderSelect() wrapper
 // MT4: OrderSelect(ticket, SELECT_BY_TICKET) or OrderSelect(i, SELECT_BY_POS)
-// MT5: Uses PositionSelectByTicket() or PositionGet_Symbol
+// MT5: MUST use PositionGetTicket() first, then PositionSelectByTicket()
+// CRITICAL: PositionGetSymbol() does NOT select the position!
 bool OrderSelect(int index, int select, int pool=0) {
     if(select == SELECT_BY_TICKET) {
         return PositionSelectByTicket(index);
     }
-    // SELECT_BY_POS mode
-    string symbol = PositionGetSymbol(index);
-    return (symbol != "");
+    // SELECT_BY_POS mode - CORRECT MT5 WAY
+    // Step 1: Get ticket (this also selects position)
+    ulong ticket = PositionGetTicket(index);
+    if(ticket == 0) return false;
+
+    // Step 2: Re-select to ensure fresh data
+    return PositionSelectByTicket(ticket);
 }
 
 // Order property functions - MT4 compatibility
@@ -979,6 +984,7 @@ bool ReadCSDLFromHTTP() {
 // Read CSDL with smart routing (HTTP or Local file) | Doc CSDL voi dinh tuyen thong minh (HTTP hoac file local)
 // Supports 4 sources: FOLDER_1, FOLDER_2, FOLDER_3, HTTP_API | Ho tro 4 nguon: 3 folder local + HTTP API
 void ReadCSDLFile() {
+    Print("[READ_CSDL] ===== STARTING ReadCSDLFile() =====");
     bool success = false;
 
     // ========== MODE 1: HTTP API (Remote VPS) ==========
@@ -1545,8 +1551,16 @@ void OpenS1Order(int tf, int signal, string mode) {
 // S1 BASIC: No NEWS check
 void ProcessS1BasicStrategy(int tf) {
     int current_signal = g_ea.csdl_rows[tf].signal;
+
+    // DEBUG LOG
+    Print("[S1_BASIC] TF:", tf, " (", G_TF_NAMES[tf], ") Signal:", current_signal,
+          " | Flag:", g_ea.position_flags[tf][0]);
+
     if(current_signal == 1 || current_signal == -1) {
+        Print("[S1_BASIC] Opening order for signal:", current_signal);
         OpenS1Order(tf, current_signal, "BASIC");
+    } else {
+        Print("[S1_BASIC] No valid signal (signal=", current_signal, ")");
     }
 }
 
@@ -2597,7 +2611,11 @@ void OnTimer() {
     if(!UseEvenOddMode || (current_second % 2 == 0)) {
 
         // STEP 1: Read CSDL file | Doc file CSDL
+        Print("[TIMER] ===== STEP 1: ReadCSDLFile() =====");
         ReadCSDLFile();
+        Print("[TIMER] ===== STEP 1 DONE: Check data =====");
+        Print("[TIMER] M5 Signal:", g_ea.csdl_rows[1].signal, " News:", g_ea.csdl_rows[1].news);
+        Print("[TIMER] H1 Signal:", g_ea.csdl_rows[3].signal, " News:", g_ea.csdl_rows[3].news);
 
         // STEP 2: Map data for all 7 TF | Anh xa du lieu cho 7 khung
         MapCSDLToEAVariables();
