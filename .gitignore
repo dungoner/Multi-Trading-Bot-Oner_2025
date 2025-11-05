@@ -35,3 +35,5 @@ ENV/
 # OS
 .DS_Store
 Thumbs.db
+# Package files (too large for git)
+PACKAGES/*.zip
