@@ -261,6 +261,10 @@ double OrderCommission() {
     return 0;
 }
 
+string OrderComment() {
+    return PositionGetString(POSITION_COMMENT);
+}
+
 // Account functions - MT4 compatibility
 // MT4: AccountBalance(), AccountEquity(), etc.
 // MT5: AccountInfoDouble() with ACCOUNT_* constants
@@ -282,6 +286,14 @@ double AccountMargin() {
 
 double AccountFreeMargin() {
     return AccountInfoDouble(ACCOUNT_MARGIN_FREE);
+}
+
+string AccountCompany() {
+    return AccountInfoString(ACCOUNT_COMPANY);
+}
+
+int AccountLeverage() {
+    return (int)AccountInfoInteger(ACCOUNT_LEVERAGE);
 }
 
 // MarketInfo() wrapper
@@ -1974,16 +1986,18 @@ void CheckWeekendReset() {
     if(Period() != PERIOD_M1) return;
 
     datetime current_time = TimeCurrent();
-    int day_of_week = TimeDayOfWeek(current_time);
-    int hour = TimeHour(current_time);
-    int minute = TimeMinute(current_time);
+    MqlDateTime dt;
+    TimeToStruct(current_time, dt);
+    int day_of_week = dt.day_of_week;
+    int hour = dt.hour;
+    int minute = dt.min;
 
     // Only on Saturday (6) at 0h:01 (minute 01 exactly) | Chi vao Thu 7 luc 0h:01 (phut 01 chinh xac)
     // IMPORTANT: NOT 0h:00 to avoid conflict with SPY Bot! | QUAN TRONG: KHONG 0h:00 de tranh xung dot voi SPY Bot!
     if(day_of_week != 6 || hour != 0 || minute != 3) return;
 
     // Prevent duplicate reset (once per day) | Tranh reset trung lap (1 lan moi ngay)
-    int current_day = TimeDay(current_time);
+    int current_day = dt.day;
     if(current_day == g_ea.weekend_last_day) return;  // Already reset today | Da reset hom nay roi
 
     Print("[WEEKEND_RESET] Saturday 00:03 - M1 chart triggering weekly reset...");
@@ -2005,7 +2019,9 @@ void CheckSPYBotHealth() {
     if(Period() != PERIOD_M1) return;
 
     datetime current_time = TimeCurrent();
-    int hour = TimeHour(current_time);
+    MqlDateTime dt;
+    TimeToStruct(current_time, dt);
+    int hour = dt.hour;
 
     // Only check at 8h & 16h (NOT 24h - conflicts with weekend reset) | Chi kiem tra 8h va 16h (KHONG 24h - trung voi weekend reset)
     if(hour != 8 && hour != 16) return;
