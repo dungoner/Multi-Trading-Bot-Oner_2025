@@ -119,19 +119,20 @@ input bool DebugMode = false;      // Debug mode (verbose logging)
 //=============================================================================
 //  PART 1B: UNICODE SYMBOLS (for dashboard) | KY TU UNICODE
 //=============================================================================
-// Use escape codes to keep file as ANSI (no UTF-8 encoding needed)
-// These will display as Unicode symbols in MT5 dashboard
+// CRITICAL: MQL5 does NOT support \u escape sequences (causes compilation warnings)
+// Must use direct Unicode characters - file MUST be saved as UTF-8 encoding
+// These will display as Unicode symbols in MT5 dashboard using Segoe UI font
 //=============================================================================
 
-#define ARROW_UP     "\u25B2"   // ▲ - Up triangle
-#define ARROW_DOWN   "\u25BC"   // ▼ - Down triangle
-#define BULLET       "\u2022"   // • - Bullet point (neutral)
-#define CIRCLE_FULL  "\u25CF"   // ● - Filled circle (position active)
-#define CIRCLE_EMPTY "\u25CB"   // ○ - Empty circle (no position)
-#define LINE_H       "\u2500"   // ─ - Horizontal line (separator)
-#define MULTIPLY     "\u00D7"   // × - Multiplication sign
-#define MIDDOT       "\u00B7"   // · - Middle dot (separator)
-#define EM_DASH      "\u2014"   // — - Em dash (for empty values)
+#define ARROW_UP     "▲"   // U+25B2 - Up triangle
+#define ARROW_DOWN   "▼"   // U+25BC - Down triangle
+#define BULLET       "•"   // U+2022 - Bullet point (neutral)
+#define CIRCLE_FULL  "●"   // U+25CF - Filled circle (position active)
+#define CIRCLE_EMPTY "○"   // U+25CB - Empty circle (no position)
+#define LINE_H       "─"   // U+2500 - Horizontal line (separator)
+#define MULTIPLY     "×"   // U+00D7 - Multiplication sign
+#define MIDDOT       "·"   // U+00B7 - Middle dot (separator)
+#define EM_DASH      "—"   // U+2014 - Em dash (for empty values)
 
 //=============================================================================
 //  PART 2: DATA STRUCTURES (1 struct) | CAU TRUC DU LIEU
