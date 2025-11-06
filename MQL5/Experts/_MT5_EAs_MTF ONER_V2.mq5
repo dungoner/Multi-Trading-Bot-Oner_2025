@@ -2622,48 +2622,17 @@ string FormatBonusStatus() {
 
 // Get all leverage types for account (FX, CRYPTO, METAL, INDEX) | Lay tat ca cac loai don bay cua tai khoan
 string GetAllLeverages() {
-    // Simplified: Display estimated leverages based on account leverage | Don gian: Hien thi don bay uoc tinh tu don bay tai khoan
+    // Display estimated leverages based on account leverage | Hien thi don bay uoc tinh tu don bay tai khoan
     // Most brokers use: FX=Full, Crypto=1/5, Metal=Full, Index=1/2 | Hau het san dung: FX=Day du, Crypto=1/5, Metal=Day du, Index=1/2
+    // SIMPLIFIED: Always show all 4 types (most brokers support all) | DON GIAN: Luon hien thi ca 4 loai (hau het san deu ho tro)
 
     int base_lev = (int)AccountLeverage();
-    string result = "";
 
-    // Check which symbol types are available by trying to select them | Kiem tra loai symbol nao co san
-    bool has_fx = false, has_crypto = false, has_metal = false, has_index = false;
-
-    // Try common FX symbols | Thu cac symbol FX pho bien
-    if(SymbolSelect("EURUSD", false) || SymbolSelect("GBPUSD", false) || SymbolSelect("USDJPY", false)) {
-        has_fx = true;
-    }
-
-    // Try common Crypto symbols | Thu cac symbol Crypto pho bien
-    if(SymbolSelect("BTCUSD", false) || SymbolSelect("BTCUSDT", false) || SymbolSelect("ETHUSD", false)) {
-        has_crypto = true;
-    }
-
-    // Try common Metal symbols | Thu cac symbol Metal pho bien
-    if(SymbolSelect("XAUUSD", false) || SymbolSelect("XAGUSD", false)) {
-        has_metal = true;
-    }
-
-    // Try common Index symbols | Thu cac symbol Index pho bien
-    if(SymbolSelect("SPX500", false) || SymbolSelect("US30", false) || SymbolSelect("NAS100", false)) {
-        has_index = true;
-    }
-
-    // Build result string with estimated leverages | Xay dung chuoi ket qua voi don bay uoc tinh
-    if(has_fx) result += "FX:" + IntegerToString(base_lev) + " ";
-    if(has_crypto) result += "CR:" + IntegerToString(base_lev / 5) + " ";
-    if(has_metal) result += "MT:" + IntegerToString(base_lev) + " ";
-    if(has_index) result += "IX:" + IntegerToString(base_lev / 2);
-
-    // Remove trailing space if exists | Xoa khoang trang cuoi neu co
-    if(StringLen(result) > 0 && StringGetCharacter(result, StringLen(result) - 1) == 32) {
-        result = StringSubstr(result, 0, StringLen(result) - 1);
-    }
-
-    // Fallback if nothing found | Du phong neu khong tim thay gi
-    if(result == "") result = "Lev:1:" + IntegerToString(base_lev);
+    // Build result with all 4 common leverage types | Xay dung ket qua voi 4 loai don bay pho bien
+    string result = "FX:" + IntegerToString(base_lev) + " " +
+                   "CR:" + IntegerToString(base_lev / 5) + " " +
+                   "MT:" + IntegerToString(base_lev) + " " +
+                   "IX:" + IntegerToString(base_lev / 2);
 
     return result;
 }
