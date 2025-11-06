@@ -2600,6 +2600,34 @@ string FormatBonusStatus() {
     return result;
 }
 
+// Create dashboard background panel (dark brown rectangle) | Tao nen dashboard (hinh chu nhat mau nau dam)
+void CreateDashboardBackground(int y_start, int line_height, int total_rows) {
+    string bg_name = g_ea.symbol_prefix + "dash_bg";
+
+    // Calculate panel dimensions | Tinh kich thuoc panel
+    int panel_x = 5;              // 5px from left edge | 5px tu canh trai
+    int panel_y = y_start - 5;    // 5px above dashboard start | 5px phia tren dashboard
+    int panel_width = 750;        // Wide enough for all text | Du rong cho tat ca text
+    int panel_height = (total_rows * line_height) + 10;  // Height for all rows + padding | Chieu cao cho tat ca dong + padding
+
+    // Dark brown color (professional look) | Mau nau dam (nhin chuyen nghiep)
+    color bg_color = C'30,25,20';  // RGB: Very dark brown | Nau rat dam
+
+    // Create or update rectangle background | Tao hoac cap nhat nen hinh chu nhat
+    if(ObjectFind(bg_name) < 0) {
+        ObjectCreate(bg_name, OBJ_RECTANGLE_LABEL, 0, 0, 0);
+        ObjectSet(bg_name, OBJPROP_CORNER, CORNER_LEFT_UPPER);
+        ObjectSet(bg_name, OBJPROP_BACK, true);  // Place in background layer | Dat o lop phia sau
+    }
+
+    // Update position and size | Cap nhat vi tri va kich thuoc
+    ObjectSet(bg_name, OBJPROP_XDISTANCE, panel_x);
+    ObjectSet(bg_name, OBJPROP_YDISTANCE, panel_y);
+    ObjectSet(bg_name, OBJPROP_XSIZE, panel_width);
+    ObjectSet(bg_name, OBJPROP_YSIZE, panel_height);
+    ObjectSet(bg_name, OBJPROP_BGCOLOR, bg_color);
+}
+
 // Main dashboard update with OBJ_LABEL - DYNAMIC LAYOUT (11 lines, compact) | Cap nhat dashboard - BO CUC DONG (11 dong, gon)
 void UpdateDashboard() {
     // Check if dashboard is enabled | Kiem tra dashboard co bat khong
@@ -2608,12 +2636,17 @@ void UpdateDashboard() {
         for(int i = 0; i <= 14; i++) {
             ObjectDelete("dash_" + IntegerToString(i));
         }
+        ObjectDelete(g_ea.symbol_prefix + "dash_bg");  // Delete background too
         return;
     }
 
     int y_start = 150;  // Start 150px from top | Bat dau tu 150px tu tren
-    int line_height = 13;  // Line spacing (smaller) | Khoang cach dong (nho hon)
+    int line_height = 13;  // Line spacing (smaller) | Khoang cach dong (nho bon)
     int y_pos = y_start;
+    int total_rows = 11;  // Total dashboard rows | Tong so dong dashboard
+
+    // ===== CREATE BACKGROUND PANEL (draw first, before labels) | TAO NEN (ve truoc, duoi cac label)
+    CreateDashboardBackground(y_start, line_height, total_rows);
 
     // ===== LEVERAGE: Account info | Tai su dung: Thong tin tai khoan
     double equity = AccountEquity();
@@ -2786,7 +2819,7 @@ void UpdateDashboard() {
     CreateOrUpdateLabel(g_ea.symbol_prefix + "dash_10", summary, 10, y_pos, clrYellow, 8);
     y_pos += line_height;
 
-    // ===== ROW 11: BROKER INFO (Yellow) | HANG 11: THONG TIN SAN (Vang)
+    // ===== ROW 11: BROKER INFO with Symbol Type + Leverage (Yellow) | HANG 11: THONG TIN SAN voi Loai Symbol + Don bay (Vang)
     string broker = AccountCompany();
     int leverage = AccountLeverage();
     long account_type = AccountInfoInteger(ACCOUNT_TRADE_MODE);
@@ -2795,8 +2828,10 @@ void UpdateDashboard() {
     double current_spread = SymbolInfoInteger(_Symbol, SYMBOL_SPREAD) * SymbolInfoDouble(_Symbol, SYMBOL_POINT);
     string spread_str = DoubleToString(current_spread / SymbolInfoDouble(_Symbol, SYMBOL_POINT), 0);
 
-    string broker_info = broker + " " + acc_type + " Lev:1:" + IntegerToString(leverage) +
-                        " Spread:" + spread_str + " 2s";
+    // Symbol Type + Leverage display | Hien thi loai symbol + don bay
+    string type_lev = g_ea.symbol_type + ":1:" + IntegerToString(leverage);
+
+    string broker_info = broker + " " + acc_type + " " + type_lev + " Sp:" + spread_str + " 2s";
     CreateOrUpdateLabel(g_ea.symbol_prefix + "dash_11", broker_info, 10, y_pos, clrYellow, 7);
 
     // Clean up old unused labels (dash_12-dash_16) | Don dep nhan cu khong dung
