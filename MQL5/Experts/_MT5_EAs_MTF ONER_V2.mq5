@@ -2602,73 +2602,50 @@ string FormatBonusStatus() {
 
 // Get all leverage types for account (FX, CRYPTO, METAL, INDEX) | Lay tat ca cac loai don bay cua tai khoan
 string GetAllLeverages() {
+    // Simplified: Display estimated leverages based on account leverage | Don gian: Hien thi don bay uoc tinh tu don bay tai khoan
+    // Most brokers use: FX=Full, Crypto=1/5, Metal=Full, Index=1/2 | Hau het san dung: FX=Day du, Crypto=1/5, Metal=Day du, Index=1/2
+
+    int base_lev = (int)AccountLeverage();
     string result = "";
 
-    // Try to get leverage for different symbol types | Thu lay don bay cho cac loai symbol khac nhau
-    // We'll query representative symbols for each type | Query cac symbol dai dien cho moi loai
+    // Check which symbol types are available by trying to select them | Kiem tra loai symbol nao co san
+    bool has_fx = false, has_crypto = false, has_metal = false, has_index = false;
 
-    // Array of test symbols for each type | Mang cac symbol thu cho moi loai
-    string fx_symbols[] = {"EURUSD", "GBPUSD", "USDJPY", "AUDUSD"};
-    string crypto_symbols[] = {"BTCUSD", "BTCUSDT", "ETHUSD", "LTCUSD"};
-    string metal_symbols[] = {"XAUUSD", "GOLD", "XAGUSD", "SILVER"};
-    string index_symbols[] = {"SPX500", "US30", "NAS100", "GER40"};
-
-    int fx_lev = 0, crypto_lev = 0, metal_lev = 0, index_lev = 0;
-
-    // Find FX leverage | Tim don bay FX
-    for(int i = 0; i < ArraySize(fx_symbols); i++) {
-        if(SymbolSelect(fx_symbols[i], true)) {
-            long lev = SymbolInfoInteger(fx_symbols[i], SYMBOL_TRADE_CONTRACT_SIZE);
-            if(lev > 0) {
-                fx_lev = (int)AccountLeverage();  // FX usually uses account leverage
-                break;
-            }
-        }
+    // Try common FX symbols | Thu cac symbol FX pho bien
+    if(SymbolSelect("EURUSD", false) || SymbolSelect("GBPUSD", false) || SymbolSelect("USDJPY", false)) {
+        has_fx = true;
     }
 
-    // Find CRYPTO leverage | Tim don bay CRYPTO
-    for(int i = 0; i < ArraySize(crypto_symbols); i++) {
-        if(SymbolSelect(crypto_symbols[i], true)) {
-            long lev = SymbolInfoInteger(crypto_symbols[i], SYMBOL_TRADE_CONTRACT_SIZE);
-            if(lev > 0) {
-                crypto_lev = (int)AccountLeverage() / 5;  // Crypto usually 1/5 of FX (estimate)
-                break;
-            }
-        }
+    // Try common Crypto symbols | Thu cac symbol Crypto pho bien
+    if(SymbolSelect("BTCUSD", false) || SymbolSelect("BTCUSDT", false) || SymbolSelect("ETHUSD", false)) {
+        has_crypto = true;
     }
 
-    // Find METAL leverage | Tim don bay METAL
-    for(int i = 0; i < ArraySize(metal_symbols); i++) {
-        if(SymbolSelect(metal_symbols[i], true)) {
-            long lev = SymbolInfoInteger(metal_symbols[i], SYMBOL_TRADE_CONTRACT_SIZE);
-            if(lev > 0) {
-                metal_lev = (int)AccountLeverage();  // Metal usually same as FX
-                break;
-            }
-        }
+    // Try common Metal symbols | Thu cac symbol Metal pho bien
+    if(SymbolSelect("XAUUSD", false) || SymbolSelect("XAGUSD", false)) {
+        has_metal = true;
     }
 
-    // Find INDEX leverage | Tim don bay INDEX
-    for(int i = 0; i < ArraySize(index_symbols); i++) {
-        if(SymbolSelect(index_symbols[i], true)) {
-            long lev = SymbolInfoInteger(index_symbols[i], SYMBOL_TRADE_CONTRACT_SIZE);
-            if(lev > 0) {
-                index_lev = (int)AccountLeverage() / 2;  // Index usually 1/2 of FX (estimate)
-                break;
-            }
-        }
+    // Try common Index symbols | Thu cac symbol Index pho bien
+    if(SymbolSelect("SPX500", false) || SymbolSelect("US30", false) || SymbolSelect("NAS100", false)) {
+        has_index = true;
     }
 
-    // Build compact string | Xay dung chuoi gon
-    if(fx_lev > 0) result += "FX:" + IntegerToString(fx_lev) + " ";
-    if(crypto_lev > 0) result += "CR:" + IntegerToString(crypto_lev) + " ";
-    if(metal_lev > 0) result += "MT:" + IntegerToString(metal_lev) + " ";
-    if(index_lev > 0) result += "IX:" + IntegerToString(index_lev);
+    // Build result string with estimated leverages | Xay dung chuoi ket qua voi don bay uoc tinh
+    if(has_fx) result += "FX:" + IntegerToString(base_lev) + " ";
+    if(has_crypto) result += "CR:" + IntegerToString(base_lev / 5) + " ";
+    if(has_metal) result += "MT:" + IntegerToString(base_lev) + " ";
+    if(has_index) result += "IX:" + IntegerToString(base_lev / 2);
+
+    // Remove trailing space if exists | Xoa khoang trang cuoi neu co
+    if(StringLen(result) > 0 && StringGetCharacter(result, StringLen(result) - 1) == 32) {
+        result = StringSubstr(result, 0, StringLen(result) - 1);
+    }
 
     // Fallback if nothing found | Du phong neu khong tim thay gi
-    if(result == "") result = "Lev:1:" + IntegerToString(AccountLeverage());
+    if(result == "") result = "Lev:1:" + IntegerToString(base_lev);
 
-    return StringTrimRight(result);  // Remove trailing space
+    return result;
 }
 
 // Create dashboard background panel (dark brown rectangle) | Tao nen dashboard (hinh chu nhat mau nau dam)
