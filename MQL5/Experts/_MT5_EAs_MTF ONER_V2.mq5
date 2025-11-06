@@ -156,11 +156,14 @@ struct CSDLLoveRow {
 //=============================================================================
 
 struct EASymbolData {
-    // Symbol & File info (6 vars) | Thong tin symbol va file
+    // Symbol & File info (9 vars) | Thong tin symbol va file
     string symbol_name;          // Symbol name from broker (may have suffix: LTCUSDC, XAUUSD.xyz) | Ten symbol tu broker
     string normalized_symbol_name; // Normalized symbol name (LTCUSD, XAUUSD) for API calls | Ten symbol chuan hoa cho goi API
     string symbol_prefix;        // Symbol prefix with underscore | Tien to symbol co gach duoi
     string symbol_type;          // Symbol type (FX/CRYPTO/METAL/INDEX/STOCK) | Loai symbol
+    string all_leverages;        // All leverage types (FX:500 CR:100 MT:500 IX:250) | Tat ca cac loai don bay
+    string broker_name;          // Broker company name (Exness, IC Markets, etc.) | Ten cong ty san
+    string account_type;         // Account type (Demo/Real/Contest) | Loai tai khoan
     string csdl_folder;          // CSDL folder path | Duong dan thu muc CSDL
     string csdl_filename;        // Full CSDL filename | Ten file CSDL day du
 
@@ -2242,6 +2245,17 @@ int OnInit() {
     g_ea.symbol_type = DetectSymbolType(_Symbol);
     Print("[INIT] Symbol type detected: ", g_ea.symbol_type);
 
+    // PART 1C: Get all leverages ONCE (FX:500 CR:100 MT:500 IX:250) | Lay tat ca don bay MOT LAN
+    g_ea.all_leverages = GetAllLeverages();
+    Print("[INIT] All leverages: ", g_ea.all_leverages);
+
+    // PART 1D: Get broker & account info ONCE | Lay thong tin san va tai khoan MOT LAN
+    g_ea.broker_name = AccountCompany();
+    long acc_type = AccountInfoInteger(ACCOUNT_TRADE_MODE);
+    g_ea.account_type = (acc_type == ACCOUNT_TRADE_MODE_DEMO) ? "Demo" :
+                        (acc_type == ACCOUNT_TRADE_MODE_REAL) ? "Real" : "Contest";
+    Print("[INIT] Broker: ", g_ea.broker_name, " | Account: ", g_ea.account_type);
+
     // PART 2: Folder selection (only for local file mode) | Chon thu muc (chi cho che do file local)
     if(CSDL_Source == FOLDER_1) g_ea.csdl_folder = "DataAutoOner\\";
     else if(CSDL_Source == FOLDER_2) g_ea.csdl_folder = "DataAutoOner2\\";
@@ -2868,17 +2882,11 @@ void UpdateDashboard() {
     y_pos += line_height;
 
     // ===== ROW 11: BROKER INFO with ALL Leverage Types (Yellow) | HANG 11: THONG TIN SAN voi TAT CA Don bay (Vang)
-    string broker = AccountCompany();
-    long account_type = AccountInfoInteger(ACCOUNT_TRADE_MODE);
-    string acc_type = (account_type == ACCOUNT_TRADE_MODE_DEMO) ? "Demo" :
-                      (account_type == ACCOUNT_TRADE_MODE_REAL) ? "Real" : "Contest";
+    // Use cached values from g_ea (calculated ONCE in OnInit) | Dung gia tri cache tu g_ea (tinh MOT LAN trong OnInit)
     double current_spread = SymbolInfoInteger(_Symbol, SYMBOL_SPREAD) * SymbolInfoDouble(_Symbol, SYMBOL_POINT);
     string spread_str = DoubleToString(current_spread / SymbolInfoDouble(_Symbol, SYMBOL_POINT), 0);
 
-    // Get ALL leverage types (FX, CRYPTO, METAL, INDEX) | Lay TAT CA cac loai don bay
-    string all_leverages = GetAllLeverages();
-
-    string broker_info = broker + " " + acc_type + " " + all_leverages + " Sp:" + spread_str + " 2s";
+    string broker_info = g_ea.broker_name + " " + g_ea.account_type + " " + g_ea.all_leverages + " Sp:" + spread_str + " 2s";
     CreateOrUpdateLabel(g_ea.symbol_prefix + "dash_11", broker_info, 10, y_pos, clrYellow, 7);
 
     // Clean up old unused labels (dash_12-dash_16) | Don dep nhan cu khong dung
