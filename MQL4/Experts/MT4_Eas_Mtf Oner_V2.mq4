@@ -672,7 +672,8 @@ bool ReadCSDLFromHTTP() {
 
     // Send HTTP GET request (timeout 500ms = 0.5s)
     // Timeout 500ms is suitable for LAN/VPS (typically <100ms)
-    int res = WebRequest("GET", url, "", headers, 500, post_data, 0, result, result_headers);
+    // MT4 Version 2 (7 params): WebRequest(method, url, headers, timeout, data[], result[], result_headers)
+    int res = WebRequest("GET", url, headers, 500, post_data, result, result_headers);
 
     // Check for errors
     if(res == -1) {
