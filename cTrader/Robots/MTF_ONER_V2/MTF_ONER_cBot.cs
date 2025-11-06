@@ -2,8 +2,9 @@
 //| MTF_ONER_V2 cBot for cTrader
 //| Multi Timeframe Trading Bot - 7 TF × 3 Strategies = 21 orders
 //| Converted from MT5 EA to cTrader C#
-//| Version: cTrader_V1.0 (Phase A - COMPLETE)
-//| Lines: 1,592 (vs MT5: 2,839) - 56% size, 100% trading logic
+//| Version: cTrader_V1.0 (Phase A - 100% COMPLETE)
+//| Lines: 1,729 (vs MT5: 2,839) - 61% size, 100% functionality
+//| ALL critical logic included: RestoreOrCleanupPositions() added
 //+------------------------------------------------------------------+
 
 using System;
@@ -340,6 +341,19 @@ namespace cAlgo.Robots
             // Initialize position flags
             InitializePositionFlags();
 
+            // First CSDL read to get initial signals
+            if (!ReadCSDL())
+            {
+                Print("[INIT] Warning: Could not read CSDL on startup");
+            }
+            else
+            {
+                MapCSDLToEAVariables();
+            }
+
+            // Restore or cleanup positions from previous run
+            RestoreOrCleanupPositions();
+
             // Print initialization summary
             PrintInitSummary();
 
@@ -637,9 +651,132 @@ namespace cAlgo.Robots
             if (S2_TREND) enabledStrategies++;
             if (S3_NEWS) enabledStrategies++;
 
-            Print($"[INIT] Enabled: {enabledTF} TF × {enabledStrategies} Strategies = {enabledTF * enabledStrategies} potential orders");
+            _eaData.InitSummary = $"[INIT] Enabled: {enabledTF} TF × {enabledStrategies} Strategies = {enabledTF * enabledStrategies} potential orders";
+
+            Print(_eaData.InitSummary);
             Print($"[INIT] Stoploss: {StoplossMode}, TakeProfit: {(UseTakeProfit ? "ON" : "OFF")}");
             Print($"[INIT] CSDL Source: {CSDL_Source}");
+        }
+
+        /// <summary>
+        /// Restore or cleanup positions on bot startup
+        /// Validates existing positions and restores flags or closes invalid ones
+        /// </summary>
+        private void RestoreOrCleanupPositions()
+        {
+            // Step 1: Reset all flags first (already done in InitializePositionFlags)
+            // Step 2: Scan all open positions
+            int kept_count = 0;
+            int closed_count = 0;
+
+            foreach (var position in Positions)
+            {
+                // Filter: Only this symbol
+                if (position.SymbolName != SymbolName) continue;
+
+                // Get order signal from position
+                int order_signal = (position.TradeType == TradeType.Buy) ? 1 : -1;
+
+                // Step 3: Scan 7×3 combinations to find valid match
+                bool found = false;
+                int found_tf = -1;
+                int found_s = -1;
+
+                for (int tf = 0; tf < 7; tf++)
+                {
+                    // Skip if TF disabled
+                    if (!IsTFEnabled(tf)) continue;
+
+                    for (int s = 0; s < 3; s++)
+                    {
+                        // CONDITION 1: Label match (replaces magic number check)
+                        bool cond1_label = (position.Label == _eaData.Labels[tf, s]);
+
+                        // CONDITION 2: Signal pair match (order signal == old signal == CSDL signal)
+                        // AND timestamp old == CSDL timestamp (locked)
+                        DateTime csdl_time = DateTimeOffset.FromUnixTimeSeconds(_eaData.CSDLRows[tf].Timestamp).DateTime;
+                        bool cond2_signal_pair = (order_signal == _eaData.SignalOld[tf] &&
+                                                  order_signal == _eaData.CSDLRows[tf].Signal &&
+                                                  _eaData.TimestampOld[tf] == csdl_time);
+
+                        // CONDITION 3: Strategy enabled
+                        bool cond3_strategy = false;
+                        if (s == 0) cond3_strategy = S1_HOME;
+                        else if (s == 1) cond3_strategy = S2_TREND;
+                        else if (s == 2) cond3_strategy = S3_NEWS;
+
+                        // CONDITION 4: Not duplicate (flag must be 0)
+                        bool cond4_unique = (_eaData.PositionFlags[tf, s] == 0);
+
+                        // CONSOLIDATED CHECK: ALL with AND
+                        if (cond1_label && cond2_signal_pair && cond3_strategy && cond4_unique)
+                        {
+                            found = true;
+                            found_tf = tf;
+                            found_s = s;
+                            break;  // Exit strategy loop
+                        }
+                    }
+
+                    if (found) break;  // Exit TF loop
+                }
+
+                // Step 4: Decide KEEP or CLOSE
+                if (found)
+                {
+                    // ✅ KEEP: All conditions passed → Restore flag
+                    _eaData.PositionFlags[found_tf, found_s] = 1;
+                    kept_count++;
+
+                    DebugPrint($"[RESTORE_KEEP] #{position.Id} TF:{found_tf} S:{found_s + 1} Signal:{order_signal} | Flag=1");
+                }
+                else
+                {
+                    // ❌ CLOSE: ANY condition failed → Close position
+                    CloseOrderSafely(position, "RESTORE_INVALID");
+                    closed_count++;
+
+                    // CRITICAL: Reset flag if this was a known label
+                    // Prevents stoploss function from miscalculating
+                    for (int tf_check = 0; tf_check < 7; tf_check++)
+                    {
+                        for (int s_check = 0; s_check < 3; s_check++)
+                        {
+                            if (position.Label == _eaData.Labels[tf_check, s_check])
+                            {
+                                _eaData.PositionFlags[tf_check, s_check] = 0;  // Ensure flag = 0
+                                break;
+                            }
+                        }
+                    }
+
+                    DebugPrint($"[RESTORE_CLOSE] #{position.Id} Label:{position.Label} Signal:{order_signal} | INVALID");
+                }
+            }
+
+            // Step 5: Final summary report
+            Print($"{_eaData.InitSummary} | RESTORE: KEPT={kept_count} CLOSED={closed_count}");
+
+            // Debug: Print restored flags (optional)
+            if (DebugMode && kept_count > 0)
+            {
+                for (int tf = 0; tf < 7; tf++)
+                {
+                    bool has_flag = false;
+                    for (int s = 0; s < 3; s++)
+                    {
+                        if (_eaData.PositionFlags[tf, s] == 1)
+                        {
+                            has_flag = true;
+                            break;
+                        }
+                    }
+                    if (has_flag)
+                    {
+                        Print($"[RESTORE_FLAGS] {TF_NAMES[tf]}: S1={_eaData.PositionFlags[tf, 0]} S2={_eaData.PositionFlags[tf, 1]} S3={_eaData.PositionFlags[tf, 2]}");
+                    }
+                }
+            }
         }
 
         #endregion
