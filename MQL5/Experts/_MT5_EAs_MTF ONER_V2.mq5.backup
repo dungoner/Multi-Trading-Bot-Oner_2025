@@ -7,22 +7,6 @@
 #property copyright "_MT5_EAs_MTF ONER_v2"
 
 //=============================================================================
-//  MT5 REQUIRED INCLUDES - CRITICAL FOR FILL POLICY
-//=============================================================================
-#include <Trade\Trade.mqh>
-#include <Trade\PositionInfo.mqh>
-#include <Trade\SymbolInfo.mqh>
-#include <Trade\AccountInfo.mqh>
-
-//=============================================================================
-//  MT5 GLOBAL TRADING OBJECTS - MUST DECLARE BEFORE FUNCTIONS
-//=============================================================================
-CTrade         g_trade;           // Trade operations with Fill Policy setup
-CPositionInfo  g_position_info;   // Position information
-CSymbolInfo    g_symbol_info;     // Symbol information
-CAccountInfo   g_account_info;    // Account information
-
-//=============================================================================
 //  PART 1: USER INPUTS (30 inputs + 4 separators) | CAU HINH NGUOI DUNG
 //=============================================================================
 
@@ -197,49 +181,6 @@ EASymbolData g_ea;
 
 const string G_TF_NAMES[7] = {"M1", "M5", "M15", "M30", "H1", "H4", "D1"};
 const string G_STRATEGY_NAMES[3] = {"S1", "S2", "S3"};
-
-//=============================================================================
-//  PART 4B: MT5 INITIALIZATION - CRITICAL FILL POLICY SETUP
-//=============================================================================
-// This function MUST be called in OnInit() to setup Fill Policy
-// Without this, OrderSend() will fail with Error 10030 (Invalid Fill)
-// Đây là hàm QUAN TRỌNG - phải gọi trong OnInit() để setup Fill Policy
-// Nếu thiếu, OrderSend() sẽ lỗi 10030 (Invalid Fill)
-
-void InitMT5Trading() {
-    // Setup symbol info | Thiết lập thông tin symbol
-    g_symbol_info.Name(_Symbol);
-    g_symbol_info.RefreshRates();
-
-    // Detect broker's supported Fill Mode | Phát hiện Fill Mode mà broker hỗ trợ
-    // CRITICAL: Each broker supports different fill modes | QUAN TRỌNG: Mỗi broker hỗ trợ fill mode khác nhau
-    // Bit 1 (value 1): FOK (Fill or Kill) - All or nothing
-    // Bit 2 (value 2): IOC (Immediate or Cancel) - Partial fill allowed
-    // Bit 3 (value 4): RETURN - Market execution
-    long filling = SymbolInfoInteger(_Symbol, SYMBOL_FILLING_MODE);
-
-    // Set Fill Policy based on broker support | Đặt Fill Policy dựa trên broker
-    if((filling & 2) == 2) {
-        // Broker supports IOC - prefer this (most flexible)
-        g_trade.SetTypeFilling(ORDER_FILLING_IOC);
-        Print("[INIT] Fill Policy: IOC (Immediate or Cancel)");
-    }
-    else if((filling & 1) == 1) {
-        // Broker only supports FOK
-        g_trade.SetTypeFilling(ORDER_FILLING_FOK);
-        Print("[INIT] Fill Policy: FOK (Fill or Kill)");
-    }
-    else {
-        // Fallback to RETURN mode
-        g_trade.SetTypeFilling(ORDER_FILLING_RETURN);
-        Print("[INIT] Fill Policy: RETURN (Market Execution)");
-    }
-
-    // Set slippage tolerance | Đặt độ trượt giá chấp nhận
-    g_trade.SetDeviationInPoints(30);
-
-    Print("[INIT] MT5 Trading initialized successfully | Khởi tạo MT5 Trading thành công");
-}
 
 //=============================================================================
 //  PART 5: UTILITY FUNCTIONS (11 functions) | HAM TRO GIUP
@@ -466,29 +407,38 @@ datetime OrderCloseTime() {
     return 0;  // Always return 0 for open positions
 }
 
-// OrderClose() wrapper - MT5 uses CTrade object with Fill Policy
-// CRITICAL FIX: Now uses g_trade which has Fill Policy setup in InitMT5Trading()
-// This prevents Error 10030 when closing positions | Ngăn lỗi 10030 khi đóng lệnh
+// OrderClose() wrapper - MT5 uses CTrade or MqlTradeRequest
 bool OrderClose(int ticket, double lots, double price, int slippage, color arrow_color) {
+    // Use PositionClose for MT5
+    MqlTradeRequest request;
+    MqlTradeResult result;
 
-    // Check if position exists | Kiểm tra lệnh có tồn tại không
+    // Select position first
     if(!PositionSelectByTicket(ticket)) {
-        return false;  // Position doesn't exist | Lệnh không tồn tại
+        return false;  // Position doesn't exist
     }
 
-    // Close position using CTrade (automatically uses Fill Policy from InitMT5Trading)
-    // Đóng lệnh bằng CTrade (tự động dùng Fill Policy từ InitMT5Trading)
-    bool result = g_trade.PositionClose(ticket, slippage);
+    ZeroMemory(request);
+    ZeroMemory(result);
 
-    if(!result) {
-        // Failed - log error | Thất bại - ghi lỗi
-        int error = GetLastError();
-        Print("[OrderClose ERROR] Ticket:", ticket, " Lots:", lots,
-              " Error:", error, " RetCode:", g_trade.ResultRetcode(),
-              " Comment:", g_trade.ResultRetcodeDescription());
+    request.action = TRADE_ACTION_DEAL;
+    request.position = ticket;
+    request.symbol = PositionGetString(POSITION_SYMBOL);
+    request.volume = lots;
+    request.deviation = slippage;
+    request.magic = (int)PositionGetInteger(POSITION_MAGIC);
+
+    // Determine if position is BUY or SELL
+    ENUM_POSITION_TYPE pos_type = (ENUM_POSITION_TYPE)PositionGetInteger(POSITION_TYPE);
+    if(pos_type == POSITION_TYPE_BUY) {
+        request.type = ORDER_TYPE_SELL;  // Close BUY with SELL
+        request.price = SymbolInfoDouble(request.symbol, SYMBOL_BID);
+    } else {
+        request.type = ORDER_TYPE_BUY;   // Close SELL with BUY
+        request.price = SymbolInfoDouble(request.symbol, SYMBOL_ASK);
     }
 
-    return result;
+    return ::OrderSend(request, result);
 }
 
 // OrderModify() wrapper - MT5 uses MqlTradeRequest
@@ -512,44 +462,41 @@ bool OrderModify(int ticket, double price, double sl, double tp, datetime expira
     return ::OrderSend(request, result);
 }
 
-// OrderSend() wrapper - MT5 uses CTrade object with Fill Policy
-// CRITICAL FIX: Now uses g_trade which has Fill Policy setup in InitMT5Trading()
-// This prevents Error 10030 (Invalid Fill) | Ngăn lỗi 10030 (Invalid Fill)
+// OrderSend() wrapper - MT5 uses MqlTradeRequest structure
 int OrderSend(string symbol, int cmd, double volume, double price, int slippage,
               double stoploss, double takeprofit, string comment, int magic,
               datetime expiration, color arrow_color) {
+    MqlTradeRequest request;
+    MqlTradeResult result;
 
-    // Set magic number for this trade | Đặt magic number cho giao dịch này
-    g_trade.SetExpertMagicNumber(magic);
+    ZeroMemory(request);
+    ZeroMemory(result);
 
-    // Execute trade using CTrade (automatically uses Fill Policy from InitMT5Trading)
-    // Thực hiện giao dịch bằng CTrade (tự động dùng Fill Policy từ InitMT5Trading)
-    bool result = false;
+    request.action = TRADE_ACTION_DEAL;
+    request.symbol = symbol;
+    request.volume = volume;
+    request.deviation = slippage;
+    request.magic = magic;
+    request.comment = comment;
+    request.sl = stoploss;
+    request.tp = takeprofit;
 
+    // Convert MT4 order type to MT5
     if(cmd == OP_BUY) {
-        // CTrade.Buy(volume, symbol, price=0 (market), sl, tp, comment)
-        result = g_trade.Buy(volume, symbol, 0, stoploss, takeprofit, comment);
-    }
-    else if(cmd == OP_SELL) {
-        // CTrade.Sell(volume, symbol, price=0 (market), sl, tp, comment)
-        result = g_trade.Sell(volume, symbol, 0, stoploss, takeprofit, comment);
-    }
-    else {
-        return -1;  // Invalid command | Lệnh không hợp lệ
+        request.type = ORDER_TYPE_BUY;
+        request.price = SymbolInfoDouble(symbol, SYMBOL_ASK);
+    } else if(cmd == OP_SELL) {
+        request.type = ORDER_TYPE_SELL;
+        request.price = SymbolInfoDouble(symbol, SYMBOL_BID);
+    } else {
+        return -1;  // Only market orders supported
     }
 
-    if(result) {
-        // Success - return deal ticket | Thành công - trả về ticket
-        return (int)g_trade.ResultDeal();
+    if(!::OrderSend(request, result)) {
+        return -1;
     }
 
-    // Failed - log error | Thất bại - ghi lỗi
-    int error = GetLastError();
-    Print("[OrderSend ERROR] Symbol:", symbol, " Cmd:", cmd, " Vol:", volume,
-          " Error:", error, " RetCode:", g_trade.ResultRetcode(),
-          " Comment:", g_trade.ResultRetcodeDescription());
-
-    return -1;
+    return (int)result.order;
 }
 
 // RefreshRates() wrapper - Not needed in MT5, but keep for compatibility
@@ -2212,11 +2159,6 @@ void CheckSPYBotHealth() {
 // EA initialization - setup all components | Khoi tao EA - cai dat tat ca thanh phan
 // OPTIMIZED V3.4: Struct-based data isolation for multi-symbol support | TOI UU: Cach ly du lieu theo struct cho da ky hieu
 int OnInit() {
-    // PART 0: MT5 CRITICAL INITIALIZATION - MUST BE FIRST!
-    // Setup Fill Policy BEFORE any trading operations | Thiết lập Fill Policy TRƯỚC KHI giao dịch
-    // Without this, OrderSend() will fail with Error 10030 | Nếu thiếu, OrderSend() sẽ lỗi 10030
-    InitMT5Trading();
-
     // PART 1: Symbol recognition | Nhan dien ky hieu
     if(!InitializeSymbolRecognition()) return(INIT_FAILED);
     InitializeSymbolPrefix();
