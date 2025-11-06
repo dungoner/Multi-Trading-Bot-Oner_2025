@@ -2360,6 +2360,12 @@ void OnDeinit(const int reason) {
     EventKillTimer();
     Comment("");  // Clear Comment | Xoa Comment
 
+    // Delete background panel FIRST | Xoa nen truoc tien
+    string bg_name = g_ea.symbol_prefix + "dash_bg";
+    if(::ObjectFind(0, bg_name) >= 0) {
+        ::ObjectDelete(0, bg_name);
+    }
+
     // Delete all dashboard labels (15 labels: dash_0 to dash_14) | Xoa tat ca label dashboard
     // ✅ FIX: Use g_ea.symbol_prefix to delete objects correctly | Su dung g_ea.symbol_prefix de xoa dung
     // IMPORTANT: Use direct MT5 call (not wrapper) to ensure objects are deleted
@@ -2883,10 +2889,11 @@ void UpdateDashboard() {
 
     // ===== ROW 11: BROKER INFO with ALL Leverage Types (Yellow) | HANG 11: THONG TIN SAN voi TAT CA Don bay (Vang)
     // Use cached values from g_ea (calculated ONCE in OnInit) | Dung gia tri cache tu g_ea (tinh MOT LAN trong OnInit)
+    // Format: Exness | Demo | FX:500 CR:100 MT:500 IX:250 | Sp:2 2s
     double current_spread = SymbolInfoInteger(_Symbol, SYMBOL_SPREAD) * SymbolInfoDouble(_Symbol, SYMBOL_POINT);
     string spread_str = DoubleToString(current_spread / SymbolInfoDouble(_Symbol, SYMBOL_POINT), 0);
 
-    string broker_info = g_ea.broker_name + " " + g_ea.account_type + " " + g_ea.all_leverages + " Sp:" + spread_str + " 2s";
+    string broker_info = g_ea.broker_name + " | " + g_ea.account_type + " | " + g_ea.all_leverages + " | Sp:" + spread_str + " 2s";
     CreateOrUpdateLabel(g_ea.symbol_prefix + "dash_11", broker_info, 10, y_pos, clrYellow, 7);
 
     // Clean up old unused labels (dash_12-dash_16) | Don dep nhan cu khong dung
