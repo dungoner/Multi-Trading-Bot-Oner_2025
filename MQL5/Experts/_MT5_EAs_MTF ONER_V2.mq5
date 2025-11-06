@@ -2662,11 +2662,23 @@ void UpdateDashboard() {
     }
 
     // ===== LEVERAGE: g_ea variables | Tai su dung: Bien g_ea
+    // Folder/API source display | Hien thi nguon folder/API
     string folder = "";
-    if(CSDL_Source == FOLDER_1) folder = "DA1";
-    else if(CSDL_Source == FOLDER_2) folder = "DA2";
-    else if(CSDL_Source == FOLDER_3) folder = "DA3";
-    string trend = (g_ea.trend_d1 == 1) ? ARROW_UP : (g_ea.trend_d1 == -1 ? ARROW_DOWN : BULLET);
+    if(CSDL_Source == FOLDER_1) folder = "DA1:BSpy";
+    else if(CSDL_Source == FOLDER_2) folder = "DA2:Def";
+    else if(CSDL_Source == FOLDER_3) folder = "DA3:Sync";
+    else if(CSDL_Source == HTTP_API) folder = "API:Rem";
+
+    // S2 Trend Mode display (from Input parameter, not g_ea.trend_d1) | Hien thi che do S2 Trend (tu tham so Input)
+    string trend = "";
+    if(S2_TrendMode == S2_FOLLOW_D1) {
+        // Auto: Follow D1 signal | Tu dong: Theo tin hieu D1
+        trend = (g_ea.trend_d1 == 1) ? ARROW_UP : (g_ea.trend_d1 == -1 ? ARROW_DOWN : BULLET);
+    } else if(S2_TrendMode == S2_FORCE_BUY) {
+        trend = ARROW_UP + "!";  // Force BUY mode | Che do ep BUY
+    } else if(S2_TrendMode == S2_FORCE_SELL) {
+        trend = ARROW_DOWN + "!";  // Force SELL mode | Che do ep SELL
+    }
 
     // ===== ROW 0: HEADER with Symbol Type (YELLOW) | HANG 0: TIEU DE voi Loai symbol (VANG)
     string header = "[" + g_ea.symbol_name + MIDDOT + g_ea.symbol_type + "] " + folder +
@@ -2724,10 +2736,20 @@ void UpdateDashboard() {
                           IntegerToString(bonus_count_per_tf[tf]) + "|" + DoubleToString(bonus_lots_per_tf[tf], 2) :
                           EM_DASH;
 
-        // Build row with DYNAMIC SPACING (no PadRight) | Xay dung dong voi KHOANG CACH DONG
-        // Format: TF  Sig PrDiff TmDiff  S1 S2 S3 P&L  News  Bonus
-        string row = G_TF_NAMES[tf] + "  " + sig + " " + pd_str + " " + td_str + "  " +
-                     s1 + " " + s2 + " " + s3 + " " + pnl_str + "  " + nw + "  " + bonus_str;
+        // Add padding to TF name for relative column alignment | Them padding cho ten TF de canh cot tuong doi
+        string tf_padded = "";
+        if(G_TF_NAMES[tf] == "M1")  tf_padded = "M1__";   // 2 underscores
+        else if(G_TF_NAMES[tf] == "M5")  tf_padded = "M5__";
+        else if(G_TF_NAMES[tf] == "M15") tf_padded = "M15_";  // 1 underscore
+        else if(G_TF_NAMES[tf] == "M30") tf_padded = "M30_";
+        else if(G_TF_NAMES[tf] == "H1")  tf_padded = "H1__";  // 2 underscores
+        else if(G_TF_NAMES[tf] == "H4")  tf_padded = "H4__";
+        else if(G_TF_NAMES[tf] == "D1")  tf_padded = "D1__";
+
+        // Build row with | SEPARATORS for visual clarity | Xay dung dong voi | PHAN CACH de de doc
+        // Format: |TF__ signal |pricediff| |timediff||s1||s2||s3||pnl||news||bonus|
+        string row = "|" + tf_padded + " " + sig + " |" + pd_str + "| |" + td_str + "||" +
+                     s1 + "||" + s2 + "||" + s3 + "||" + pnl_str + "||" + nw + "||" + bonus_str + "|";
 
         // Alternating colors | Mau xen ke
         color row_color = (tf % 2 == 0) ? clrDodgerBlue : clrWhite;
@@ -2767,7 +2789,14 @@ void UpdateDashboard() {
     // ===== ROW 11: BROKER INFO (Yellow) | HANG 11: THONG TIN SAN (Vang)
     string broker = AccountCompany();
     int leverage = AccountLeverage();
-    string broker_info = broker + " Lev:1:" + IntegerToString(leverage) + " 2s";
+    long account_type = AccountInfoInteger(ACCOUNT_TRADE_MODE);
+    string acc_type = (account_type == ACCOUNT_TRADE_MODE_DEMO) ? "Demo" :
+                      (account_type == ACCOUNT_TRADE_MODE_REAL) ? "Real" : "Contest";
+    double current_spread = SymbolInfoInteger(_Symbol, SYMBOL_SPREAD) * SymbolInfoDouble(_Symbol, SYMBOL_POINT);
+    string spread_str = DoubleToString(current_spread / SymbolInfoDouble(_Symbol, SYMBOL_POINT), 0);
+
+    string broker_info = broker + " " + acc_type + " Lev:1:" + IntegerToString(leverage) +
+                        " Spread:" + spread_str + " 2s";
     CreateOrUpdateLabel(g_ea.symbol_prefix + "dash_11", broker_info, 10, y_pos, clrYellow, 7);
 
     // Clean up old unused labels (dash_12-dash_16) | Don dep nhan cu khong dung
