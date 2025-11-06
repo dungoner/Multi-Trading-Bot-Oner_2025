@@ -660,9 +660,13 @@ bool ReadCSDLFromHTTP() {
     string url = "http://" + HTTP_Server_IP + "/api/csdl/" + g_ea.normalized_symbol_name + "_LIVE.json";
 
     // Build headers with API key (if provided)
-    string headers = "";
+    // CRITICAL FOR MT4: Must include User-Agent and Host headers when using domain names
+    // MT4 WebRequest requires explicit headers for proper DNS resolution and server acceptance
+    string headers = "User-Agent: Mozilla/5.0 (compatible; MT4EA/1.0)\r\n";
+    headers += "Host: " + HTTP_Server_IP + "\r\n";
+
     if(StringLen(HTTP_API_Key) > 0) {
-        headers = "X-API-Key: " + HTTP_API_Key + "\r\n";
+        headers += "X-API-Key: " + HTTP_API_Key + "\r\n";
     }
 
     // Prepare WebRequest
