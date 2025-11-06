@@ -2600,6 +2600,77 @@ string FormatBonusStatus() {
     return result;
 }
 
+// Get all leverage types for account (FX, CRYPTO, METAL, INDEX) | Lay tat ca cac loai don bay cua tai khoan
+string GetAllLeverages() {
+    string result = "";
+
+    // Try to get leverage for different symbol types | Thu lay don bay cho cac loai symbol khac nhau
+    // We'll query representative symbols for each type | Query cac symbol dai dien cho moi loai
+
+    // Array of test symbols for each type | Mang cac symbol thu cho moi loai
+    string fx_symbols[] = {"EURUSD", "GBPUSD", "USDJPY", "AUDUSD"};
+    string crypto_symbols[] = {"BTCUSD", "BTCUSDT", "ETHUSD", "LTCUSD"};
+    string metal_symbols[] = {"XAUUSD", "GOLD", "XAGUSD", "SILVER"};
+    string index_symbols[] = {"SPX500", "US30", "NAS100", "GER40"};
+
+    int fx_lev = 0, crypto_lev = 0, metal_lev = 0, index_lev = 0;
+
+    // Find FX leverage | Tim don bay FX
+    for(int i = 0; i < ArraySize(fx_symbols); i++) {
+        if(SymbolSelect(fx_symbols[i], true)) {
+            long lev = SymbolInfoInteger(fx_symbols[i], SYMBOL_TRADE_CONTRACT_SIZE);
+            if(lev > 0) {
+                fx_lev = (int)AccountLeverage();  // FX usually uses account leverage
+                break;
+            }
+        }
+    }
+
+    // Find CRYPTO leverage | Tim don bay CRYPTO
+    for(int i = 0; i < ArraySize(crypto_symbols); i++) {
+        if(SymbolSelect(crypto_symbols[i], true)) {
+            long lev = SymbolInfoInteger(crypto_symbols[i], SYMBOL_TRADE_CONTRACT_SIZE);
+            if(lev > 0) {
+                crypto_lev = (int)AccountLeverage() / 5;  // Crypto usually 1/5 of FX (estimate)
+                break;
+            }
+        }
+    }
+
+    // Find METAL leverage | Tim don bay METAL
+    for(int i = 0; i < ArraySize(metal_symbols); i++) {
+        if(SymbolSelect(metal_symbols[i], true)) {
+            long lev = SymbolInfoInteger(metal_symbols[i], SYMBOL_TRADE_CONTRACT_SIZE);
+            if(lev > 0) {
+                metal_lev = (int)AccountLeverage();  // Metal usually same as FX
+                break;
+            }
+        }
+    }
+
+    // Find INDEX leverage | Tim don bay INDEX
+    for(int i = 0; i < ArraySize(index_symbols); i++) {
+        if(SymbolSelect(index_symbols[i], true)) {
+            long lev = SymbolInfoInteger(index_symbols[i], SYMBOL_TRADE_CONTRACT_SIZE);
+            if(lev > 0) {
+                index_lev = (int)AccountLeverage() / 2;  // Index usually 1/2 of FX (estimate)
+                break;
+            }
+        }
+    }
+
+    // Build compact string | Xay dung chuoi gon
+    if(fx_lev > 0) result += "FX:" + IntegerToString(fx_lev) + " ";
+    if(crypto_lev > 0) result += "CR:" + IntegerToString(crypto_lev) + " ";
+    if(metal_lev > 0) result += "MT:" + IntegerToString(metal_lev) + " ";
+    if(index_lev > 0) result += "IX:" + IntegerToString(index_lev);
+
+    // Fallback if nothing found | Du phong neu khong tim thay gi
+    if(result == "") result = "Lev:1:" + IntegerToString(AccountLeverage());
+
+    return StringTrimRight(result);  // Remove trailing space
+}
+
 // Create dashboard background panel (dark brown rectangle) | Tao nen dashboard (hinh chu nhat mau nau dam)
 void CreateDashboardBackground(int y_start, int line_height, int total_rows) {
     string bg_name = g_ea.symbol_prefix + "dash_bg";
@@ -2607,8 +2678,8 @@ void CreateDashboardBackground(int y_start, int line_height, int total_rows) {
     // Calculate panel dimensions | Tinh kich thuoc panel
     int panel_x = 5;              // 5px from left edge | 5px tu canh trai
     int panel_y = y_start - 5;    // 5px above dashboard start | 5px phia tren dashboard
-    int panel_width = 750;        // Wide enough for all text | Du rong cho tat ca text
-    int panel_height = (total_rows * line_height) + 10;  // Height for all rows + padding | Chieu cao cho tat ca dong + padding
+    int panel_width = 500;        // 2/3 of original (750 * 2/3 = 500) | 2/3 kich thuoc cu
+    int panel_height = (total_rows * line_height) + 20;  // Height + extra padding for last row | Chieu cao + padding them cho dong cuoi
 
     // Dark brown color (professional look) | Mau nau dam (nhin chuyen nghiep)
     color bg_color = C'30,25,20';  // RGB: Very dark brown | Nau rat dam
@@ -2819,19 +2890,18 @@ void UpdateDashboard() {
     CreateOrUpdateLabel(g_ea.symbol_prefix + "dash_10", summary, 10, y_pos, clrYellow, 8);
     y_pos += line_height;
 
-    // ===== ROW 11: BROKER INFO with Symbol Type + Leverage (Yellow) | HANG 11: THONG TIN SAN voi Loai Symbol + Don bay (Vang)
+    // ===== ROW 11: BROKER INFO with ALL Leverage Types (Yellow) | HANG 11: THONG TIN SAN voi TAT CA Don bay (Vang)
     string broker = AccountCompany();
-    int leverage = AccountLeverage();
     long account_type = AccountInfoInteger(ACCOUNT_TRADE_MODE);
     string acc_type = (account_type == ACCOUNT_TRADE_MODE_DEMO) ? "Demo" :
                       (account_type == ACCOUNT_TRADE_MODE_REAL) ? "Real" : "Contest";
     double current_spread = SymbolInfoInteger(_Symbol, SYMBOL_SPREAD) * SymbolInfoDouble(_Symbol, SYMBOL_POINT);
     string spread_str = DoubleToString(current_spread / SymbolInfoDouble(_Symbol, SYMBOL_POINT), 0);
 
-    // Symbol Type + Leverage display | Hien thi loai symbol + don bay
-    string type_lev = g_ea.symbol_type + ":1:" + IntegerToString(leverage);
+    // Get ALL leverage types (FX, CRYPTO, METAL, INDEX) | Lay TAT CA cac loai don bay
+    string all_leverages = GetAllLeverages();
 
-    string broker_info = broker + " " + acc_type + " " + type_lev + " Sp:" + spread_str + " 2s";
+    string broker_info = broker + " " + acc_type + " " + all_leverages + " Sp:" + spread_str + " 2s";
     CreateOrUpdateLabel(g_ea.symbol_prefix + "dash_11", broker_info, 10, y_pos, clrYellow, 7);
 
     // Clean up old unused labels (dash_12-dash_16) | Don dep nhan cu khong dung
