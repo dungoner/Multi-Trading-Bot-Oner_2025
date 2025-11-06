@@ -469,7 +469,8 @@ datetime OrderCloseTime() {
 // OrderClose() wrapper - MT5 uses CTrade object with Fill Policy
 // CRITICAL FIX: Now uses g_trade which has Fill Policy setup in InitMT5Trading()
 // This prevents Error 10030 when closing positions | Ngăn lỗi 10030 khi đóng lệnh
-bool OrderClose(int ticket, double lots, double price, int slippage, color arrow_color) {
+// NOTE: price parameter removed - MT5 auto-detects Bid/Ask based on position type
+bool OrderClose(int ticket, double lots, int slippage) {
 
     // Check if position exists | Kiểm tra lệnh có tồn tại không
     if(!PositionSelectByTicket(ticket)) {
@@ -477,7 +478,8 @@ bool OrderClose(int ticket, double lots, double price, int slippage, color arrow
     }
 
     // Close position using CTrade (automatically uses Fill Policy from InitMT5Trading)
-    // Đóng lệnh bằng CTrade (tự động dùng Fill Policy từ InitMT5Trading)
+    // MT5 tự động lấy giá: BUY position → close at Bid, SELL position → close at Ask
+    // Đóng lệnh bằng CTrade (tự động dùng Fill Policy và giá phù hợp)
     bool result = g_trade.PositionClose(ticket, slippage);
 
     if(!result) {
@@ -492,7 +494,8 @@ bool OrderClose(int ticket, double lots, double price, int slippage, color arrow
 }
 
 // OrderModify() wrapper - MT5 uses MqlTradeRequest
-bool OrderModify(int ticket, double price, double sl, double tp, datetime expiration, color arrow_color) {
+// NOTE: price and expiration parameters removed - only SL/TP modification is used
+bool OrderModify(int ticket, double sl, double tp) {
     MqlTradeRequest request;
     MqlTradeResult result;
 
@@ -515,9 +518,9 @@ bool OrderModify(int ticket, double price, double sl, double tp, datetime expira
 // OrderSend() wrapper - MT5 uses CTrade object with Fill Policy
 // CRITICAL FIX: Now uses g_trade which has Fill Policy setup in InitMT5Trading()
 // This prevents Error 10030 (Invalid Fill) | Ngăn lỗi 10030 (Invalid Fill)
+// NOTE: expiration parameter removed - EA only uses market orders (OP_BUY/OP_SELL)
 int OrderSend(string symbol, int cmd, double volume, double price, int slippage,
-              double stoploss, double takeprofit, string comment, int magic,
-              datetime expiration, color arrow_color) {
+              double stoploss, double takeprofit, string comment, int magic) {
 
     // Set magic number for this trade | Đặt magic number cho giao dịch này
     g_trade.SetExpertMagicNumber(magic);
@@ -669,12 +672,8 @@ bool CloseOrderSafely(int ticket, string reason) {
     RefreshRates();
 
     // Try 1: Close order | Lan 1: Dong lenh
-    bool result = false;
-    if(OrderType() == OP_BUY) {
-        result = OrderClose(ticket, OrderLots(), Bid, 3, clrRed);
-    } else if(OrderType() == OP_SELL) {
-        result = OrderClose(ticket, OrderLots(), Ask, 3, clrRed);
-    }
+    // MT5 tự động lấy giá Bid/Ask phù hợp với loại lệnh
+    bool result = OrderClose(ticket, OrderLots(), 3);
 
     if(result) {
         // Success - detailed log printed by caller | Thanh cong - log chi tiet se in boi ham goi
@@ -696,11 +695,8 @@ bool CloseOrderSafely(int ticket, string reason) {
             return false;
         }
 
-        if(OrderType() == OP_BUY) {
-            result = OrderClose(ticket, OrderLots(), Bid, 3, clrRed);
-        } else if(OrderType() == OP_SELL) {
-            result = OrderClose(ticket, OrderLots(), Ask, 3, clrRed);
-        }
+        // Retry close - MT5 tự động lấy giá phù hợp
+        result = OrderClose(ticket, OrderLots(), 3);
 
         if(result) {
             // Retry success - detailed log printed by caller | Thanh cong sau retry - log chi tiet se in boi ham goi
@@ -725,7 +721,7 @@ bool CloseOrderSafely(int ticket, string reason) {
 // Returns: ticket (>0) or -1, caller must check and handle flag | Tra ve ticket hoac -1, nguoi goi phai kiem tra va xu ly co
 int OrderSendSafe(int tf, string symbol, int cmd, double lot_smart,
                   double price, int slippage,
-                  string comment, int magic, color arrow_color) {
+                  string comment, int magic) {
 
     RefreshRates();
 
@@ -734,7 +730,7 @@ int OrderSendSafe(int tf, string symbol, int cmd, double lot_smart,
     else if(cmd == OP_SELL) price = Bid;
 
     // Try 1: Smart lot | Lan 1: Lot thong minh
-    int ticket = OrderSend(symbol, cmd, lot_smart, price, slippage, 0, 0, comment, magic, 0, clrNONE);
+    int ticket = OrderSend(symbol, cmd, lot_smart, price, slippage, 0, 0, comment, magic);
 
     if(ticket > 0) {
         // Success - detailed log printed by strategy caller | Thanh cong - log chi tiet se in boi ham chien luoc
@@ -749,7 +745,7 @@ int OrderSendSafe(int tf, string symbol, int cmd, double lot_smart,
     if(error == 134 || error == 131) {
         Print("[ORDER_FAIL] ", comment, " Err:", error, " (Retry 0.01 lot)");
 
-        ticket = OrderSend(symbol, cmd, 0.01, price, slippage, 0, 0, comment + "_Min", magic, 0, clrNONE);
+        ticket = OrderSend(symbol, cmd, 0.01, price, slippage, 0, 0, comment + "_Min", magic);
 
         if(ticket > 0) {
             // Fallback success - detailed log printed by strategy caller | Thanh cong du phong - log chi tiet se in boi ham chien luoc
@@ -771,7 +767,7 @@ int OrderSendSafe(int tf, string symbol, int cmd, double lot_smart,
         if(cmd == OP_BUY) price = Ask;
         else if(cmd == OP_SELL) price = Bid;
 
-        ticket = OrderSend(symbol, cmd, lot_smart, price, slippage, 0, 0, comment, magic, 0, clrNONE);
+        ticket = OrderSend(symbol, cmd, lot_smart, price, slippage, 0, 0, comment, magic);
 
         if(ticket > 0) {
             // Retry success - detailed log printed by strategy caller | Thanh cong sau retry - log chi tiet se in boi ham chien luoc
