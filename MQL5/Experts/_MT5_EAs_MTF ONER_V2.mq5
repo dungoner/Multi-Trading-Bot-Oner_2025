@@ -7,6 +7,22 @@
 #property copyright "_MT5_EAs_MTF ONER_v2"
 
 //=============================================================================
+//  MT5 REQUIRED INCLUDES - CRITICAL FOR FILL POLICY
+//=============================================================================
+#include <Trade\Trade.mqh>
+#include <Trade\PositionInfo.mqh>
+#include <Trade\SymbolInfo.mqh>
+#include <Trade\AccountInfo.mqh>
+
+//=============================================================================
+//  MT5 GLOBAL TRADING OBJECTS - MUST DECLARE BEFORE FUNCTIONS
+//=============================================================================
+CTrade         g_trade;           // Trade operations with Fill Policy setup
+CPositionInfo  g_position_info;   // Position information
+CSymbolInfo    g_symbol_info;     // Symbol information
+CAccountInfo   g_account_info;    // Account information
+
+//=============================================================================
 //  PART 1: USER INPUTS (30 inputs + 4 separators) | CAU HINH NGUOI DUNG
 //=============================================================================
 
@@ -101,6 +117,24 @@ input bool ShowDashboard = true;  // Show dashboard (on-chart info)
 input bool DebugMode = false;      // Debug mode (verbose logging)
 
 //=============================================================================
+//  PART 1B: UNICODE SYMBOLS (for dashboard) | KY TU UNICODE
+//=============================================================================
+// CRITICAL: MQL5 does NOT support \u escape sequences (causes compilation warnings)
+// Must use direct Unicode characters - file MUST be saved as UTF-8 encoding
+// These will display as Unicode symbols in MT5 dashboard using Segoe UI font
+//=============================================================================
+
+#define ARROW_UP     "▲"   // U+25B2 - Up triangle
+#define ARROW_DOWN   "▼"   // U+25BC - Down triangle
+#define BULLET       "•"   // U+2022 - Bullet point (neutral)
+#define CIRCLE_FULL  "●"   // U+25CF - Filled circle (position active)
+#define CIRCLE_EMPTY "○"   // U+25CB - Empty circle (no position)
+#define LINE_H       "─"   // U+2500 - Horizontal line (separator)
+#define MULTIPLY     "×"   // U+00D7 - Multiplication sign
+#define MIDDOT       "·"   // U+00B7 - Middle dot (separator)
+#define EM_DASH      "—"   // U+2014 - Em dash (for empty values)
+
+//=============================================================================
 //  PART 2: DATA STRUCTURES (1 struct) | CAU TRUC DU LIEU
 //=============================================================================
 
@@ -122,10 +156,14 @@ struct CSDLLoveRow {
 //=============================================================================
 
 struct EASymbolData {
-    // Symbol & File info (5 vars) | Thong tin symbol va file
+    // Symbol & File info (9 vars) | Thong tin symbol va file
     string symbol_name;          // Symbol name from broker (may have suffix: LTCUSDC, XAUUSD.xyz) | Ten symbol tu broker
     string normalized_symbol_name; // Normalized symbol name (LTCUSD, XAUUSD) for API calls | Ten symbol chuan hoa cho goi API
     string symbol_prefix;        // Symbol prefix with underscore | Tien to symbol co gach duoi
+    string symbol_type;          // Symbol type (FX/CRYPTO/METAL/INDEX/STOCK) | Loai symbol
+    string all_leverages;        // All leverage types (FX:500 CR:100 MT:500 IX:250) | Tat ca cac loai don bay
+    string broker_name;          // Broker company name (Exness, IC Markets, etc.) | Ten cong ty san
+    string account_type;         // Account type (Demo/Real/Contest) | Loai tai khoan
     string csdl_folder;          // CSDL folder path | Duong dan thu muc CSDL
     string csdl_filename;        // Full CSDL filename | Ten file CSDL day du
 
@@ -181,6 +219,49 @@ EASymbolData g_ea;
 
 const string G_TF_NAMES[7] = {"M1", "M5", "M15", "M30", "H1", "H4", "D1"};
 const string G_STRATEGY_NAMES[3] = {"S1", "S2", "S3"};
+
+//=============================================================================
+//  PART 4B: MT5 INITIALIZATION - CRITICAL FILL POLICY SETUP
+//=============================================================================
+// This function MUST be called in OnInit() to setup Fill Policy
+// Without this, OrderSend() will fail with Error 10030 (Invalid Fill)
+// Đây là hàm QUAN TRỌNG - phải gọi trong OnInit() để setup Fill Policy
+// Nếu thiếu, OrderSend() sẽ lỗi 10030 (Invalid Fill)
+
+void InitMT5Trading() {
+    // Setup symbol info | Thiết lập thông tin symbol
+    g_symbol_info.Name(_Symbol);
+    g_symbol_info.RefreshRates();
+
+    // Detect broker's supported Fill Mode | Phát hiện Fill Mode mà broker hỗ trợ
+    // CRITICAL: Each broker supports different fill modes | QUAN TRỌNG: Mỗi broker hỗ trợ fill mode khác nhau
+    // Bit 1 (value 1): FOK (Fill or Kill) - All or nothing
+    // Bit 2 (value 2): IOC (Immediate or Cancel) - Partial fill allowed
+    // Bit 3 (value 4): RETURN - Market execution
+    long filling = SymbolInfoInteger(_Symbol, SYMBOL_FILLING_MODE);
+
+    // Set Fill Policy based on broker support | Đặt Fill Policy dựa trên broker
+    if((filling & 2) == 2) {
+        // Broker supports IOC - prefer this (most flexible)
+        g_trade.SetTypeFilling(ORDER_FILLING_IOC);
+        Print("[INIT] Fill Policy: IOC (Immediate or Cancel)");
+    }
+    else if((filling & 1) == 1) {
+        // Broker only supports FOK
+        g_trade.SetTypeFilling(ORDER_FILLING_FOK);
+        Print("[INIT] Fill Policy: FOK (Fill or Kill)");
+    }
+    else {
+        // Fallback to RETURN mode
+        g_trade.SetTypeFilling(ORDER_FILLING_RETURN);
+        Print("[INIT] Fill Policy: RETURN (Market Execution)");
+    }
+
+    // Set slippage tolerance | Đặt độ trượt giá chấp nhận
+    g_trade.SetDeviationInPoints(30);
+
+    Print("[INIT] MT5 Trading initialized successfully | Khởi tạo MT5 Trading thành công");
+}
 
 //=============================================================================
 //  PART 5: UTILITY FUNCTIONS (11 functions) | HAM TRO GIUP
@@ -407,42 +488,36 @@ datetime OrderCloseTime() {
     return 0;  // Always return 0 for open positions
 }
 
-// OrderClose() wrapper - MT5 uses CTrade or MqlTradeRequest
-bool OrderClose(int ticket, double lots, double price, int slippage, color arrow_color) {
-    // Use PositionClose for MT5
-    MqlTradeRequest request;
-    MqlTradeResult result;
+// OrderClose() wrapper - MT5 uses CTrade object with Fill Policy
+// CRITICAL FIX: Now uses g_trade which has Fill Policy setup in InitMT5Trading()
+// This prevents Error 10030 when closing positions | Ngăn lỗi 10030 khi đóng lệnh
+// NOTE: price parameter removed - MT5 auto-detects Bid/Ask based on position type
+bool OrderClose(int ticket, double lots, int slippage) {
 
-    // Select position first
+    // Check if position exists | Kiểm tra lệnh có tồn tại không
     if(!PositionSelectByTicket(ticket)) {
-        return false;  // Position doesn't exist
+        return false;  // Position doesn't exist | Lệnh không tồn tại
     }
 
-    ZeroMemory(request);
-    ZeroMemory(result);
+    // Close position using CTrade (automatically uses Fill Policy from InitMT5Trading)
+    // MT5 tự động lấy giá: BUY position → close at Bid, SELL position → close at Ask
+    // Đóng lệnh bằng CTrade (tự động dùng Fill Policy và giá phù hợp)
+    bool result = g_trade.PositionClose(ticket, slippage);
 
-    request.action = TRADE_ACTION_DEAL;
-    request.position = ticket;
-    request.symbol = PositionGetString(POSITION_SYMBOL);
-    request.volume = lots;
-    request.deviation = slippage;
-    request.magic = (int)PositionGetInteger(POSITION_MAGIC);
-
-    // Determine if position is BUY or SELL
-    ENUM_POSITION_TYPE pos_type = (ENUM_POSITION_TYPE)PositionGetInteger(POSITION_TYPE);
-    if(pos_type == POSITION_TYPE_BUY) {
-        request.type = ORDER_TYPE_SELL;  // Close BUY with SELL
-        request.price = SymbolInfoDouble(request.symbol, SYMBOL_BID);
-    } else {
-        request.type = ORDER_TYPE_BUY;   // Close SELL with BUY
-        request.price = SymbolInfoDouble(request.symbol, SYMBOL_ASK);
+    if(!result) {
+        // Failed - log error | Thất bại - ghi lỗi
+        int error = GetLastError();
+        Print("[OrderClose ERROR] Ticket:", ticket, " Lots:", lots,
+              " Error:", error, " RetCode:", g_trade.ResultRetcode(),
+              " Comment:", g_trade.ResultRetcodeDescription());
     }
 
-    return ::OrderSend(request, result);
+    return result;
 }
 
 // OrderModify() wrapper - MT5 uses MqlTradeRequest
-bool OrderModify(int ticket, double price, double sl, double tp, datetime expiration, color arrow_color) {
+// NOTE: price and expiration parameters removed - only SL/TP modification is used
+bool OrderModify(int ticket, double sl, double tp) {
     MqlTradeRequest request;
     MqlTradeResult result;
 
@@ -462,41 +537,44 @@ bool OrderModify(int ticket, double price, double sl, double tp, datetime expira
     return ::OrderSend(request, result);
 }
 
-// OrderSend() wrapper - MT5 uses MqlTradeRequest structure
+// OrderSend() wrapper - MT5 uses CTrade object with Fill Policy
+// CRITICAL FIX: Now uses g_trade which has Fill Policy setup in InitMT5Trading()
+// This prevents Error 10030 (Invalid Fill) | Ngăn lỗi 10030 (Invalid Fill)
+// NOTE: expiration parameter removed - EA only uses market orders (OP_BUY/OP_SELL)
 int OrderSend(string symbol, int cmd, double volume, double price, int slippage,
-              double stoploss, double takeprofit, string comment, int magic,
-              datetime expiration, color arrow_color) {
-    MqlTradeRequest request;
-    MqlTradeResult result;
+              double stoploss, double takeprofit, string comment, int magic) {
 
-    ZeroMemory(request);
-    ZeroMemory(result);
+    // Set magic number for this trade | Đặt magic number cho giao dịch này
+    g_trade.SetExpertMagicNumber(magic);
 
-    request.action = TRADE_ACTION_DEAL;
-    request.symbol = symbol;
-    request.volume = volume;
-    request.deviation = slippage;
-    request.magic = magic;
-    request.comment = comment;
-    request.sl = stoploss;
-    request.tp = takeprofit;
+    // Execute trade using CTrade (automatically uses Fill Policy from InitMT5Trading)
+    // Thực hiện giao dịch bằng CTrade (tự động dùng Fill Policy từ InitMT5Trading)
+    bool result = false;
 
-    // Convert MT4 order type to MT5
     if(cmd == OP_BUY) {
-        request.type = ORDER_TYPE_BUY;
-        request.price = SymbolInfoDouble(symbol, SYMBOL_ASK);
-    } else if(cmd == OP_SELL) {
-        request.type = ORDER_TYPE_SELL;
-        request.price = SymbolInfoDouble(symbol, SYMBOL_BID);
-    } else {
-        return -1;  // Only market orders supported
+        // CTrade.Buy(volume, symbol, price=0 (market), sl, tp, comment)
+        result = g_trade.Buy(volume, symbol, 0, stoploss, takeprofit, comment);
+    }
+    else if(cmd == OP_SELL) {
+        // CTrade.Sell(volume, symbol, price=0 (market), sl, tp, comment)
+        result = g_trade.Sell(volume, symbol, 0, stoploss, takeprofit, comment);
+    }
+    else {
+        return -1;  // Invalid command | Lệnh không hợp lệ
     }
 
-    if(!::OrderSend(request, result)) {
-        return -1;
+    if(result) {
+        // Success - return deal ticket | Thành công - trả về ticket
+        return (int)g_trade.ResultDeal();
     }
 
-    return (int)result.order;
+    // Failed - log error | Thất bại - ghi lỗi
+    int error = GetLastError();
+    Print("[OrderSend ERROR] Symbol:", symbol, " Cmd:", cmd, " Vol:", volume,
+          " Error:", error, " RetCode:", g_trade.ResultRetcode(),
+          " Comment:", g_trade.ResultRetcodeDescription());
+
+    return -1;
 }
 
 // RefreshRates() wrapper - Not needed in MT5, but keep for compatibility
@@ -616,12 +694,8 @@ bool CloseOrderSafely(int ticket, string reason) {
     RefreshRates();
 
     // Try 1: Close order | Lan 1: Dong lenh
-    bool result = false;
-    if(OrderType() == OP_BUY) {
-        result = OrderClose(ticket, OrderLots(), Bid, 3, clrRed);
-    } else if(OrderType() == OP_SELL) {
-        result = OrderClose(ticket, OrderLots(), Ask, 3, clrRed);
-    }
+    // MT5 tự động lấy giá Bid/Ask phù hợp với loại lệnh
+    bool result = OrderClose(ticket, OrderLots(), 3);
 
     if(result) {
         // Success - detailed log printed by caller | Thanh cong - log chi tiet se in boi ham goi
@@ -643,11 +717,8 @@ bool CloseOrderSafely(int ticket, string reason) {
             return false;
         }
 
-        if(OrderType() == OP_BUY) {
-            result = OrderClose(ticket, OrderLots(), Bid, 3, clrRed);
-        } else if(OrderType() == OP_SELL) {
-            result = OrderClose(ticket, OrderLots(), Ask, 3, clrRed);
-        }
+        // Retry close - MT5 tự động lấy giá phù hợp
+        result = OrderClose(ticket, OrderLots(), 3);
 
         if(result) {
             // Retry success - detailed log printed by caller | Thanh cong sau retry - log chi tiet se in boi ham goi
@@ -672,7 +743,7 @@ bool CloseOrderSafely(int ticket, string reason) {
 // Returns: ticket (>0) or -1, caller must check and handle flag | Tra ve ticket hoac -1, nguoi goi phai kiem tra va xu ly co
 int OrderSendSafe(int tf, string symbol, int cmd, double lot_smart,
                   double price, int slippage,
-                  string comment, int magic, color arrow_color) {
+                  string comment, int magic) {
 
     RefreshRates();
 
@@ -681,7 +752,7 @@ int OrderSendSafe(int tf, string symbol, int cmd, double lot_smart,
     else if(cmd == OP_SELL) price = Bid;
 
     // Try 1: Smart lot | Lan 1: Lot thong minh
-    int ticket = OrderSend(symbol, cmd, lot_smart, price, slippage, 0, 0, comment, magic, 0, clrNONE);
+    int ticket = OrderSend(symbol, cmd, lot_smart, price, slippage, 0, 0, comment, magic);
 
     if(ticket > 0) {
         // Success - detailed log printed by strategy caller | Thanh cong - log chi tiet se in boi ham chien luoc
@@ -696,7 +767,7 @@ int OrderSendSafe(int tf, string symbol, int cmd, double lot_smart,
     if(error == 134 || error == 131) {
         Print("[ORDER_FAIL] ", comment, " Err:", error, " (Retry 0.01 lot)");
 
-        ticket = OrderSend(symbol, cmd, 0.01, price, slippage, 0, 0, comment + "_Min", magic, 0, clrNONE);
+        ticket = OrderSend(symbol, cmd, 0.01, price, slippage, 0, 0, comment + "_Min", magic);
 
         if(ticket > 0) {
             // Fallback success - detailed log printed by strategy caller | Thanh cong du phong - log chi tiet se in boi ham chien luoc
@@ -718,7 +789,7 @@ int OrderSendSafe(int tf, string symbol, int cmd, double lot_smart,
         if(cmd == OP_BUY) price = Ask;
         else if(cmd == OP_SELL) price = Bid;
 
-        ticket = OrderSend(symbol, cmd, lot_smart, price, slippage, 0, 0, comment, magic, 0, clrNONE);
+        ticket = OrderSend(symbol, cmd, lot_smart, price, slippage, 0, 0, comment, magic);
 
         if(ticket > 0) {
             // Retry success - detailed log printed by strategy caller | Thanh cong sau retry - log chi tiet se in boi ham chien luoc
@@ -1610,12 +1681,11 @@ void OpenS1Order(int tf, int signal, string mode) {
 
     int cmd = (signal == 1) ? OP_BUY : OP_SELL;
     double price = (signal == 1) ? Ask : Bid;
-    color clr = (signal == 1) ? clrBlue : clrRed;
     string type_str = (signal == 1) ? "BUY" : "SELL";
 
     int ticket = OrderSendSafe(tf, _Symbol, cmd, g_ea.lot_sizes[tf][0],
                                price, 3,
-                               "S1_" + G_TF_NAMES[tf], g_ea.magic_numbers[tf][0], clr);
+                               "S1_" + G_TF_NAMES[tf], g_ea.magic_numbers[tf][0]);
 
     if(ticket > 0) {
         g_ea.position_flags[tf][0] = 1;
@@ -1722,7 +1792,7 @@ void ProcessS2Strategy(int tf) {
     if(current_signal == 1) {
         int ticket = OrderSendSafe(tf, _Symbol, OP_BUY, g_ea.lot_sizes[tf][1],
                                    Ask, 3,
-                                   "S2_" + G_TF_NAMES[tf], g_ea.magic_numbers[tf][1], clrBlue);
+                                   "S2_" + G_TF_NAMES[tf], g_ea.magic_numbers[tf][1]);
         if(ticket > 0) {
             g_ea.position_flags[tf][1] = 1;
             string trend_str = trend_to_follow == 1 ? "UP" : "DOWN";
@@ -1738,7 +1808,7 @@ void ProcessS2Strategy(int tf) {
     else if(current_signal == -1) {
         int ticket = OrderSendSafe(tf, _Symbol, OP_SELL, g_ea.lot_sizes[tf][1],
                                    Bid, 3,
-                                   "S2_" + G_TF_NAMES[tf], g_ea.magic_numbers[tf][1], clrRed);
+                                   "S2_" + G_TF_NAMES[tf], g_ea.magic_numbers[tf][1]);
         if(ticket > 0) {
             g_ea.position_flags[tf][1] = 1;
             string trend_str = trend_to_follow == -1 ? "DOWN" : "UP";
@@ -1782,7 +1852,7 @@ void ProcessS3Strategy(int tf) {
     if(current_signal == 1) {
         int ticket = OrderSendSafe(tf, _Symbol, OP_BUY, g_ea.lot_sizes[tf][2],
                                    Ask, 3,
-                                   "S3_" + G_TF_NAMES[tf], g_ea.magic_numbers[tf][2], clrBlue);
+                                   "S3_" + G_TF_NAMES[tf], g_ea.magic_numbers[tf][2]);
         if(ticket > 0) {
             g_ea.position_flags[tf][2] = 1;
             string arrow = (news_direction > 0) ? "↑" : "↓";
@@ -1798,7 +1868,7 @@ void ProcessS3Strategy(int tf) {
     else if(current_signal == -1) {
         int ticket = OrderSendSafe(tf, _Symbol, OP_SELL, g_ea.lot_sizes[tf][2],
                                    Bid, 3,
-                                   "S3_" + G_TF_NAMES[tf], g_ea.magic_numbers[tf][2], clrRed);
+                                   "S3_" + G_TF_NAMES[tf], g_ea.magic_numbers[tf][2]);
         if(ticket > 0) {
             g_ea.position_flags[tf][2] = 1;
             string arrow = (news_direction > 0) ? "↑" : "↓";
@@ -1840,6 +1910,9 @@ void ProcessBonusNews() {
 
         // Calculate BONUS lot (S3 lot × multiplier) | Tinh lot BONUS (lot S3 × he so nhan)
         double bonus_lot = g_ea.lot_sizes[tf][2] * BonusLotMultiplier;
+        // CRITICAL: Normalize to 2 decimals (0.01 step) to prevent "invalid volume" error
+        // MT5 requires lot to be multiple of 0.01 (e.g., 0.38 OK, 0.384 INVALID)
+        bonus_lot = NormalizeDouble(bonus_lot, 2);
 
         RefreshRates();
 
@@ -1852,7 +1925,7 @@ void ProcessBonusNews() {
             if(news_direction == 1) {
                 int ticket = OrderSendSafe(tf, _Symbol, OP_BUY, bonus_lot,
                                            Ask, 3,
-                                           "BONUS_" + G_TF_NAMES[tf], g_ea.magic_numbers[tf][2], clrGold);
+                                           "BONUS_" + G_TF_NAMES[tf], g_ea.magic_numbers[tf][2]);
                 if(ticket > 0) {
                     opened_count++;
                     if(ticket_list != "") ticket_list = ticket_list + ",";
@@ -1862,7 +1935,7 @@ void ProcessBonusNews() {
             } else {
                 int ticket = OrderSendSafe(tf, _Symbol, OP_SELL, bonus_lot,
                                            Bid, 3,
-                                           "BONUS_" + G_TF_NAMES[tf], g_ea.magic_numbers[tf][2], clrOrange);
+                                           "BONUS_" + G_TF_NAMES[tf], g_ea.magic_numbers[tf][2]);
                 if(ticket > 0) {
                     opened_count++;
                     if(ticket_list != "") ticket_list = ticket_list + ",";
@@ -2159,9 +2232,29 @@ void CheckSPYBotHealth() {
 // EA initialization - setup all components | Khoi tao EA - cai dat tat ca thanh phan
 // OPTIMIZED V3.4: Struct-based data isolation for multi-symbol support | TOI UU: Cach ly du lieu theo struct cho da ky hieu
 int OnInit() {
+    // PART 0: MT5 CRITICAL INITIALIZATION - MUST BE FIRST!
+    // Setup Fill Policy BEFORE any trading operations | Thiết lập Fill Policy TRƯỚC KHI giao dịch
+    // Without this, OrderSend() will fail with Error 10030 | Nếu thiếu, OrderSend() sẽ lỗi 10030
+    InitMT5Trading();
+
     // PART 1: Symbol recognition | Nhan dien ky hieu
     if(!InitializeSymbolRecognition()) return(INIT_FAILED);
     InitializeSymbolPrefix();
+
+    // PART 1B: Detect symbol type ONCE (FOREX/CRYPTO/METAL/INDEX) | Phat hien loai symbol MOT LAN
+    g_ea.symbol_type = DetectSymbolType(_Symbol);
+    Print("[INIT] Symbol type detected: ", g_ea.symbol_type);
+
+    // PART 1C: Get all leverages ONCE (FX:500 CR:100 MT:500 IX:250) | Lay tat ca don bay MOT LAN
+    g_ea.all_leverages = GetAllLeverages();
+    Print("[INIT] All leverages: ", g_ea.all_leverages);
+
+    // PART 1D: Get broker & account info ONCE | Lay thong tin san va tai khoan MOT LAN
+    g_ea.broker_name = AccountCompany();
+    long acc_type = AccountInfoInteger(ACCOUNT_TRADE_MODE);
+    g_ea.account_type = (acc_type == ACCOUNT_TRADE_MODE_DEMO) ? "Demo" :
+                        (acc_type == ACCOUNT_TRADE_MODE_REAL) ? "Real" : "Contest";
+    Print("[INIT] Broker: ", g_ea.broker_name, " | Account: ", g_ea.account_type);
 
     // PART 2: Folder selection (only for local file mode) | Chon thu muc (chi cho che do file local)
     if(CSDL_Source == FOLDER_1) g_ea.csdl_folder = "DataAutoOner\\";
@@ -2293,10 +2386,53 @@ void OnDeinit(const int reason) {
 }
 
 //=============================================================================
-//  PART 19: DASHBOARD - OBJ_LABEL (4 functions) | BANG DIEU KHIEN OBJ_LABEL
+//  PART 19: DASHBOARD - OBJ_LABEL (5 functions) | BANG DIEU KHIEN OBJ_LABEL
 //=============================================================================
 // Leverages existing EA resources: g_ea struct, flags, lot sizes | Tan dung tai nguyen EA co san
-// Uses OBJ_LABEL with fixed-width spaces + alternating colors (Blue/White) | Dung OBJ_LABEL voi khoang cach co dinh + 2 mau xen ke
+// Uses OBJ_LABEL with dynamic spacing + Unicode symbols + Segoe UI font | Dung OBJ_LABEL voi khoang cach dong + ky tu Unicode + font Segoe UI
+
+// Detect symbol type (FOREX/CRYPTO/METAL/INDEX) - called ONCE at OnInit | Phat hien loai symbol - goi MOT LAN tai OnInit
+// Uses hybrid approach: MT5 API first, then pattern matching fallback | Dung phuong phap lai: MT5 API truoc, sau do pattern matching
+string DetectSymbolType(string symbol) {
+    // Try MT5 API first (works on MT5 build 2600+) | Thu MT5 API truoc
+    long sector = SymbolInfoInteger(symbol, SYMBOL_SECTOR);
+
+    if(sector > 0) {
+        // API works, use it | API hoat dong, su dung
+        switch((int)sector) {
+            case 1: return "FX";       // SECTOR_CURRENCY
+            case 2: return "METAL";    // SECTOR_METALS
+            case 3: return "CRYPTO";   // SECTOR_CRYPTO
+            case 4: return "INDEX";    // SECTOR_INDEX
+            case 5: return "STOCK";    // SECTOR_STOCK
+            case 6: return "CMDTY";    // SECTOR_COMMODITY
+        }
+    }
+
+    // Fallback: Pattern matching if API not available or returns 0 | Du phong: khop pattern neu API khong co
+    string sym = symbol;
+    StringToUpper(sym);
+
+    // CRYPTO patterns | Cac pattern CRYPTO
+    if(StringFind(sym, "BTC") >= 0 || StringFind(sym, "ETH") >= 0 ||
+       StringFind(sym, "LTC") >= 0 || StringFind(sym, "XRP") >= 0 ||
+       StringFind(sym, "BNB") >= 0) return "CRYPTO";
+
+    // METAL patterns | Cac pattern KIM LOAI
+    if(StringFind(sym, "XAU") >= 0 || StringFind(sym, "XAG") >= 0 ||
+       StringFind(sym, "GOLD") >= 0 || StringFind(sym, "SILVER") >= 0) return "METAL";
+
+    // ENERGY patterns | Cac pattern NANG LUONG
+    if(StringFind(sym, "OIL") >= 0 || StringFind(sym, "WTI") >= 0 ||
+       StringFind(sym, "BRENT") >= 0) return "ENERGY";
+
+    // INDEX patterns | Cac pattern CHI SO
+    if(StringFind(sym, "SPX") >= 0 || StringFind(sym, "NAS") >= 0 ||
+       StringFind(sym, "DOW") >= 0 || StringFind(sym, "DAX") >= 0) return "INDEX";
+
+    // Default to FOREX | Mac dinh la FOREX
+    return "FX";
+}
 
 // Scan all orders once for dashboard (reuse stoploss logic) | Quet lenh 1 lan cho dashboard (tai su dung logic stoploss)
 // NEW: Builds 2 separate summaries - S1 only (row 1), S2+S3 (row 2) | Xay dung 2 tom tat rieng - Chi S1 (hang 1), S2+S3 (hang 2)
@@ -2478,7 +2614,83 @@ string FormatBonusStatus() {
     return result;
 }
 
-// Main dashboard update with OBJ_LABEL (15 lines, optimized) | Cap nhat dashboard voi OBJ_LABEL (15 dong, toi uu)
+// Get all leverage types for account (FX, CRYPTO, METAL, INDEX) | Lay tat ca cac loai don bay cua tai khoan
+string GetAllLeverages() {
+    // Simplified: Display estimated leverages based on account leverage | Don gian: Hien thi don bay uoc tinh tu don bay tai khoan
+    // Most brokers use: FX=Full, Crypto=1/5, Metal=Full, Index=1/2 | Hau het san dung: FX=Day du, Crypto=1/5, Metal=Day du, Index=1/2
+
+    int base_lev = (int)AccountLeverage();
+    string result = "";
+
+    // Check which symbol types are available by trying to select them | Kiem tra loai symbol nao co san
+    bool has_fx = false, has_crypto = false, has_metal = false, has_index = false;
+
+    // Try common FX symbols | Thu cac symbol FX pho bien
+    if(SymbolSelect("EURUSD", false) || SymbolSelect("GBPUSD", false) || SymbolSelect("USDJPY", false)) {
+        has_fx = true;
+    }
+
+    // Try common Crypto symbols | Thu cac symbol Crypto pho bien
+    if(SymbolSelect("BTCUSD", false) || SymbolSelect("BTCUSDT", false) || SymbolSelect("ETHUSD", false)) {
+        has_crypto = true;
+    }
+
+    // Try common Metal symbols | Thu cac symbol Metal pho bien
+    if(SymbolSelect("XAUUSD", false) || SymbolSelect("XAGUSD", false)) {
+        has_metal = true;
+    }
+
+    // Try common Index symbols | Thu cac symbol Index pho bien
+    if(SymbolSelect("SPX500", false) || SymbolSelect("US30", false) || SymbolSelect("NAS100", false)) {
+        has_index = true;
+    }
+
+    // Build result string with estimated leverages | Xay dung chuoi ket qua voi don bay uoc tinh
+    if(has_fx) result += "FX:" + IntegerToString(base_lev) + " ";
+    if(has_crypto) result += "CR:" + IntegerToString(base_lev / 5) + " ";
+    if(has_metal) result += "MT:" + IntegerToString(base_lev) + " ";
+    if(has_index) result += "IX:" + IntegerToString(base_lev / 2);
+
+    // Remove trailing space if exists | Xoa khoang trang cuoi neu co
+    if(StringLen(result) > 0 && StringGetCharacter(result, StringLen(result) - 1) == 32) {
+        result = StringSubstr(result, 0, StringLen(result) - 1);
+    }
+
+    // Fallback if nothing found | Du phong neu khong tim thay gi
+    if(result == "") result = "Lev:1:" + IntegerToString(base_lev);
+
+    return result;
+}
+
+// Create dashboard background panel (dark brown rectangle) | Tao nen dashboard (hinh chu nhat mau nau dam)
+void CreateDashboardBackground(int y_start, int line_height, int total_rows) {
+    string bg_name = g_ea.symbol_prefix + "dash_bg";
+
+    // Calculate panel dimensions | Tinh kich thuoc panel
+    int panel_x = 5;              // 5px from left edge | 5px tu canh trai
+    int panel_y = y_start - 5;    // 5px above dashboard start | 5px phia tren dashboard
+    int panel_width = 500;        // 2/3 of original (750 * 2/3 = 500) | 2/3 kich thuoc cu
+    int panel_height = (total_rows * line_height) + 20;  // Height + extra padding for last row | Chieu cao + padding them cho dong cuoi
+
+    // Dark brown color (professional look) | Mau nau dam (nhin chuyen nghiep)
+    color bg_color = C'30,25,20';  // RGB: Very dark brown | Nau rat dam
+
+    // Create or update rectangle background | Tao hoac cap nhat nen hinh chu nhat
+    if(ObjectFind(bg_name) < 0) {
+        ObjectCreate(bg_name, OBJ_RECTANGLE_LABEL, 0, 0, 0);
+        ObjectSet(bg_name, OBJPROP_CORNER, CORNER_LEFT_UPPER);
+        ObjectSet(bg_name, OBJPROP_BACK, true);  // Place in background layer | Dat o lop phia sau
+    }
+
+    // Update position and size | Cap nhat vi tri va kich thuoc
+    ObjectSet(bg_name, OBJPROP_XDISTANCE, panel_x);
+    ObjectSet(bg_name, OBJPROP_YDISTANCE, panel_y);
+    ObjectSet(bg_name, OBJPROP_XSIZE, panel_width);
+    ObjectSet(bg_name, OBJPROP_YSIZE, panel_height);
+    ObjectSet(bg_name, OBJPROP_BGCOLOR, bg_color);
+}
+
+// Main dashboard update with OBJ_LABEL - DYNAMIC LAYOUT (11 lines, compact) | Cap nhat dashboard - BO CUC DONG (11 dong, gon)
 void UpdateDashboard() {
     // Check if dashboard is enabled | Kiem tra dashboard co bat khong
     if(!ShowDashboard) {
@@ -2486,13 +2698,17 @@ void UpdateDashboard() {
         for(int i = 0; i <= 14; i++) {
             ObjectDelete("dash_" + IntegerToString(i));
         }
+        ObjectDelete(g_ea.symbol_prefix + "dash_bg");  // Delete background too
         return;
     }
 
-
     int y_start = 150;  // Start 150px from top | Bat dau tu 150px tu tren
-    int line_height = 14;  // Line spacing | Khoang cach dong
+    int line_height = 13;  // Line spacing (smaller) | Khoang cach dong (nho bon)
     int y_pos = y_start;
+    int total_rows = 11;  // Total dashboard rows | Tong so dong dashboard
+
+    // ===== CREATE BACKGROUND PANEL (draw first, before labels) | TAO NEN (ve truoc, duoi cac label)
+    CreateDashboardBackground(y_start, line_height, total_rows);
 
     // ===== LEVERAGE: Account info | Tai su dung: Thong tin tai khoan
     double equity = AccountEquity();
@@ -2541,61 +2757,65 @@ void UpdateDashboard() {
     }
 
     // ===== LEVERAGE: g_ea variables | Tai su dung: Bien g_ea
+    // Folder/API source display | Hien thi nguon folder/API
     string folder = "";
-    if(CSDL_Source == FOLDER_1) folder = "DA1";
-    else if(CSDL_Source == FOLDER_2) folder = "DA2";
-    else if(CSDL_Source == FOLDER_3) folder = "DA3";
-    string trend = (g_ea.trend_d1 == 1) ? "^" : (g_ea.trend_d1 == -1 ? "v" : "-");
+    if(CSDL_Source == FOLDER_1) folder = "DA1:BSpy";
+    else if(CSDL_Source == FOLDER_2) folder = "DA2:Def";
+    else if(CSDL_Source == FOLDER_3) folder = "DA3:Sync";
+    else if(CSDL_Source == HTTP_API) folder = "API:Rem";
 
-    // ===== LINE 0: HEADER (YELLOW) | TIEU DE (VANG)
-    string header = "[" + g_ea.symbol_name + "] " + folder + " | 7TFx3S | D1:" + trend +
-                    " | $" + DoubleToString(equity, 0) + " DD:" + DoubleToString(dd, 1) + "% | " +
-                    IntegerToString(total_orders) + "/21";
-    CreateOrUpdateLabel(g_ea.symbol_prefix + "dash_0", header, 10, y_pos, clrYellow, 9);
-    y_pos += line_height;
-
-    // ===== LINE 1: SEPARATOR (White) | DUONG GACH (Trang)
-    CreateOrUpdateLabel(g_ea.symbol_prefix + "dash_1", "----------------------------------------------------", 10, y_pos, clrWhite, 9);
-    y_pos += line_height;
-
-    // ===== LINE 2: COLUMN HEADERS (White) | TEN COT (Trang)
-    string col_header = PadRight("TF", 5) + PadRight("Sig", 5) + PadRight("S1", 7) +
-                        PadRight("S2", 7) + PadRight("S3", 7) + PadRight("P&L", 9) +
-                        PadRight("News", 7) + "Bonus";
-    CreateOrUpdateLabel(g_ea.symbol_prefix + "dash_2", col_header, 10, y_pos, clrWhite, 9);
-    y_pos += line_height;
-
-    // ===== LINE 3: SEPARATOR (White) | DUONG GACH (Trang)
-    CreateOrUpdateLabel(g_ea.symbol_prefix + "dash_3", "----------------------------------------------------", 10, y_pos, clrWhite, 9);
-    y_pos += line_height;
-
-    // ===== LINES 4-10: 7 TF ROWS - ALTERNATING COLORS + P&L | 7 HANG TF - 2 MAU XEN KE + LAI LO
-
-    // 🔍 DEBUG: Print NEWS before display (once per cycle)
-    static datetime last_news_debug = 0;
-    if(TimeCurrent() != last_news_debug) {
-        string news_debug = "DASH NEWS: ";
-        for(int i = 0; i < 7; i++) {
-            news_debug += "TF" + IntegerToString(i) + "=" + IntegerToString(g_ea.csdl_rows[i].news) + " ";
-        }
-        DebugPrint(news_debug);
-        last_news_debug = TimeCurrent();
+    // S2 Trend Mode display (from Input parameter, not g_ea.trend_d1) | Hien thi che do S2 Trend (tu tham so Input)
+    string trend = "";
+    if(S2_TrendMode == S2_FOLLOW_D1) {
+        // Auto: Follow D1 signal | Tu dong: Theo tin hieu D1
+        trend = (g_ea.trend_d1 == 1) ? ARROW_UP : (g_ea.trend_d1 == -1 ? ARROW_DOWN : BULLET);
+    } else if(S2_TrendMode == S2_FORCE_BUY) {
+        trend = ARROW_UP + "!";  // Force BUY mode | Che do ep BUY
+    } else if(S2_TrendMode == S2_FORCE_SELL) {
+        trend = ARROW_DOWN + "!";  // Force SELL mode | Che do ep SELL
     }
 
+    // ===== ROW 0: HEADER with Symbol Type (YELLOW) | HANG 0: TIEU DE voi Loai symbol (VANG)
+    string header = "[" + g_ea.symbol_name + MIDDOT + g_ea.symbol_type + "] " + folder +
+                    " | 7TFx3S | D1" + trend + " | $" + DoubleToString(equity, 0) +
+                    " DD:" + DoubleToString(dd, 1) + "% | " + IntegerToString(total_orders) + "/21";
+    CreateOrUpdateLabel(g_ea.symbol_prefix + "dash_0", header, 10, y_pos, clrYellow, 8);
+    y_pos += line_height;
+
+    // ===== ROW 1: SEPARATOR (White) | HANG 1: DUONG PHAN CACH (Trang)
+    string separator = "";
+    for(int i = 0; i < 55; i++) separator += LINE_H;  // 55 chars of ─
+    CreateOrUpdateLabel(g_ea.symbol_prefix + "dash_1", separator, 10, y_pos, clrWhite, 8);
+    y_pos += line_height;
+
+    // ===== ROWS 2-8: 7 TF ROWS with DYNAMIC LAYOUT + UNICODE | 7 HANG TF voi BO CUC DONG + UNICODE
+
     for(int tf = 0; tf < 7; tf++) {
-        // Signal with ASCII arrows (^ up, v down, - none) | Tin hieu voi mui ten ASCII
+        // Signal with Unicode symbols | Tin hieu voi ky tu Unicode
         int current_signal = g_ea.csdl_rows[tf].signal;
-        string sig = "";
-        if(current_signal == 1) sig = "^";         // UP arrow | Mui ten len
-        else if(current_signal == -1) sig = "v";   // DOWN arrow | Mui ten xuong
-        else sig = "-";                             // NONE | Khong co
+        string sig = (current_signal == 1) ? ARROW_UP : (current_signal == -1 ? ARROW_DOWN : BULLET);
 
-        // S1/S2/S3 positions | Vi the S1/S2/S3
-        string s1 = (g_ea.position_flags[tf][0] == 1) ? "*" + DoubleToString(g_ea.lot_sizes[tf][0], 2) : "o";
-        string s2 = (g_ea.position_flags[tf][1] == 1) ? "*" + DoubleToString(g_ea.lot_sizes[tf][1], 2) : "o";
-        string s3 = (g_ea.position_flags[tf][2] == 1) ? "*" + DoubleToString(g_ea.lot_sizes[tf][2], 2) : "o";
+        // PriceDiff (USD movement) | Chenh lech gia (USD)
+        double pricediff = g_ea.csdl_rows[tf].pricediff;
+        string pd_str = "";
+        if(pricediff > 0.05) pd_str = "+" + DoubleToString(pricediff, 1);
+        else if(pricediff < -0.05) pd_str = DoubleToString(pricediff, 1);
+        else pd_str = "+0.0";
 
-        // P&L for this TF (all strategies) | Lai lo cho TF nay (tat ca chien luoc)
+        // TimeDiff (smart format: 3m, 2h, 5d) | Chenh lech thoi gian (dinh dang thong minh)
+        int timediff = g_ea.csdl_rows[tf].timediff;
+        string td_str = "";
+        if(timediff < 0) td_str = "0m";
+        else if(timediff < 60) td_str = IntegerToString(timediff) + "m";        // < 1h: minutes
+        else if(timediff < 1440) td_str = IntegerToString(timediff/60) + "h";   // < 1d: hours
+        else td_str = IntegerToString(timediff/1440) + "d";                      // >= 1d: days
+
+        // S1/S2/S3 positions with Unicode | Vi the S1/S2/S3 voi Unicode
+        string s1 = (g_ea.position_flags[tf][0] == 1) ? CIRCLE_FULL + DoubleToString(g_ea.lot_sizes[tf][0], 2) : CIRCLE_EMPTY;
+        string s2 = (g_ea.position_flags[tf][1] == 1) ? CIRCLE_FULL + DoubleToString(g_ea.lot_sizes[tf][1], 2) : CIRCLE_EMPTY;
+        string s3 = (g_ea.position_flags[tf][2] == 1) ? CIRCLE_FULL + DoubleToString(g_ea.lot_sizes[tf][2], 2) : CIRCLE_EMPTY;
+
+        // P&L for this TF | Lai lo cho TF nay
         double tf_pnl = CalculateTFPnL(tf);
         string pnl_str = "";
         if(tf_pnl > 0) pnl_str = "+" + DoubleToString(tf_pnl, 2);
@@ -2603,59 +2823,76 @@ void UpdateDashboard() {
         else pnl_str = "+0.00";
 
         // News with sign | Tin tuc voi dau
-        string nw = IntegerToString(g_ea.csdl_rows[tf].news);
-        if(g_ea.csdl_rows[tf].news > 0) nw = "+" + nw;
+        int news = g_ea.csdl_rows[tf].news;
+        string nw = (news > 0) ? "+" + IntegerToString(news) : IntegerToString(news);
 
-        // BONUS display: "count|lot" or "-" | Hien thi BONUS: "so|lot" hoac "-"
-        string bonus_str = "-";
-        if(bonus_count_per_tf[tf] > 0) {
-            bonus_str = IntegerToString(bonus_count_per_tf[tf]) + "|" +
-                        DoubleToString(bonus_lots_per_tf[tf], 2);
-        }
+        // BONUS display | Hien thi BONUS
+        string bonus_str = (bonus_count_per_tf[tf] > 0) ?
+                          IntegerToString(bonus_count_per_tf[tf]) + "|" + DoubleToString(bonus_lots_per_tf[tf], 2) :
+                          EM_DASH;
 
-        // Build row with fixed-width columns | Xay dung dong voi cot co dinh
-        string row = PadRight(G_TF_NAMES[tf], 5) + PadRight(sig, 5) + PadRight(s1, 7) +
-                     PadRight(s2, 7) + PadRight(s3, 7) + PadRight(pnl_str, 9) +
-                     PadRight(nw, 7) + bonus_str;
+        // Add padding to TF name for relative column alignment | Them padding cho ten TF de canh cot tuong doi
+        string tf_padded = "";
+        if(G_TF_NAMES[tf] == "M1")  tf_padded = "M1__";   // 2 underscores
+        else if(G_TF_NAMES[tf] == "M5")  tf_padded = "M5__";
+        else if(G_TF_NAMES[tf] == "M15") tf_padded = "M15_";  // 1 underscore
+        else if(G_TF_NAMES[tf] == "M30") tf_padded = "M30_";
+        else if(G_TF_NAMES[tf] == "H1")  tf_padded = "H1__";  // 2 underscores
+        else if(G_TF_NAMES[tf] == "H4")  tf_padded = "H4__";
+        else if(G_TF_NAMES[tf] == "D1")  tf_padded = "D1__";
 
-        // Alternating colors: Blue (even rows), White (odd rows) | Mau xen ke: Xanh (dong chan), Trang (dong le)
+        // Build row with | SEPARATORS for visual clarity | Xay dung dong voi | PHAN CACH de de doc
+        // Format: |TF__ signal |pricediff| |timediff||s1||s2||s3||pnl||news||bonus|
+        string row = "|" + tf_padded + " " + sig + " |" + pd_str + "| |" + td_str + "||" +
+                     s1 + "||" + s2 + "||" + s3 + "||" + pnl_str + "||" + nw + "||" + bonus_str + "|";
+
+        // Alternating colors | Mau xen ke
         color row_color = (tf % 2 == 0) ? clrDodgerBlue : clrWhite;
-        CreateOrUpdateLabel(g_ea.symbol_prefix + "dash_" + IntegerToString(4 + tf), row, 10, y_pos, row_color, 9);
+        CreateOrUpdateLabel(g_ea.symbol_prefix + "dash_" + IntegerToString(2 + tf), row, 10, y_pos, row_color, 8);
         y_pos += line_height;
     }
 
-    // ===== LINE 11: SEPARATOR (White) | DUONG GACH (Trang)
-    CreateOrUpdateLabel(g_ea.symbol_prefix + "dash_11", "----------------------------------------------------", 10, y_pos, clrWhite, 9);
+    // ===== ROW 9: SEPARATOR (White) | HANG 9: DUONG PHAN CACH (Trang)
+    CreateOrUpdateLabel(g_ea.symbol_prefix + "dash_9", separator, 10, y_pos, clrWhite, 8);
     y_pos += line_height;
 
-    // ===== LINE 12: BONUS STATUS (White) | TRANG THAI BONUS (Trang)
-    string bonus_status = FormatBonusStatus();
-    CreateOrUpdateLabel(g_ea.symbol_prefix + "dash_12", bonus_status, 10, y_pos, clrWhite, 9);
-    y_pos += line_height;
-
-    // ===== LINE 13: NET SUMMARY (Yellow) | TOM TAT NET (Vang)
+    // ===== ROW 10: NET SUMMARY + BONUS (MERGED) (Yellow) | HANG 10: TOM TAT + BONUS (GOP CHUNG) (Vang)
     double net = total_profit + total_loss;
-    string net_summary = "NET:$" + DoubleToString(net, 2);
+    string summary = "NET:$" + DoubleToString(net, 2);
 
     // Add strategy breakdown if there are orders | Them phan tich chien luoc neu co lenh
-    if(s1_count > 0) net_summary += " | S1:" + IntegerToString(s1_count) + "x$" + DoubleToString(s1_pnl, 0);
-    if(s2_count > 0) net_summary += " | S2:" + IntegerToString(s2_count) + "x$" + DoubleToString(s2_pnl, 0);
-    if(s3_count > 0) net_summary += " | S3:" + IntegerToString(s3_count) + "x$" + DoubleToString(s3_pnl, 1);
+    if(s1_count > 0) summary += " S1:" + IntegerToString(s1_count) + MULTIPLY + "$" + DoubleToString(s1_pnl, 0);
+    if(s2_count > 0) summary += " S2:" + IntegerToString(s2_count) + MULTIPLY + "$" + DoubleToString(s2_pnl, 0);
+    if(s3_count > 0) summary += " S3:" + IntegerToString(s3_count) + MULTIPLY + "$" + DoubleToString(s3_pnl, 1);
 
-    net_summary += " | " + IntegerToString(total_orders) + "/21";
+    // Add BONUS to same line (merged) | Them BONUS vao cung dong (gop lai)
+    int total_bonus = 0;
+    double total_bonus_lots = 0;
+    for(int i = 0; i < 7; i++) {
+        total_bonus += bonus_count_per_tf[i];
+        total_bonus_lots += bonus_lots_per_tf[i];
+    }
+    if(total_bonus > 0) {
+        summary += " BONUS:" + IntegerToString(total_bonus) + "|" + DoubleToString(total_bonus_lots, 2);
+    }
 
-    CreateOrUpdateLabel(g_ea.symbol_prefix + "dash_13", net_summary, 10, y_pos, clrYellow, 9);
+    summary += " " + IntegerToString(total_orders) + "/21";
+
+    CreateOrUpdateLabel(g_ea.symbol_prefix + "dash_10", summary, 10, y_pos, clrYellow, 8);
     y_pos += line_height;
 
-    // ===== LINE 14: BROKER INFO (Yellow) | THONG TIN SAN (Vang)
-    string broker = AccountCompany();
-    int leverage = AccountLeverage();
-    string broker_info = broker + " | Lev:1:" + IntegerToString(leverage) + " | 2s";
-    CreateOrUpdateLabel(g_ea.symbol_prefix + "dash_14", broker_info, 10, y_pos, clrYellow, 8);
+    // ===== ROW 11: BROKER INFO with ALL Leverage Types (Yellow) | HANG 11: THONG TIN SAN voi TAT CA Don bay (Vang)
+    // Use cached values from g_ea (calculated ONCE in OnInit) | Dung gia tri cache tu g_ea (tinh MOT LAN trong OnInit)
+    double current_spread = SymbolInfoInteger(_Symbol, SYMBOL_SPREAD) * SymbolInfoDouble(_Symbol, SYMBOL_POINT);
+    string spread_str = DoubleToString(current_spread / SymbolInfoDouble(_Symbol, SYMBOL_POINT), 0);
 
-    // Clean up old unused labels | Don dep nhan cu khong dung
-    ObjectDelete(g_ea.symbol_prefix + "dash_15");
-    ObjectDelete(g_ea.symbol_prefix + "dash_16");
+    string broker_info = g_ea.broker_name + " " + g_ea.account_type + " " + g_ea.all_leverages + " Sp:" + spread_str + " 2s";
+    CreateOrUpdateLabel(g_ea.symbol_prefix + "dash_11", broker_info, 10, y_pos, clrYellow, 7);
+
+    // Clean up old unused labels (dash_12-dash_16) | Don dep nhan cu khong dung
+    for(int i = 12; i <= 16; i++) {
+        ObjectDelete(g_ea.symbol_prefix + "dash_" + IntegerToString(i));
+    }
 }
 
 // Create or update OBJ_LABEL | Tao hoac cap nhat OBJ_LABEL
@@ -2666,7 +2903,7 @@ void CreateOrUpdateLabel(string name, string text, int x, int y, color clr, int 
         ObjectSet(name, OBJPROP_XDISTANCE, x);
         ObjectSet(name, OBJPROP_YDISTANCE, y);
     }
-    ObjectSetText(name, text, font_size, "Courier New", clr);
+    ObjectSetText(name, text, font_size, "Segoe UI", clr);  // Changed to Segoe UI
 }
 
 // Timer event - main trading loop (1 second) | Su kien timer - vong lap giao dich chinh (1 giay)
