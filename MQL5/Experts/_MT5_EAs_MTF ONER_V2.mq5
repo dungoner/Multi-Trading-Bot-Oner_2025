@@ -117,6 +117,23 @@ input bool ShowDashboard = true;  // Show dashboard (on-chart info)
 input bool DebugMode = false;      // Debug mode (verbose logging)
 
 //=============================================================================
+//  PART 1B: UNICODE SYMBOLS (for dashboard) | KY TU UNICODE
+//=============================================================================
+// Use escape codes to keep file as ANSI (no UTF-8 encoding needed)
+// These will display as Unicode symbols in MT5 dashboard
+//=============================================================================
+
+#define ARROW_UP     "\u25B2"   // ▲ - Up triangle
+#define ARROW_DOWN   "\u25BC"   // ▼ - Down triangle
+#define BULLET       "\u2022"   // • - Bullet point (neutral)
+#define CIRCLE_FULL  "\u25CF"   // ● - Filled circle (position active)
+#define CIRCLE_EMPTY "\u25CB"   // ○ - Empty circle (no position)
+#define LINE_H       "\u2500"   // ─ - Horizontal line (separator)
+#define MULTIPLY     "\u00D7"   // × - Multiplication sign
+#define MIDDOT       "\u00B7"   // · - Middle dot (separator)
+#define EM_DASH      "\u2014"   // — - Em dash (for empty values)
+
+//=============================================================================
 //  PART 2: DATA STRUCTURES (1 struct) | CAU TRUC DU LIEU
 //=============================================================================
 
@@ -138,10 +155,11 @@ struct CSDLLoveRow {
 //=============================================================================
 
 struct EASymbolData {
-    // Symbol & File info (5 vars) | Thong tin symbol va file
+    // Symbol & File info (6 vars) | Thong tin symbol va file
     string symbol_name;          // Symbol name from broker (may have suffix: LTCUSDC, XAUUSD.xyz) | Ten symbol tu broker
     string normalized_symbol_name; // Normalized symbol name (LTCUSD, XAUUSD) for API calls | Ten symbol chuan hoa cho goi API
     string symbol_prefix;        // Symbol prefix with underscore | Tien to symbol co gach duoi
+    string symbol_type;          // Symbol type (FX/CRYPTO/METAL/INDEX/STOCK) | Loai symbol
     string csdl_folder;          // CSDL folder path | Duong dan thu muc CSDL
     string csdl_filename;        // Full CSDL filename | Ten file CSDL day du
 
@@ -2219,6 +2237,10 @@ int OnInit() {
     if(!InitializeSymbolRecognition()) return(INIT_FAILED);
     InitializeSymbolPrefix();
 
+    // PART 1B: Detect symbol type ONCE (FOREX/CRYPTO/METAL/INDEX) | Phat hien loai symbol MOT LAN
+    g_ea.symbol_type = DetectSymbolType(_Symbol);
+    Print("[INIT] Symbol type detected: ", g_ea.symbol_type);
+
     // PART 2: Folder selection (only for local file mode) | Chon thu muc (chi cho che do file local)
     if(CSDL_Source == FOLDER_1) g_ea.csdl_folder = "DataAutoOner\\";
     else if(CSDL_Source == FOLDER_2) g_ea.csdl_folder = "DataAutoOner2\\";
@@ -2349,10 +2371,53 @@ void OnDeinit(const int reason) {
 }
 
 //=============================================================================
-//  PART 19: DASHBOARD - OBJ_LABEL (4 functions) | BANG DIEU KHIEN OBJ_LABEL
+//  PART 19: DASHBOARD - OBJ_LABEL (5 functions) | BANG DIEU KHIEN OBJ_LABEL
 //=============================================================================
 // Leverages existing EA resources: g_ea struct, flags, lot sizes | Tan dung tai nguyen EA co san
-// Uses OBJ_LABEL with fixed-width spaces + alternating colors (Blue/White) | Dung OBJ_LABEL voi khoang cach co dinh + 2 mau xen ke
+// Uses OBJ_LABEL with dynamic spacing + Unicode symbols + Segoe UI font | Dung OBJ_LABEL voi khoang cach dong + ky tu Unicode + font Segoe UI
+
+// Detect symbol type (FOREX/CRYPTO/METAL/INDEX) - called ONCE at OnInit | Phat hien loai symbol - goi MOT LAN tai OnInit
+// Uses hybrid approach: MT5 API first, then pattern matching fallback | Dung phuong phap lai: MT5 API truoc, sau do pattern matching
+string DetectSymbolType(string symbol) {
+    // Try MT5 API first (works on MT5 build 2600+) | Thu MT5 API truoc
+    long sector = SymbolInfoInteger(symbol, SYMBOL_SECTOR);
+
+    if(sector > 0) {
+        // API works, use it | API hoat dong, su dung
+        switch((int)sector) {
+            case 1: return "FX";       // SECTOR_CURRENCY
+            case 2: return "METAL";    // SECTOR_METALS
+            case 3: return "CRYPTO";   // SECTOR_CRYPTO
+            case 4: return "INDEX";    // SECTOR_INDEX
+            case 5: return "STOCK";    // SECTOR_STOCK
+            case 6: return "CMDTY";    // SECTOR_COMMODITY
+        }
+    }
+
+    // Fallback: Pattern matching if API not available or returns 0 | Du phong: khop pattern neu API khong co
+    string sym = symbol;
+    StringToUpper(sym);
+
+    // CRYPTO patterns | Cac pattern CRYPTO
+    if(StringFind(sym, "BTC") >= 0 || StringFind(sym, "ETH") >= 0 ||
+       StringFind(sym, "LTC") >= 0 || StringFind(sym, "XRP") >= 0 ||
+       StringFind(sym, "BNB") >= 0) return "CRYPTO";
+
+    // METAL patterns | Cac pattern KIM LOAI
+    if(StringFind(sym, "XAU") >= 0 || StringFind(sym, "XAG") >= 0 ||
+       StringFind(sym, "GOLD") >= 0 || StringFind(sym, "SILVER") >= 0) return "METAL";
+
+    // ENERGY patterns | Cac pattern NANG LUONG
+    if(StringFind(sym, "OIL") >= 0 || StringFind(sym, "WTI") >= 0 ||
+       StringFind(sym, "BRENT") >= 0) return "ENERGY";
+
+    // INDEX patterns | Cac pattern CHI SO
+    if(StringFind(sym, "SPX") >= 0 || StringFind(sym, "NAS") >= 0 ||
+       StringFind(sym, "DOW") >= 0 || StringFind(sym, "DAX") >= 0) return "INDEX";
+
+    // Default to FOREX | Mac dinh la FOREX
+    return "FX";
+}
 
 // Scan all orders once for dashboard (reuse stoploss logic) | Quet lenh 1 lan cho dashboard (tai su dung logic stoploss)
 // NEW: Builds 2 separate summaries - S1 only (row 1), S2+S3 (row 2) | Xay dung 2 tom tat rieng - Chi S1 (hang 1), S2+S3 (hang 2)
@@ -2534,7 +2599,7 @@ string FormatBonusStatus() {
     return result;
 }
 
-// Main dashboard update with OBJ_LABEL (15 lines, optimized) | Cap nhat dashboard voi OBJ_LABEL (15 dong, toi uu)
+// Main dashboard update with OBJ_LABEL - DYNAMIC LAYOUT (11 lines, compact) | Cap nhat dashboard - BO CUC DONG (11 dong, gon)
 void UpdateDashboard() {
     // Check if dashboard is enabled | Kiem tra dashboard co bat khong
     if(!ShowDashboard) {
@@ -2545,9 +2610,8 @@ void UpdateDashboard() {
         return;
     }
 
-
     int y_start = 150;  // Start 150px from top | Bat dau tu 150px tu tren
-    int line_height = 14;  // Line spacing | Khoang cach dong
+    int line_height = 13;  // Line spacing (smaller) | Khoang cach dong (nho hon)
     int y_pos = y_start;
 
     // ===== LEVERAGE: Account info | Tai su dung: Thong tin tai khoan
@@ -2601,57 +2665,49 @@ void UpdateDashboard() {
     if(CSDL_Source == FOLDER_1) folder = "DA1";
     else if(CSDL_Source == FOLDER_2) folder = "DA2";
     else if(CSDL_Source == FOLDER_3) folder = "DA3";
-    string trend = (g_ea.trend_d1 == 1) ? "^" : (g_ea.trend_d1 == -1 ? "v" : "-");
+    string trend = (g_ea.trend_d1 == 1) ? ARROW_UP : (g_ea.trend_d1 == -1 ? ARROW_DOWN : BULLET);
 
-    // ===== LINE 0: HEADER (YELLOW) | TIEU DE (VANG)
-    string header = "[" + g_ea.symbol_name + "] " + folder + " | 7TFx3S | D1:" + trend +
-                    " | $" + DoubleToString(equity, 0) + " DD:" + DoubleToString(dd, 1) + "% | " +
-                    IntegerToString(total_orders) + "/21";
-    CreateOrUpdateLabel(g_ea.symbol_prefix + "dash_0", header, 10, y_pos, clrYellow, 9);
+    // ===== ROW 0: HEADER with Symbol Type (YELLOW) | HANG 0: TIEU DE voi Loai symbol (VANG)
+    string header = "[" + g_ea.symbol_name + MIDDOT + g_ea.symbol_type + "] " + folder +
+                    " | 7TFx3S | D1" + trend + " | $" + DoubleToString(equity, 0) +
+                    " DD:" + DoubleToString(dd, 1) + "% | " + IntegerToString(total_orders) + "/21";
+    CreateOrUpdateLabel(g_ea.symbol_prefix + "dash_0", header, 10, y_pos, clrYellow, 8);
     y_pos += line_height;
 
-    // ===== LINE 1: SEPARATOR (White) | DUONG GACH (Trang)
-    CreateOrUpdateLabel(g_ea.symbol_prefix + "dash_1", "----------------------------------------------------", 10, y_pos, clrWhite, 9);
+    // ===== ROW 1: SEPARATOR (White) | HANG 1: DUONG PHAN CACH (Trang)
+    string separator = "";
+    for(int i = 0; i < 55; i++) separator += LINE_H;  // 55 chars of ─
+    CreateOrUpdateLabel(g_ea.symbol_prefix + "dash_1", separator, 10, y_pos, clrWhite, 8);
     y_pos += line_height;
 
-    // ===== LINE 2: COLUMN HEADERS (White) | TEN COT (Trang)
-    string col_header = PadRight("TF", 5) + PadRight("Sig", 5) + PadRight("S1", 7) +
-                        PadRight("S2", 7) + PadRight("S3", 7) + PadRight("P&L", 9) +
-                        PadRight("News", 7) + "Bonus";
-    CreateOrUpdateLabel(g_ea.symbol_prefix + "dash_2", col_header, 10, y_pos, clrWhite, 9);
-    y_pos += line_height;
-
-    // ===== LINE 3: SEPARATOR (White) | DUONG GACH (Trang)
-    CreateOrUpdateLabel(g_ea.symbol_prefix + "dash_3", "----------------------------------------------------", 10, y_pos, clrWhite, 9);
-    y_pos += line_height;
-
-    // ===== LINES 4-10: 7 TF ROWS - ALTERNATING COLORS + P&L | 7 HANG TF - 2 MAU XEN KE + LAI LO
-
-    // 🔍 DEBUG: Print NEWS before display (once per cycle)
-    static datetime last_news_debug = 0;
-    if(TimeCurrent() != last_news_debug) {
-        string news_debug = "DASH NEWS: ";
-        for(int i = 0; i < 7; i++) {
-            news_debug += "TF" + IntegerToString(i) + "=" + IntegerToString(g_ea.csdl_rows[i].news) + " ";
-        }
-        DebugPrint(news_debug);
-        last_news_debug = TimeCurrent();
-    }
+    // ===== ROWS 2-8: 7 TF ROWS with DYNAMIC LAYOUT + UNICODE | 7 HANG TF voi BO CUC DONG + UNICODE
 
     for(int tf = 0; tf < 7; tf++) {
-        // Signal with ASCII arrows (^ up, v down, - none) | Tin hieu voi mui ten ASCII
+        // Signal with Unicode symbols | Tin hieu voi ky tu Unicode
         int current_signal = g_ea.csdl_rows[tf].signal;
-        string sig = "";
-        if(current_signal == 1) sig = "^";         // UP arrow | Mui ten len
-        else if(current_signal == -1) sig = "v";   // DOWN arrow | Mui ten xuong
-        else sig = "-";                             // NONE | Khong co
+        string sig = (current_signal == 1) ? ARROW_UP : (current_signal == -1 ? ARROW_DOWN : BULLET);
 
-        // S1/S2/S3 positions | Vi the S1/S2/S3
-        string s1 = (g_ea.position_flags[tf][0] == 1) ? "*" + DoubleToString(g_ea.lot_sizes[tf][0], 2) : "o";
-        string s2 = (g_ea.position_flags[tf][1] == 1) ? "*" + DoubleToString(g_ea.lot_sizes[tf][1], 2) : "o";
-        string s3 = (g_ea.position_flags[tf][2] == 1) ? "*" + DoubleToString(g_ea.lot_sizes[tf][2], 2) : "o";
+        // PriceDiff (USD movement) | Chenh lech gia (USD)
+        double pricediff = g_ea.csdl_rows[tf].pricediff;
+        string pd_str = "";
+        if(pricediff > 0.05) pd_str = "+" + DoubleToString(pricediff, 1);
+        else if(pricediff < -0.05) pd_str = DoubleToString(pricediff, 1);
+        else pd_str = "+0.0";
 
-        // P&L for this TF (all strategies) | Lai lo cho TF nay (tat ca chien luoc)
+        // TimeDiff (smart format: 3m, 2h, 5d) | Chenh lech thoi gian (dinh dang thong minh)
+        int timediff = g_ea.csdl_rows[tf].timediff;
+        string td_str = "";
+        if(timediff < 0) td_str = "0m";
+        else if(timediff < 60) td_str = IntegerToString(timediff) + "m";        // < 1h: minutes
+        else if(timediff < 1440) td_str = IntegerToString(timediff/60) + "h";   // < 1d: hours
+        else td_str = IntegerToString(timediff/1440) + "d";                      // >= 1d: days
+
+        // S1/S2/S3 positions with Unicode | Vi the S1/S2/S3 voi Unicode
+        string s1 = (g_ea.position_flags[tf][0] == 1) ? CIRCLE_FULL + DoubleToString(g_ea.lot_sizes[tf][0], 2) : CIRCLE_EMPTY;
+        string s2 = (g_ea.position_flags[tf][1] == 1) ? CIRCLE_FULL + DoubleToString(g_ea.lot_sizes[tf][1], 2) : CIRCLE_EMPTY;
+        string s3 = (g_ea.position_flags[tf][2] == 1) ? CIRCLE_FULL + DoubleToString(g_ea.lot_sizes[tf][2], 2) : CIRCLE_EMPTY;
+
+        // P&L for this TF | Lai lo cho TF nay
         double tf_pnl = CalculateTFPnL(tf);
         string pnl_str = "";
         if(tf_pnl > 0) pnl_str = "+" + DoubleToString(tf_pnl, 2);
@@ -2659,59 +2715,64 @@ void UpdateDashboard() {
         else pnl_str = "+0.00";
 
         // News with sign | Tin tuc voi dau
-        string nw = IntegerToString(g_ea.csdl_rows[tf].news);
-        if(g_ea.csdl_rows[tf].news > 0) nw = "+" + nw;
+        int news = g_ea.csdl_rows[tf].news;
+        string nw = (news > 0) ? "+" + IntegerToString(news) : IntegerToString(news);
 
-        // BONUS display: "count|lot" or "-" | Hien thi BONUS: "so|lot" hoac "-"
-        string bonus_str = "-";
-        if(bonus_count_per_tf[tf] > 0) {
-            bonus_str = IntegerToString(bonus_count_per_tf[tf]) + "|" +
-                        DoubleToString(bonus_lots_per_tf[tf], 2);
-        }
+        // BONUS display | Hien thi BONUS
+        string bonus_str = (bonus_count_per_tf[tf] > 0) ?
+                          IntegerToString(bonus_count_per_tf[tf]) + "|" + DoubleToString(bonus_lots_per_tf[tf], 2) :
+                          EM_DASH;
 
-        // Build row with fixed-width columns | Xay dung dong voi cot co dinh
-        string row = PadRight(G_TF_NAMES[tf], 5) + PadRight(sig, 5) + PadRight(s1, 7) +
-                     PadRight(s2, 7) + PadRight(s3, 7) + PadRight(pnl_str, 9) +
-                     PadRight(nw, 7) + bonus_str;
+        // Build row with DYNAMIC SPACING (no PadRight) | Xay dung dong voi KHOANG CACH DONG
+        // Format: TF  Sig PrDiff TmDiff  S1 S2 S3 P&L  News  Bonus
+        string row = G_TF_NAMES[tf] + "  " + sig + " " + pd_str + " " + td_str + "  " +
+                     s1 + " " + s2 + " " + s3 + " " + pnl_str + "  " + nw + "  " + bonus_str;
 
-        // Alternating colors: Blue (even rows), White (odd rows) | Mau xen ke: Xanh (dong chan), Trang (dong le)
+        // Alternating colors | Mau xen ke
         color row_color = (tf % 2 == 0) ? clrDodgerBlue : clrWhite;
-        CreateOrUpdateLabel(g_ea.symbol_prefix + "dash_" + IntegerToString(4 + tf), row, 10, y_pos, row_color, 9);
+        CreateOrUpdateLabel(g_ea.symbol_prefix + "dash_" + IntegerToString(2 + tf), row, 10, y_pos, row_color, 8);
         y_pos += line_height;
     }
 
-    // ===== LINE 11: SEPARATOR (White) | DUONG GACH (Trang)
-    CreateOrUpdateLabel(g_ea.symbol_prefix + "dash_11", "----------------------------------------------------", 10, y_pos, clrWhite, 9);
+    // ===== ROW 9: SEPARATOR (White) | HANG 9: DUONG PHAN CACH (Trang)
+    CreateOrUpdateLabel(g_ea.symbol_prefix + "dash_9", separator, 10, y_pos, clrWhite, 8);
     y_pos += line_height;
 
-    // ===== LINE 12: BONUS STATUS (White) | TRANG THAI BONUS (Trang)
-    string bonus_status = FormatBonusStatus();
-    CreateOrUpdateLabel(g_ea.symbol_prefix + "dash_12", bonus_status, 10, y_pos, clrWhite, 9);
-    y_pos += line_height;
-
-    // ===== LINE 13: NET SUMMARY (Yellow) | TOM TAT NET (Vang)
+    // ===== ROW 10: NET SUMMARY + BONUS (MERGED) (Yellow) | HANG 10: TOM TAT + BONUS (GOP CHUNG) (Vang)
     double net = total_profit + total_loss;
-    string net_summary = "NET:$" + DoubleToString(net, 2);
+    string summary = "NET:$" + DoubleToString(net, 2);
 
     // Add strategy breakdown if there are orders | Them phan tich chien luoc neu co lenh
-    if(s1_count > 0) net_summary += " | S1:" + IntegerToString(s1_count) + "x$" + DoubleToString(s1_pnl, 0);
-    if(s2_count > 0) net_summary += " | S2:" + IntegerToString(s2_count) + "x$" + DoubleToString(s2_pnl, 0);
-    if(s3_count > 0) net_summary += " | S3:" + IntegerToString(s3_count) + "x$" + DoubleToString(s3_pnl, 1);
+    if(s1_count > 0) summary += " S1:" + IntegerToString(s1_count) + MULTIPLY + "$" + DoubleToString(s1_pnl, 0);
+    if(s2_count > 0) summary += " S2:" + IntegerToString(s2_count) + MULTIPLY + "$" + DoubleToString(s2_pnl, 0);
+    if(s3_count > 0) summary += " S3:" + IntegerToString(s3_count) + MULTIPLY + "$" + DoubleToString(s3_pnl, 1);
 
-    net_summary += " | " + IntegerToString(total_orders) + "/21";
+    // Add BONUS to same line (merged) | Them BONUS vao cung dong (gop lai)
+    int total_bonus = 0;
+    double total_bonus_lots = 0;
+    for(int i = 0; i < 7; i++) {
+        total_bonus += bonus_count_per_tf[i];
+        total_bonus_lots += bonus_lots_per_tf[i];
+    }
+    if(total_bonus > 0) {
+        summary += " BONUS:" + IntegerToString(total_bonus) + "|" + DoubleToString(total_bonus_lots, 2);
+    }
 
-    CreateOrUpdateLabel(g_ea.symbol_prefix + "dash_13", net_summary, 10, y_pos, clrYellow, 9);
+    summary += " " + IntegerToString(total_orders) + "/21";
+
+    CreateOrUpdateLabel(g_ea.symbol_prefix + "dash_10", summary, 10, y_pos, clrYellow, 8);
     y_pos += line_height;
 
-    // ===== LINE 14: BROKER INFO (Yellow) | THONG TIN SAN (Vang)
+    // ===== ROW 11: BROKER INFO (Yellow) | HANG 11: THONG TIN SAN (Vang)
     string broker = AccountCompany();
     int leverage = AccountLeverage();
-    string broker_info = broker + " | Lev:1:" + IntegerToString(leverage) + " | 2s";
-    CreateOrUpdateLabel(g_ea.symbol_prefix + "dash_14", broker_info, 10, y_pos, clrYellow, 8);
+    string broker_info = broker + " Lev:1:" + IntegerToString(leverage) + " 2s";
+    CreateOrUpdateLabel(g_ea.symbol_prefix + "dash_11", broker_info, 10, y_pos, clrYellow, 7);
 
-    // Clean up old unused labels | Don dep nhan cu khong dung
-    ObjectDelete(g_ea.symbol_prefix + "dash_15");
-    ObjectDelete(g_ea.symbol_prefix + "dash_16");
+    // Clean up old unused labels (dash_12-dash_16) | Don dep nhan cu khong dung
+    for(int i = 12; i <= 16; i++) {
+        ObjectDelete(g_ea.symbol_prefix + "dash_" + IntegerToString(i));
+    }
 }
 
 // Create or update OBJ_LABEL | Tao hoac cap nhat OBJ_LABEL
@@ -2722,7 +2783,7 @@ void CreateOrUpdateLabel(string name, string text, int x, int y, color clr, int 
         ObjectSet(name, OBJPROP_XDISTANCE, x);
         ObjectSet(name, OBJPROP_YDISTANCE, y);
     }
-    ObjectSetText(name, text, font_size, "Courier New", clr);
+    ObjectSetText(name, text, font_size, "Segoe UI", clr);  // Changed to Segoe UI
 }
 
 // Timer event - main trading loop (1 second) | Su kien timer - vong lap giao dich chinh (1 giay)
