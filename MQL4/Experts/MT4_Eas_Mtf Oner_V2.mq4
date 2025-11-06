@@ -1484,6 +1484,9 @@ void ProcessBonusNews() {
 
         // Calculate BONUS lot (S3 lot × multiplier) | Tinh lot BONUS (lot S3 × he so nhan)
         double bonus_lot = g_ea.lot_sizes[tf][2] * BonusLotMultiplier;
+        // CRITICAL: Normalize to 2 decimals (0.01 step) to prevent "invalid volume" error
+        // MT4 requires lot to be multiple of 0.01 (e.g., 0.38 OK, 0.384 INVALID)
+        bonus_lot = NormalizeDouble(bonus_lot, 2);
 
         RefreshRates();
 
