@@ -1237,6 +1237,9 @@ bool HasValidS2BaseCondition(int tf) {
 //  PART 14: STRATEGY PROCESSING (4 functions) | XU LY CHIEN LUOC
 //=============================================================================
 
+// Static flag to prevent spam print when order fails | Co tinh de tranh spam print khi lenh that bai
+static bool g_print_failed[7][3] = {{false}};  // [TF][Strategy]: Track if already printed error
+
 // S1 Core: Open order (DRY - shared logic for BASIC and NEWS strategies)
 void OpenS1Order(int tf, int signal, string mode) {
     datetime timestamp = (datetime)g_ea.csdl_rows[tf].timestamp;
@@ -1257,6 +1260,7 @@ void OpenS1Order(int tf, int signal, string mode) {
 
     if(ticket > 0) {
         g_ea.position_flags[tf][0] = 1;
+        g_print_failed[tf][0] = false;  // Reset error flag on success | Dat lai co loi khi thanh cong
 
         string log_msg = ">>> [OPEN] S1_" + mode + " TF=" + G_TF_NAMES[tf] +
                          " | #" + IntegerToString(ticket) + " " + type_str + " " +
@@ -1274,7 +1278,12 @@ void OpenS1Order(int tf, int signal, string mode) {
         Print(log_msg);
     } else {
         g_ea.position_flags[tf][0] = 0;
-        Print("[S1_", mode, "_", G_TF_NAMES[tf], "] Failed: ", GetLastError());
+
+        // Print error ONLY ONCE until success | Chi in loi 1 LAN cho den khi thanh cong
+        if(!g_print_failed[tf][0]) {
+            Print("[S1_", mode, "_", G_TF_NAMES[tf], "] Failed: ", GetLastError());
+            g_print_failed[tf][0] = true;
+        }
     }
 }
 
@@ -1361,6 +1370,7 @@ void ProcessS2Strategy(int tf) {
                                    "S2_" + G_TF_NAMES[tf], g_ea.magic_numbers[tf][1]);
         if(ticket > 0) {
             g_ea.position_flags[tf][1] = 1;
+            g_print_failed[tf][1] = false;  // Reset error flag on success | Dat lai co loi khi thanh cong
             string trend_str = trend_to_follow == 1 ? "UP" : "DOWN";
             string mode_str = (S2_TrendMode == 0) ? "AUTO" : (S2_TrendMode == 1) ? "FBUY" : "FSELL";
             Print(">>> [OPEN] S2_TREND TF=", G_TF_NAMES[tf], " | #", ticket, " BUY ",
@@ -1368,7 +1378,12 @@ void ProcessS2Strategy(int tf) {
                   " | Sig=+1 Trend:", trend_str, " Mode:", mode_str, " | Timestamp:", IntegerToString(timestamp), " <<<");
         } else {
             g_ea.position_flags[tf][1] = 0;
-            Print("[S2_", G_TF_NAMES[tf], "] Failed: ", GetLastError());
+
+            // Print error ONLY ONCE until success | Chi in loi 1 LAN cho den khi thanh cong
+            if(!g_print_failed[tf][1]) {
+                Print("[S2_", G_TF_NAMES[tf], "] Failed: ", GetLastError());
+                g_print_failed[tf][1] = true;
+            }
         }
     }
     else if(current_signal == -1) {
@@ -1377,6 +1392,7 @@ void ProcessS2Strategy(int tf) {
                                    "S2_" + G_TF_NAMES[tf], g_ea.magic_numbers[tf][1]);
         if(ticket > 0) {
             g_ea.position_flags[tf][1] = 1;
+            g_print_failed[tf][1] = false;  // Reset error flag on success | Dat lai co loi khi thanh cong
             string trend_str = trend_to_follow == -1 ? "DOWN" : "UP";
             string mode_str = (S2_TrendMode == 0) ? "AUTO" : (S2_TrendMode == 1) ? "FBUY" : "FSELL";
             Print(">>> [OPEN] S2_TREND TF=", G_TF_NAMES[tf], " | #", ticket, " SELL ",
@@ -1384,7 +1400,12 @@ void ProcessS2Strategy(int tf) {
                   " | Sig=-1 Trend:", trend_str, " Mode:", mode_str, " | Timestamp:", IntegerToString(timestamp), " <<<");
         } else {
             g_ea.position_flags[tf][1] = 0;
-            Print("[S2_", G_TF_NAMES[tf], "] Failed: ", GetLastError());
+
+            // Print error ONLY ONCE until success | Chi in loi 1 LAN cho den khi thanh cong
+            if(!g_print_failed[tf][1]) {
+                Print("[S2_", G_TF_NAMES[tf], "] Failed: ", GetLastError());
+                g_print_failed[tf][1] = true;
+            }
         }
     }
 }
@@ -1421,6 +1442,7 @@ void ProcessS3Strategy(int tf) {
                                    "S3_" + G_TF_NAMES[tf], g_ea.magic_numbers[tf][2]);
         if(ticket > 0) {
             g_ea.position_flags[tf][2] = 1;
+            g_print_failed[tf][2] = false;  // Reset error flag on success | Dat lai co loi khi thanh cong
             string arrow = (news_direction > 0) ? "↑" : "↓";
             Print(">>> [OPEN] S3_NEWS TF=", G_TF_NAMES[tf], " | #", ticket, " BUY ",
                   DoubleToStr(g_ea.lot_sizes[tf][2], 2), " @", DoubleToStr(Ask, Digits),
@@ -1428,7 +1450,12 @@ void ProcessS3Strategy(int tf) {
                   " | Timestamp:", IntegerToString(timestamp), " <<<");
         } else {
             g_ea.position_flags[tf][2] = 0;
-            Print("[S3_", G_TF_NAMES[tf], "] Failed: ", GetLastError());
+
+            // Print error ONLY ONCE until success | Chi in loi 1 LAN cho den khi thanh cong
+            if(!g_print_failed[tf][2]) {
+                Print("[S3_", G_TF_NAMES[tf], "] Failed: ", GetLastError());
+                g_print_failed[tf][2] = true;
+            }
         }
     }
     else if(current_signal == -1) {
@@ -1437,6 +1464,7 @@ void ProcessS3Strategy(int tf) {
                                    "S3_" + G_TF_NAMES[tf], g_ea.magic_numbers[tf][2]);
         if(ticket > 0) {
             g_ea.position_flags[tf][2] = 1;
+            g_print_failed[tf][2] = false;  // Reset error flag on success | Dat lai co loi khi thanh cong
             string arrow = (news_direction > 0) ? "↑" : "↓";
             Print(">>> [OPEN] S3_NEWS TF=", G_TF_NAMES[tf], " | #", ticket, " SELL ",
                   DoubleToStr(g_ea.lot_sizes[tf][2], 2), " @", DoubleToStr(Bid, Digits),
@@ -1444,7 +1472,12 @@ void ProcessS3Strategy(int tf) {
                   " | Timestamp:", IntegerToString(timestamp), " <<<");
         } else {
             g_ea.position_flags[tf][2] = 0;
-            Print("[S3_", G_TF_NAMES[tf], "] Failed: ", GetLastError());
+
+            // Print error ONLY ONCE until success | Chi in loi 1 LAN cho den khi thanh cong
+            if(!g_print_failed[tf][2]) {
+                Print("[S3_", G_TF_NAMES[tf], "] Failed: ", GetLastError());
+                g_print_failed[tf][2] = true;
+            }
         }
     }
 }
