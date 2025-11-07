@@ -1,8 +1,6 @@
 //+------------------------------------------------------------------+
-//| _MT5_EAs_MTF ONER_v2
-//| Multi Timeframe Expert Advisor for MT5 | EA nhieu khung thoi gian cho MT5
-//| 7 TF × 3 Strategies = 21 orders | 7 khung x 3 chien luoc = 21 lenh
-//| Version: API_V2 (MT5) - Added HTTP API | Phien ban: API_V2 - Them HTTP API
+//| _MT5_EAs_MTF ONER_v2 : Multi Timeframe Expert Advisor for MT5 | EA nhieu khung thoi gian cho MT5
+//| 7 TF × 3 Strategies = 21 orders | 7 khung x 3 chien luoc = 21 lenh | Version: API_V2 (MT5) - Added HTTP API | Phien ban: API_V2 - Them HTTP API
 //+------------------------------------------------------------------+
 #property copyright "_MT5_EAs_MTF ONER_v2"
 
@@ -60,11 +58,10 @@ input CSDL_SOURCE_ENUM CSDL_Source = HTTP_API;  // CSDL via HTTP (Bot Sync Py)
 
 //--- A.6 HTTP API settings (only used if CSDL_Source = HTTP_API) | Cau hinh HTTP API
 // IMPORTANT: MT5 must allow URL in Tools->Options->Expert Advisors | QUAN TRONG: MT5 phai cho phep URL
-// NOTE: MT5 WebRequest automatically uses port 80 for http:// | LUU Y: MT5 WebRequest tu dong dung port 80
-// DuckDNS domain for easy IP management (update IP at duckdns.org only) | Domain DuckDNS de quan ly IP de dang
+// NOTE: MT5 WebRequest automatically uses port 80 for http:// | LUU Y: MT5 WebRequest tu dong dung port 80 (DuckDNS domain for easy IP update IP at duckdns.org only)
 input string HTTP_Server_IP = "dungalading.duckdns.org";  // HTTP Server domain/IP (Bot Python VPS)
 input string HTTP_API_Key = "";                    // API Key (empty = no auth | de trong = khong xac thuc)
-input bool EnableSymbolNormalization = false;       // Normal symbol name (LTCUSDC→LTCUSD, FALSE=use exact name)
+input bool EnableSymbolNormalization = false;      // symbol name (LTCUSDc.xyz -> FALSE = LTCUSD use_exact_name)
 
 input string ___Sep_B___ = "___B. STRATEGY CONFIG ________";  //
 
@@ -101,7 +98,7 @@ input double Layer2_Divisor = 5.0;  // Layer2 divisor (margin/-5 = threshold)
 
 //--- C.2 Take profit (2) | Chot loi
 input bool   UseTakeProfit = false;  // Enable take profit (FALSE=OFF, TRUE=ON)
-input double TakeProfit_Multiplier = 3;  // TP_multi = Maxloss x A_lot x T_Profit
+input double TakeProfit_Multiplier = 5;  // TP_multi (vd=1000 × 0.21 × 3 = 630 USD)
 
 input string ___Sep_D___ = "___D. AUXILIARY SETTINGS ______";  //
 
@@ -109,8 +106,8 @@ input string ___Sep_D___ = "___D. AUXILIARY SETTINGS ______";  //
 input bool UseEvenOddMode = true;  // Even/odd split mode (load balancing)
 
 //--- D.2 Health check & reset (2) | Kiem tra suc khoe
-input bool EnableWeekendReset = false;   // Weekend reset (auto close Friday 23:50)
-input bool EnableHealthCheck = false;    // Health check (8h/16h SPY bot status)
+input bool EnableWeekendReset = false;  // Weekend reset (auto close Friday 23:50)
+input bool EnableHealthCheck = true;    // Health check (8h/16h SPY bot status)
 
 //--- D.3 Display (2) | Hien thi
 input bool ShowDashboard = true;  // Show dashboard (on-chart info)
@@ -2620,11 +2617,8 @@ string FormatBonusStatus() {
     return result;
 }
 
-// Get all leverage types for account (FX, CRYPTO, METAL, INDEX) | Lay tat ca cac loai don bay cua tai khoan
+// Get all leverage: Always show all 4 types (FX, CRYPTO, METAL, INDEX) -> FX=Full, Crypto=1/5, Metal=Full, Index=1/2 | Lay tat ca cac loai don bay cua tai khoan
 string GetAllLeverages() {
-    // Display estimated leverages based on account leverage | Hien thi don bay uoc tinh tu don bay tai khoan
-    // Most brokers use: FX=Full, Crypto=1/5, Metal=Full, Index=1/2 | Hau het san dung: FX=Day du, Crypto=1/5, Metal=Day du, Index=1/2
-    // SIMPLIFIED: Always show all 4 types (most brokers support all) | DON GIAN: Luon hien thi ca 4 loai (hau het san deu ho tro)
 
     int base_lev = (int)AccountLeverage();
 
@@ -2972,8 +2966,7 @@ void OnTimer() {
     // GROUP 2: ODD SECONDS (1,3,5,7...) - AUXILIARY (SUPPORT)
     // NHOM 2: GIAY LE - PHU TRO (HO TRO)
     //=============================================================================
-    // WHY ODD: These functions don't need fresh CSDL data ? Run independently ? Reduce load on EVEN seconds
-    // TAI SAO LE: Cac ham nay khong can CSDL moi ? Chay doc lap ? Giam tai cho giay CHAN
+    // WHY ODD: These functions don't need fresh CSDL data ? Run independently ? Reduce load on EVEN seconds >> TAI SAO LE: Cac ham nay khong can CSDL moi ? Chay doc lap ? Giam tai cho giay CHAN
     // NOTE: Respects UseEvenOddMode - if disabled, runs every second | Tuan theo UseEvenOddMode - neu tat, chay moi giay
     if(!UseEvenOddMode || (current_second % 2 != 0)) {
 
