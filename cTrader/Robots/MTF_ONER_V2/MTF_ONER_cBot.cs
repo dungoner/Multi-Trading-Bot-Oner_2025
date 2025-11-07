@@ -311,6 +311,9 @@ namespace cAlgo.Robots
         // HTTP client for API calls (reusable)
         private HttpClient _httpClient;
 
+        // Static flag to prevent spam print when order fails [TF][Strategy]
+        private static bool[,] _printFailed = new bool[7, 3];
+
         #endregion
 
         #region ========== BOT LIFECYCLE METHODS ==========
@@ -325,6 +328,9 @@ namespace cAlgo.Robots
 
             // Initialize EA data structure
             _eaData = new EASymbolData();
+
+            // Skip health check on startup (prevents false "frozen" detection)
+            _eaData.HealthLastCheckHour = Server.Time.Hour;
 
             // Setup symbol info
             InitializeSymbolInfo();
@@ -683,11 +689,14 @@ namespace cAlgo.Robots
             if (S2_TREND) enabledStrategies++;
             if (S3_NEWS) enabledStrategies++;
 
-            _eaData.InitSummary = $"[INIT] Enabled: {enabledTF} TF × {enabledStrategies} Strategies = {enabledTF * enabledStrategies} potential orders";
+            // Compact init summary - 1 line style similar to MT5 EA
+            string slMode = StoplossMode == StoplossMode.NONE ? "NONE" :
+                           StoplossMode == StoplossMode.LAYER1_MAXLOSS ? "L1" : "L2";
+            string tpStatus = UseTakeProfit ? "ON" : "OFF";
+
+            _eaData.InitSummary = $"[INIT] {_eaData.SymbolName} | Broker:{Account.BrokerName} Lev:{(int)Account.PreciseLeverage} | {enabledTF} TF × {enabledStrategies} Strategies = {enabledTF * enabledStrategies} orders | SL:{slMode} TP:{tpStatus} Source:{CSDL_Source} ✓";
 
             Print(_eaData.InitSummary);
-            Print($"[INIT] Stoploss: {StoplossMode}, TakeProfit: {(UseTakeProfit ? "ON" : "OFF")}");
-            Print($"[INIT] CSDL Source: {CSDL_Source}");
         }
 
         /// <summary>
@@ -1251,6 +1260,7 @@ namespace cAlgo.Robots
             if (result != null && result.IsSuccessful)
             {
                 _eaData.PositionFlags[tf, 0] = 1;
+                _printFailed[tf, 0] = false;  // Reset error flag on success
 
                 string log_msg = $">>> [OPEN] S1_{mode} TF={TF_NAMES[tf]} | #{result.Position.Id} {type_str} {volume / 100000:F2} @{price} | Sig={signal}";
 
@@ -1268,7 +1278,13 @@ namespace cAlgo.Robots
             else
             {
                 _eaData.PositionFlags[tf, 0] = 0;
-                Print($"[S1_{mode}_{TF_NAMES[tf]}] Failed");
+
+                // Print error ONLY ONCE until success
+                if (!_printFailed[tf, 0])
+                {
+                    Print($"[S1_{mode}_{TF_NAMES[tf]}] Failed");
+                    _printFailed[tf, 0] = true;
+                }
             }
         }
 
@@ -1374,6 +1390,7 @@ namespace cAlgo.Robots
             if (result != null && result.IsSuccessful)
             {
                 _eaData.PositionFlags[tf, 1] = 1;
+                _printFailed[tf, 1] = false;  // Reset error flag on success
                 string trend_str = trend_to_follow == 1 ? "UP" : "DOWN";
                 string mode_str = (S2_TrendMode == S2TrendMode.FOLLOW_D1) ? "AUTO" :
                                   (S2_TrendMode == S2TrendMode.FORCE_BUY) ? "FBUY" : "FSELL";
@@ -1384,7 +1401,13 @@ namespace cAlgo.Robots
             else
             {
                 _eaData.PositionFlags[tf, 1] = 0;
-                Print($"[S2_{TF_NAMES[tf]}] Failed");
+
+                // Print error ONLY ONCE until success
+                if (!_printFailed[tf, 1])
+                {
+                    Print($"[S2_{TF_NAMES[tf]}] Failed");
+                    _printFailed[tf, 1] = true;
+                }
             }
         }
 
@@ -1422,6 +1445,7 @@ namespace cAlgo.Robots
             if (result != null && result.IsSuccessful)
             {
                 _eaData.PositionFlags[tf, 2] = 1;
+                _printFailed[tf, 2] = false;  // Reset error flag on success
                 string arrow = (news_direction > 0) ? "↑" : "↓";
                 string type_str = (current_signal == 1) ? "BUY" : "SELL";
 
@@ -1430,7 +1454,13 @@ namespace cAlgo.Robots
             else
             {
                 _eaData.PositionFlags[tf, 2] = 0;
-                Print($"[S3_{TF_NAMES[tf]}] Failed");
+
+                // Print error ONLY ONCE until success
+                if (!_printFailed[tf, 2])
+                {
+                    Print($"[S3_{TF_NAMES[tf]}] Failed");
+                    _printFailed[tf, 2] = true;
+                }
             }
         }
 
@@ -2002,18 +2032,33 @@ namespace cAlgo.Robots
         /// <summary>
         /// Check SPY bot health (verify CSDL is updating)
         /// Adapted from MT5 CheckSPYBotHealth()
+        /// Runs at 8h/16h only, prints only when frozen (> 8 hours old)
         /// </summary>
         private void CheckSPYBotHealth()
         {
-            // Check if CSDL timestamp is too old (> 10 minutes)
-            var now = Server.Time;
-            var csdlTime = DateTimeOffset.FromUnixTimeSeconds(_eaData.CSDLRows[0].Timestamp).DateTime;
-            var age = (now - csdlTime).TotalMinutes;
+            if (!EnableHealthCheck) return;
 
-            if (age > 10)
+            var now = Server.Time;
+            int hour = now.Hour;
+
+            // Only check at 8h or 16h
+            if (hour != 8 && hour != 16) return;
+
+            // Prevent multiple checks in same hour
+            if (hour == _eaData.HealthLastCheckHour) return;
+            _eaData.HealthLastCheckHour = hour;
+
+            // Check if CSDL timestamp is too old (> 8 hours = frozen)
+            var csdlTime = DateTimeOffset.FromUnixTimeSeconds(_eaData.CSDLRows[0].Timestamp).DateTime;
+            var diffSeconds = (now - csdlTime).TotalSeconds;
+
+            if (diffSeconds > 28800)  // 8 hours
             {
-                Print($"[WARNING] CSDL data is {age:F0} minutes old - SPY bot may not be running!");
+                int diffHours = (int)(diffSeconds / 3600);
+                int diffMinutes = (int)((diffSeconds % 3600) / 60);
+                Print($"[HEALTH_CHECK] ⚠️ SPY Bot frozen (CSDL: {diffHours}h{diffMinutes}m old) at {hour}h00");
             }
+            // No print when OK - silent operation
         }
 
         /// <summary>
