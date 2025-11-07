@@ -1,0 +1,16 @@
+# TradeLocker MTF ONER Bot - Dependencies
+# Python 3.11+ required | Yêu cầu Python 3.11+
+
+# TradeLocker API (official library)
+tradelocker>=0.56.2
+
+# HTTP requests for CSDL API
+requests>=2.31.0
+
+# Standard libraries (included in Python 3.11+)
+# - json
+# - datetime
+# - logging
+# - threading
+# - signal
+# - dataclasses
