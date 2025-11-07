@@ -2,7 +2,7 @@
 //| _MT5_EAs_MTF ONER_v2
 //| Multi Timeframe Expert Advisor for MT5 | EA nhieu khung thoi gian cho MT5
 //| 7 TF × 3 Strategies = 21 orders | 7 khung x 3 chien luoc = 21 lenh
-//| Version: API_V2 (MT5) - Added HTTP API + MT4 fixes | Phien ban: API_V2 - Them HTTP API + MT4
+//| Version: API_V2 (MT5) - Added HTTP API | Phien ban: API_V2 - Them HTTP API
 //+------------------------------------------------------------------+
 #property copyright "_MT5_EAs_MTF ONER_v2"
 
