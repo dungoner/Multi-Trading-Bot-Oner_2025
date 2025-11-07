@@ -868,17 +868,28 @@ class TradeLockerBot:
     # ==========================================================================
 
     def CalculateSmartLotSize(self, base_lot: float, tf_index: int, strategy_index: int) -> float:
-        """Calculate lot with progressive formula | Tính lot theo công thức lũy tiến"""
+        """Calculate lot with progressive formula | Tính lot theo công thức lũy tiến
 
-        # Strategy multipliers: S1=×2, S2=×1, S3=×3
+        FORMULA: (base × strategy_multiplier) + tf_increment
+        Strategy multipliers: S1=×2, S2=×1, S3=×3
+        TF increments: M1=+0.01, M5=+0.02, ..., D1=+0.07
+
+        Examples (base_lot=0.1):
+          M1_S1 = (0.1×2) + 0.01 = 0.21
+          M1_S2 = (0.1×1) + 0.01 = 0.11
+          M1_S3 = (0.1×3) + 0.01 = 0.31
+        """
+
+        # Strategy multipliers: index 0=S1(×2), 1=S2(×1), 2=S3(×3)
         strategy_multipliers = [2.0, 1.0, 3.0]
         strategy_multiplier = strategy_multipliers[strategy_index]
 
-        # TF increments: M1=+0, M5=+1, M15=+2, ..., D1=+6
-        tf_increment = tf_index
+        # TF increments: index 0=M1(+0.01), 1=M5(+0.02), ..., 6=D1(+0.07)
+        tf_increments = [0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.07]
+        tf_increment = tf_increments[tf_index]
 
-        # Formula: base_lot × strategy_multiplier × (1.0 + tf_increment × 0.1)
-        lot = base_lot * strategy_multiplier * (1.0 + tf_increment * 0.1)
+        # Calculate final lot: (base × strategy_multiplier) + tf_increment
+        lot = (base_lot * strategy_multiplier) + tf_increment
 
         # Round to 2 decimals
         lot = round(lot, 2)
