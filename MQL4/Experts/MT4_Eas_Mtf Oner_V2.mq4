@@ -1,8 +1,6 @@
 //+------------------------------------------------------------------+
-//| MT4_EAs_M7TF ONER_v2
-//| Multi Timeframe Expert Advisor for MT4 | EA nhieu khung thoi gian cho MT4
-//| 7 TF × 3 Strategies = 21 orders | 7 khung x 3 chien luoc = 21 lenh
-//| Version: API_V2 (MT4) - Added HTTP API support | Phien ban: API_V2 - Them ho tro HTTP API
+//| MT4_EAs_M7TF ONER_v2: Multi Timeframe Expert Advisor for MT4 | EA nhieu khung thoi gian cho MT4
+//| 7 TF × 3 Strategies = 21 orders | 7 khung x 3 chien luoc = 21 lenh | Version: API_V2 (MT4) - Added HTTP API support | Phien ban: API_V2 - Them ho tro HTTP API
 //+------------------------------------------------------------------+
 #property copyright "MT4_EAs_M7TF ONER_v2"
 #property strict
@@ -43,18 +41,16 @@ enum CSDL_SOURCE_ENUM {
 };
 input CSDL_SOURCE_ENUM CSDL_Source = FOLDER_2;  // CSDL folder (signal source)
 
-//--- A.6 HTTP API settings (only used if CSDL_Source = HTTP_API) | Cau hinh HTTP API
-// IMPORTANT: MT4 must allow URL in Tools->Options->Expert Advisors | QUAN TRONG: MT4 phai cho phep URL
-// NOTE: MT4 WebRequest automatically uses port 80 for http:// | LUU Y: MT4 WebRequest tu dong dung port 80
-// DuckDNS domain for easy IP management (update IP at duckdns.org only) | Domain DuckDNS de quan ly IP de dang
+//--- A.6 HTTP API settings (only used if CSDL_Source = HTTP_API) | Cau hinh HTTP API >> IMPORTANT: MT4 must allow URL in Tools->Options->Expert Advisors | QUAN TRONG: MT4 phai cho phep URL
+// NOTE: MT4 WebRequest automatically uses port 80 for http:// | LUU Y: MT4 WebRequest tu dong dung port 80 >> DuckDNS domain for easy IP update IP at duckdns.org only
 input string HTTP_Server_IP = "dungalading.duckdns.org";  // HTTP Server domain/IP (Bot Python VPS)
 input string HTTP_API_Key = "";            // API Key (empty = no auth | de trong)
-input bool EnableSymbolNormal = false;     // symbol name (LTCUSDc.xyz -> FALSE =use LTCUSD)
+input bool EnableSymbolNormal = false;     // symbol name (LTCUSDc.xyz -> FALSE = LTCUSD use_exact_name)
 
 input string ___Sep_B___ = "___B. STRATEGY CONFIG ________";  //
 
 //--- B.1 S1 NEWS Filter (3) | Loc tin tuc cho S1
-input bool S1_UseNewsFilter = false;         // S1: Use NEWS filter (TRUE=strict, FALSE=basic)
+input bool S1_UseNewsFilter = true;         // S1: Use NEWS filter (TRUE=strict, FALSE=basic)
 input int MinNewsLevelS1 = 2;                // S1: Min NEWS level (2-70, higher=stricter)
 input bool S1_RequireNewsDirection = true;   // S1: Match NEWS direction (signal==news!)
 
@@ -67,7 +63,7 @@ enum S2_TREND_MODE {
 input S2_TREND_MODE S2_TrendMode = S2_FOLLOW_D1;  // S2: Trend (D1 auto/manual)
 
 //--- B.3 S3 NEWS Configuration (4) | Cau hinh tin tuc
-input int MinNewsLevelS3 = 20;         // S3: Min NEWS level (2-70)
+input int MinNewsLevelS3 = 2;         // S3: Min NEWS level (2-70)
 input bool EnableBonusNews = true;     // S3: Enable Bonus (extra on high NEWS)
 input int BonusOrderCount = 1;         // S3: Bonus count (1-5 orders)
 input int MinNewsLevelBonus = 2;       // S3: Min NEWS for Bonus (threshold)
@@ -86,7 +82,7 @@ input double Layer2_Divisor = 5.0;  // Layer2 divisor (margin/-5 = threshold)
 
 //--- C.2 Take profit (2) | Chot loi
 input bool   UseTakeProfit = false;  // Enable take profit (FALSE=OFF, TRUE=ON)
-input double TakeProfit_Multiplier = 3;  // TP multiplier (0.5=5%, 1.0=10%, 5.0=50%)
+input double TakeProfit_Multiplier = 5;  // TP_Multi (Col_mloss x a_lot x b_Multi >> vd=1000 ×0.21 ×5 =1050 USD)
 
 input string ___Sep_D___ = "___D. AUXILIARY SETTINGS ______";  //
 
@@ -94,8 +90,8 @@ input string ___Sep_D___ = "___D. AUXILIARY SETTINGS ______";  //
 input bool UseEvenOddMode = true;  // Even/odd split mode (load balancing)
 
 //--- D.2 Health check & reset (2) | Kiem tra suc khoe
-input bool EnableWeekendReset = false;   // Weekend reset (auto close Friday 23:50)
-input bool EnableHealthCheck = false;    // Health check (8h/16h SPY bot status)
+input bool EnableWeekendReset = false;  // Weekend reset (auto close Friday 23:50)
+input bool EnableHealthCheck = true;    // Health check (8h/16h SPY bot status)
 
 //--- D.3 Display (2) | Hien thi
 input bool ShowDashboard = true;  // Show dashboard (on-chart info)
@@ -118,8 +114,7 @@ struct CSDLLoveRow {
 //  PART 3: EA DATA STRUCTURE (116 vars in struct) | CAU TRUC DU LIEU EA
 //=============================================================================
 // Contains ALL EA data for current symbol (learned from SPY Bot) | Chua tat ca du lieu EA cho symbol hien tai (hoc tu SPY Bot)
-// Each EA instance on different chart has its OWN struct | Moi EA instance tren chart khac co struct RIENG
-// This prevents conflicts when running multiple symbols simultaneously | Tranh xung dot khi chay nhieu symbol dong thoi
+// Each EA instance on different chart has its OWN struct | Moi EA instance tren chart khac co struct RIENG >> This prevents conflicts when running multiple symbols simultaneously | Tranh xung dot khi chay nhieu symbol dong thoi
 //=============================================================================
 
 struct EASymbolData {
@@ -1132,8 +1127,7 @@ void CloseAllStrategiesByMagicForTF(int tf) {
 }
 
 // Close ALL BONUS orders across ALL 7 TF when M1 signal changes | Dong TAT CA lenh BONUS qua 7 khung khi tin hieu M1 thay doi
-// TRIGGER: M1 signal change (HasValidS2BaseCondition(0)) | KICH HOAT: Tin hieu M1 thay doi
-// ACTION: Close magic[tf][2] for ALL 7 TF | HANH DONG: Dong magic[tf][2] cho TAT CA 7 khung
+// TRIGGER: M1 signal change (HasValidS2BaseCondition(0)) | KICH HOAT: Tin hieu M1 thay doi >> ACTION: Close magic[tf][2] for ALL 7 TF | HANH DONG: Dong magic[tf][2] cho TAT CA 7 khung
 void CloseAllBonusOrders() {
     // Scan all 7 TF magic numbers | Quet 7 khung magic
     for(int tf = 0; tf < 7; tf++) {
@@ -1296,8 +1290,7 @@ void ProcessS1BasicStrategy(int tf) {
 void ProcessS1NewsFilterStrategy(int tf) {
     int current_signal = g_ea.csdl_rows[tf].signal;
 
-    // Use NEWS from 14 variables (7 level + 7 direction) per TF
-    // Dung NEWS tu 14 bien (7 muc do + 7 huong) theo tung TF
+    // Use NEWS from 14 variables (7 level + 7 direction) per TF >> Dung NEWS tu 14 bien (7 muc do + 7 huong) theo tung TF
     int news_level = g_ea.news_level[tf];           // Level for this TF
     int news_direction = g_ea.news_direction[tf];   // Direction for this TF
 
@@ -1332,8 +1325,7 @@ void ProcessS1Strategy(int tf) {
     }
 }
 
-// Process S2 (Trend Following) strategy for TF | Xu ly chien luoc S2 (Theo xu huong)
-// OPTIMIZED: Uses single g_trend_d1 + pre-calculated lot + reads signal from CSDL | TOI UU: Dung g_trend_d1 don + lot da tinh + doc tin hieu tu CSDL
+// Process S2 (Trend Following) strategy for TF | Xu ly chien luoc S2 (Theo xu huong) >> OPTIMIZED: Uses single g_trend_d1 + pre-calculated lot + reads signal from CSDL | TOI UU: Dung g_trend_d1 don + lot da tinh + doc tin hieu tu CSDL
 // ENHANCED: Support 3 modes (auto D1 / force BUY / force SELL) | CAI TIEN: Ho tro 3 che do (tu dong D1 / chi BUY / chi SELL)
 void ProcessS2Strategy(int tf) {
     int current_signal = g_ea.csdl_rows[tf].signal;
@@ -1659,8 +1651,7 @@ void CheckAllEmergencyConditions() {
 //=============================================================================
 
 // Smart TF reset for all charts of current symbol (learned from SPY Bot) | Reset thong minh cho tat ca chart cung symbol (hoc tu SPY Bot)
-// Resets in FIXED ORDER: M5→M15→M30→H1→H4→D1→M1 (D1 is MOST IMPORTANT, M1 LAST) | Reset theo THU TU CO DINH: M5→M15→M30→H1→H4→D1→M1 (D1 QUAN TRONG NHAT, M1 CUOI CUNG)
-// IMPORTANT: D1 must reset BEFORE M1 (D1 has SPY Bot), M1 is LAST (EA runs on M1) | QUAN TRONG: D1 phai reset TRUOC M1 (D1 co SPY Bot), M1 la CUOI CUNG (EA chay tren M1)
+// Reset theo THU TU CO DINH: M5→M15→M30→H1→H4→D1→M1 (D1 QUAN TRONG NHAT, M1 CUOI CUNG) >> IMPORTANT: D1 must reset BEFORE M1 (D1 has SPY Bot), M1 is LAST (EA runs on M1) | QUAN TRONG: D1 phai reset TRUOC M1 (D1 co SPY Bot), M1 la CUOI CUNG (EA chay tren M1)
 void SmartTFReset() {
     Print("=======================================================");
     Print("[SMART_TF_RESET] Resetting all charts of ", g_ea.symbol_name, "...");
@@ -1720,9 +1711,7 @@ void SmartTFReset() {
     Print("=======================================================");
 }
 
-// Weekend reset (Saturday 00:03) - Trigger SmartTFReset | Reset cuoi tuan - Goi SmartTFReset
-// ONLY M1 chart has permission to reset (master chart) | CHI chart M1 co quyen reset (chart master)
-// Time: 00:03 to AVOID conflict with SPY Bot reset at 00:00 | Gio: 00:03 de TRANH xung dot voi SPY Bot reset luc 00:00
+// Weekend reset (Saturday 00:03) - Trigger SmartTFReset | Reset cuoi tuan - Goi SmartTFReset >> ONLY M1 chart has permission to reset (master chart) | CHI chart M1 co quyen reset (chart master) >> Time: 00:03 to AVOID conflict with SPY Bot reset at 00:00 | Gio: 00:03 de TRANH xung dot voi SPY Bot reset luc 00:00
 void CheckWeekendReset() {
     // Check if feature is enabled by user | Kiem tra tinh nang co duoc bat boi user
     if(!EnableWeekendReset) return;
@@ -1735,8 +1724,7 @@ void CheckWeekendReset() {
     int hour = TimeHour(current_time);
     int minute = TimeMinute(current_time);
 
-    // Only on Saturday (6) at 0h:01 (minute 01 exactly) | Chi vao Thu 7 luc 0h:01 (phut 01 chinh xac)
-    // IMPORTANT: NOT 0h:00 to avoid conflict with SPY Bot! | QUAN TRONG: KHONG 0h:00 de tranh xung dot voi SPY Bot!
+    // Only on Saturday (6) at 0h:01 (minute 01 exactly) | Chi vao Thu 7 luc 0h:01 (phut 01 chinh xac) >> IMPORTANT: NOT 0h:00 to avoid conflict with SPY Bot! | QUAN TRONG: KHONG 0h:00 de tranh xung dot voi SPY Bot!
     if(day_of_week != 6 || hour != 0 || minute != 3) return;
 
     // Prevent duplicate reset (once per day) | Tranh reset trung lap (1 lan moi ngay)
@@ -1752,8 +1740,7 @@ void CheckWeekendReset() {
     Print("[WEEKEND_RESET] ? Weekly reset completed!");
 }
 
-// Health check SPY Bot (8h/16h only, NOT 24h) | Kiem tra suc khoe SPY Bot (chi 8h va 16h, KHONG 24h)
-// ONLY M1 chart has permission to check and reset (master chart) | CHI chart M1 co quyen kiem tra va reset (chart master)
+// Health check SPY Bot (8h/16h only, NOT 24h) | Kiem tra suc khoe SPY Bot (chi 8h va 16h, KHONG 24h): ONLY M1 chart has permission to check and reset (master chart) | CHI chart M1 co quyen kiem tra va reset (chart master)
 void CheckSPYBotHealth() {
     // Check if feature is enabled by user | Kiem tra tinh nang co duoc bat boi user
     if(!EnableHealthCheck) return;
@@ -1803,8 +1790,7 @@ void CheckSPYBotHealth() {
 //  PART 18: MAIN EA FUNCTIONS (3 functions) | HAM CHINH CUA EA
 //=============================================================================
 
-// EA initialization - setup all components | Khoi tao EA - cai dat tat ca thanh phan
-// OPTIMIZED V3.4: Struct-based data isolation for multi-symbol support | TOI UU: Cach ly du lieu theo struct cho da ky hieu
+// EA initialization - setup all components | Khoi tao EA - cai dat tat ca thanh phan >> OPTIMIZED V3.4: Struct-based data isolation for multi-symbol support | TOI UU: Cach ly du lieu theo struct cho da ky hieu
 int OnInit() {
     // PART 1: Symbol recognition | Nhan dien ky hieu
     if(!InitializeSymbolRecognition()) return(INIT_FAILED);
@@ -1832,10 +1818,8 @@ int OnInit() {
     // PART 7: Map CSDL variables (includes TREND/NEWS optimization) | Anh xa bien CSDL (bao gom toi uu TREND/NEWS)
     MapCSDLToEAVariables();
 
-    // PART 7B: ?? CRITICAL FIX - Reset ALL auxiliary flags to prevent ZOMBIE variables | Dat lai TAT CA co phu tranh bien zombie
-    // MQL4 does NOT auto-reset global variables on EA restart | MQL4 KHONG tu dong reset bien toan cuc khi EA khoi dong lai
-    // If EA was killed (crash/user stop), old flag values may persist | Neu EA bi tat ngang, gia tri co cu co the con ton tai
-    // This causes ZOMBIE orders: flag=1 but order doesn't exist, or TF disabled but flag still set | Gay lenh zombie: co=1 nhung lenh khong ton tai, hoac TF tat nhung co van = 1
+    // PART 7B: CRITICAL FIX - Reset ALL auxiliary flags to prevent ZOMBIE variables | Dat lai TAT CA co phu tranh bien zombie >> MQL4 does NOT auto-reset global variables on EA restart | MQL4 KHONG tu dong reset bien toan cuc khi EA khoi dong lai
+    // If EA was killed (crash/user stop), old flag values may persist | Neu EA bi tat ngang, gia tri co cu co the con ton tai >> This causes ZOMBIE orders: flag=1 but order doesn't exist, or TF disabled but flag still set | Gay lenh zombie: co=1 nhung lenh khong ton tai, hoac TF tat nhung co van = 1
     for(int tf = 0; tf < 7; tf++) {
         for(int s = 0; s < 3; s++) {
             g_ea.position_flags[tf][s] = 0;
@@ -1856,8 +1840,7 @@ int OnInit() {
         g_ea.timestamp_old[tf] = (datetime)g_ea.csdl_rows[tf].timestamp;
     }
 
-    // PART 8B: Build compact startup summary BEFORE RESTORE | Tao tom tat khoi dong TRUOC KHI RESTORE
-    // This must be done BEFORE RestoreOrCleanupPositions() so it can print final summary | Phai lam TRUOC RestoreOrCleanupPositions() de in tom tat cuoi cung
+    // PART 8B: Build compact startup summary BEFORE RESTORE | Tao tom tat khoi dong TRUOC KHI RESTORE >> This must be done BEFORE RestoreOrCleanupPositions() so it can print final summary | Phai lam TRUOC RestoreOrCleanupPositions() de in tom tat cuoi cung
     string tf_status = "";
     int tf_count = 0;
     if(TF_M1) { tf_status += "M1,"; tf_count++; }
@@ -1914,8 +1897,7 @@ void OnDeinit(const int reason) {
     EventKillTimer();
     Comment("");  // Clear Comment | Xoa Comment
 
-    // Delete all dashboard labels (15 labels: dash_0 to dash_14) | Xoa tat ca label dashboard
-    // ✅ FIX: Use g_ea.symbol_prefix to delete objects correctly | Su dung g_ea.symbol_prefix de xoa dung
+    // Delete all dashboard labels (15 labels: dash_0 to dash_14) | Xoa tat ca label dashboard >> Use g_ea.symbol_prefix to delete objects correctly | Su dung g_ea.symbol_prefix de xoa dung
     for(int i = 0; i <= 14; i++) {
         string obj_name = g_ea.symbol_prefix + "dash_" + IntegerToString(i);
         if(ObjectFind(obj_name) >= 0) {
@@ -1923,13 +1905,11 @@ void OnDeinit(const int reason) {
         }
     }
 
-    // Delete all objects with symbol_prefix + "dash_" pattern (cleanup any orphaned objects)
-    // Xoa tat ca object co pattern symbol_prefix + "dash_" (don dep cac object con sot lai)
+    // Delete all objects with symbol_prefix + "dash_" pattern (cleanup any orphaned objects) >> Xoa tat ca object co pattern symbol_prefix + "dash_" (don dep cac object con sot lai)
     int total = ObjectsTotal();
     for(int i = total - 1; i >= 0; i--) {
         string obj_name = ObjectName(i);
-        // Check if object name starts with symbol_prefix AND contains "dash_"
-        // Kiem tra object bat dau bang symbol_prefix VA chua "dash_"
+        // Check if object name starts with symbol_prefix AND contains "dash_": Kiem tra object bat dau bang symbol_prefix VA chua "dash_"
         if(StringFind(obj_name, g_ea.symbol_prefix) == 0 && StringFind(obj_name, "dash_") > 0) {
             ObjectDelete(obj_name);
         }
@@ -1941,11 +1921,8 @@ void OnDeinit(const int reason) {
 //=============================================================================
 //  PART 19: DASHBOARD - OBJ_LABEL (4 functions) | BANG DIEU KHIEN OBJ_LABEL
 //=============================================================================
-// Leverages existing EA resources: g_ea struct, flags, lot sizes | Tan dung tai nguyen EA co san
-// Uses OBJ_LABEL with fixed-width spaces + alternating colors (Blue/White) | Dung OBJ_LABEL voi khoang cach co dinh + 2 mau xen ke
-
-// Scan all orders once for dashboard (reuse stoploss logic) | Quet lenh 1 lan cho dashboard (tai su dung logic stoploss)
-// NEW: Builds 2 separate summaries - S1 only (row 1), S2+S3 (row 2) | Xay dung 2 tom tat rieng - Chi S1 (hang 1), S2+S3 (hang 2)
+// Leverages existing EA resources: g_ea struct, flags, lot sizes | Tan dung tai nguyen EA co san: Uses OBJ_LABEL with fixed-width spaces + alternating colors (Blue/White) | Dung OBJ_LABEL voi khoang cach co dinh + 2 mau xen ke
+// Scan all orders once for dashboard (reuse stoploss logic) | Quet lenh 1 lan cho dashboard (tai su dung logic stoploss) >> NEW: Builds 2 separate summaries - S1 only (row 1), S2+S3 (row 2) | Xay dung 2 tom tat rieng - Chi S1 (hang 1), S2+S3 (hang 2)
 void ScanAllOrdersForDashboard(int &total_orders, double &total_profit, double &total_loss,
                                 string &s1_summary, string &s2s3_summary) {
     total_orders = 0;
@@ -2315,8 +2292,7 @@ void CreateOrUpdateLabel(string name, string text, int x, int y, color clr, int 
     ObjectSetText(name, text, font_size, "Courier New", clr);
 }
 
-// Timer event - main trading loop (1 second) | Su kien timer - vong lap giao dich chinh (1 giay)
-// OPTIMIZED V4.0: Split into 2 groups (EVEN/ODD) for better performance | TOI UU: Chia 2 nhom (CHAN/LE) de tang hieu suat
+// Timer event - main trading loop (1 second) | Su kien timer - vong lap giao dich chinh (1 giay) | OPTIMIZED V4.0: Split into 2 groups (EVEN/ODD) for better performance | TOI UU: Chia 2 nhom (CHAN/LE) de tang hieu suat
 // GROUP 1 (EVEN): Trading core - Read CSDL + Process signals | Nhom 1 (CHAN): Giao dich chinh - Doc CSDL + Xu ly tin hieu
 // GROUP 2 (ODD): Auxiliary - Stoploss + Dashboard + Health checks | Nhom 2 (LE): Phu tro - Cat lo + Bang dieu khien + Kiem tra suc khoe
 void OnTimer() {
@@ -2328,11 +2304,9 @@ void OnTimer() {
     g_ea.timer_last_run_time = current_time;
 
     //=============================================================================
-    // GROUP 1: EVEN SECONDS (0,2,4,6...) - TRADING CORE (HIGH PRIORITY)
-    // NHOM 1: GIAY CHAN - GIAO DICH CHINH (UU TIEN CAO)
+    // GROUP 1: EVEN SECONDS (0,2,4,6...) - TRADING CORE (HIGH PRIORITY) |NHOM 1: GIAY CHAN - GIAO DICH CHINH (UU TIEN CAO)
     //=============================================================================
-    // WHY EVEN: SPY Bot writes CSDL on ODD seconds ? EA reads on EVEN ? No file lock conflict
-    // TAI SAO CHAN: SPY Bot ghi CSDL giay LE ? EA doc giay CHAN ? Khong xung dot file
+    // WHY EVEN: SPY Bot writes CSDL on ODD seconds ? EA reads on EVEN ? No file lock conflict | TAI SAO CHAN: SPY Bot ghi CSDL giay LE ? EA doc giay CHAN ? Khong xung dot file
     if(!UseEvenOddMode || (current_second % 2 == 0)) {
 
         // STEP 1: Read CSDL file | Doc file CSDL
@@ -2341,9 +2315,8 @@ void OnTimer() {
         // STEP 2: Map data for all 7 TF | Anh xa du lieu cho 7 khung
         MapCSDLToEAVariables();
 
-        // STEP 3: Strategy processing loop for 7 TF | Vong lap xu ly chien luoc cho 7 khung
+        // STEP 3: Strategy processing loop for 7 TF | Vong lap xu ly chien luoc cho 7 khung | OPEN function respects TF/Strategy toggles | Ham mo tuan theo bat/tat TF/Chien luoc
         // IMPORTANT: CLOSE function runs on ALL 7 TF (no TF filter) | QUAN TRONG: Ham dong chay TAT CA 7 TF (khong loc TF)
-        // OPEN function respects TF/Strategy toggles | Ham mo tuan theo bat/tat TF/Chien luoc
         for(int tf = 0; tf < 7; tf++) {
             // STEP 3.1: FAST CLOSE by M1 (S1, S2, Bonus) | DONG NHANH theo M1 (S1, S2, Bonus)
             if(tf == 0 && HasValidS2BaseCondition(0)) {
@@ -2402,11 +2375,9 @@ void OnTimer() {
     }
 
     //=============================================================================
-    // GROUP 2: ODD SECONDS (1,3,5,7...) - AUXILIARY (SUPPORT)
-    // NHOM 2: GIAY LE - PHU TRO (HO TRO)
+    // GROUP 2: ODD SECONDS (1,3,5,7...) - AUXILIARY (SUPPORT) | NHOM 2: GIAY LE - PHU TRO (HO TRO)
     //=============================================================================
-    // WHY ODD: These functions don't need fresh CSDL data ? Run independently ? Reduce load on EVEN seconds
-    // TAI SAO LE: Cac ham nay khong can CSDL moi ? Chay doc lap ? Giam tai cho giay CHAN
+    // WHY ODD: These functions don't need fresh CSDL data ? Run independently ? Reduce load on EVEN seconds | TAI SAO LE: Cac ham nay khong can CSDL moi ? Chay doc lap ? Giam tai cho giay CHAN
     // NOTE: Respects UseEvenOddMode - if disabled, runs every second | Tuan theo UseEvenOddMode - neu tat, chay moi giay
     if(!UseEvenOddMode || (current_second % 2 != 0)) {
 
@@ -2426,4 +2397,3 @@ void OnTimer() {
         CheckSPYBotHealth();
     }
 }
-
