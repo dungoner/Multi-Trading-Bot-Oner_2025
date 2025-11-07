@@ -34,14 +34,12 @@ input double NewsBaseLiveDiff = 1.5;                         // L1 Base Live Dif
 input double NewsLiveDiffStep = 0.5;                         // Live Diff increment per level (USD) | Tang Live Diff moi cap
 input int    NewsBaseTimeMinutes = 2;                        // Category 2 Base Time (minutes) 2^level | Thoi gian co so Category 2
 input bool   EnableCategoryUser = true;                      // Enable Category 2 (User Reference) | Bat Category 2 (tham khao)
-input double NewsCascadeMultiplier = 0.3;                    // Category 2 USD Threshold Base (0.1->0.7 for L1-L7) | Nguong USD Category 2
+input double NewsCascadeMultiplier = 0.5;                    // Category 2 USD Threshold Base (0.1->0.7 for L1-L7) | Nguong USD Category 2
 
 //==============================================================================
 //  SECTION 2: DATA STRUCTURES (3 structs) | PHAN 2: CAU TRUC DU LIEU
 //==============================================================================
-// Core data structures for signal tracking and history management
-// Cau truc du lieu chinh de theo doi tin hieu va quan ly lich su
-//==============================================================================
+// Core data structures for signal tracking and history management | Cau truc du lieu chinh de theo doi tin hieu va quan ly lich su
 
 // History entry structure | Cau truc muc lich su
 struct SignalHistoryEntry {
@@ -64,7 +62,6 @@ struct SignalHistoryEntry {
 // - 7 TF × 10 columns (CSDL1 current data) | 7 khung thoi gian x 10 cot du lieu hien tai
 // - 7 TF × 7 history entries | 7 khung thoi gian x 7 muc lich su
 // - Counters, timestamps, etc. | Bo dem, dau thoi gian, v.v.
-// ============================================================================
 
 struct SymbolCSDL1Data {
     // Symbol identification | Nhan dien symbol
@@ -1074,8 +1071,7 @@ double GetPipValue(string symbol) {
     }
 }
 // Convert price change to USD value using GOLD STANDARD | Chuyen doi thay doi gia sang gia tri USD dung chuan VANG
-// GOLD STANDARD: 1 pip GOLD (0.01) = $0.10 USD as reference for all symbols
-// Chuan vang: 1 pip VANG (0.01) = $0.10 USD lam tham chieu cho tat ca symbol
+// GOLD STANDARD: 1 pip GOLD (0.01) = $0.10 USD as reference for all symbols | Chuan vang: 1 pip VANG (0.01) = $0.10 USD lam tham chieu cho tat ca symbol
 double GetUSDValue(string symbol, double price_change) {
     string symbol_upper = symbol;
     StringToUpper(symbol_upper);
@@ -1434,10 +1430,7 @@ string DiscoverSymbolFromChart() {
 
 // Create all 3 data folder structures if not exist | Tao tat ca 3 cau truc thu muc du lieu neu chua ton tai
 void CreateFolderStructure() {
-    // T?O 3 TH? M?C N?U CH?A CÓ
-    // MQL4 không có FolderCreate() - dùng FileOpen() trick
-    // T?o dummy file ?? force t?o folder, sau ?ó xóa
-
+    // TAO THU MUC NEU CHUA CO: MQL4 không có FolderCreate() - dùng FileOpen() trick | -> Tao dummy file : force tao folder, sau do xoa
     // Folder 1: DataAutoOner (cho CSDL1 + CSDL2 A)
     string test1 = "DataAutoOner\\.test";
     if(!FileIsExist(test1)) {
@@ -1490,8 +1483,7 @@ void CreateEmptyCSDL1File() {
     // Neu file da co thi khong lam gi | If file exists, do nothing
     if(FileIsExist(file_path)) return;
 
-    // Tao file moi voi cau truc day du: metadata + data + history_count + history
-    // Create new file with full structure: metadata + data + history_count + history
+    // Tao file moi voi cau truc day du: metadata + data + history_count + history | Create new file with full structure: metadata + data + history_count + history
     string symbol = g_symbol_data.symbol;
     long current_time = TimeCurrent();
 
@@ -1658,11 +1650,9 @@ void CreateEmptyCSDL2Files() {
 //==============================================================================
 //  SECTION 11: NEWS CASCADE STRATEGY (5 functions) | PHAN 11: CHIEN LUOC NEWS CASCADE
 //==============================================================================
-// 7-level cascade detection system for multi-timeframe signal alignment with 2 categories
-// He thong phat hien cascade 7 cap do de sap xep tin hieu nhieu khung thoi gian voi 2 category
+// 7-level cascade detection system for multi-timeframe signal alignment with 2 categories | He thong phat hien cascade 7 cap do de sap xep tin hieu nhieu khung thoi gian voi 2 category
+// Helper function: Check if signal timestamp is within current candle of specified timeframe | Ham ho tro: Kiem tra timestamp tin hieu co nam trong nen hien tai cua khung thoi gian chi dinh
 
-// Helper function: Check if signal timestamp is within current candle of specified timeframe
-// Ham ho tro: Kiem tra timestamp tin hieu co nam trong nen hien tai cua khung thoi gian chi dinh
 bool IsWithinOneCandle(int timeframe_index, datetime signal_time) {
     // timeframe_index: 0=M1, 1=M5, 2=M15, 3=M30, 4=H1, 5=H4, 6=D1
     int tf_periods[] = {PERIOD_M1, PERIOD_M5, PERIOD_M15, PERIOD_M30, PERIOD_H1, PERIOD_H4, PERIOD_D1};
@@ -1852,8 +1842,7 @@ void DetectCASCADE_New() {
     // If Category 1 wrote 0 → Category 2 decides: score or keep 0
     // ============================================================
     if(EnableCategoryUser) {
-        // L1: M1 only → row 0
-        // live_diff > 0.1 + time < 2 min (1×2) → Score 1
+        // L1: M1 only → row 0 | -> live_diff > 0.1 + time < 2 min (1×2) → Score 1
         if(g_symbol_data.news_results[0] == 0) {  // Only if Category 1 wrote 0
             if(m1_signal != 0) {
                 double l1_usd_threshold = NewsCascadeMultiplier * 1;  // 0.1 USD
@@ -1867,8 +1856,7 @@ void DetectCASCADE_New() {
         }
         // else: keep Category 1 score (Category 1 wrote non-zero)
 
-        // L2: M5→M1 → row 1
-        // live_diff > 0.2 + time < 4 min (2×2) → Score 2
+        // L2: M5→M1 → row 1 | -> live_diff > 0.2 + time < 4 min (2×2) → Score 2
         if(g_symbol_data.news_results[1] == 0) {  // Only if Category 1 wrote 0
             if(m5_signal != 0 && m1_signal != 0 && m1_signal == m5_signal) {
                 if(m5_cross == m1_time) {
@@ -1881,8 +1869,7 @@ void DetectCASCADE_New() {
             }
         }
 
-        // L3: M15→M5→M1 → row 2
-        // live_diff > 0.3 + time < 6 min (3×2) → Score 3
+        // L3: M15→M5→M1 → row 2 | -> live_diff > 0.3 + time < 6 min (3×2) → Score 3
         if(g_symbol_data.news_results[2] == 0) {  // Only if Category 1 wrote 0
             if(m15_signal != 0 && m5_signal != 0 && m1_signal != 0 &&
                m1_signal == m5_signal && m5_signal == m15_signal) {
@@ -1896,8 +1883,7 @@ void DetectCASCADE_New() {
             }
         }
 
-        // L4: M30→M15→M5→M1 → row 3
-        // live_diff > 0.4 + time < 8 min (4×2) → Score 4
+        // L4: M30→M15→M5→M1 → row 3 | -> live_diff > 0.4 + time < 8 min (4×2) → Score 4
         if(g_symbol_data.news_results[3] == 0) {  // Only if Category 1 wrote 0
             if(m30_signal != 0 && m15_signal != 0 && m5_signal != 0 && m1_signal != 0 &&
                m1_signal == m5_signal && m5_signal == m15_signal && m15_signal == m30_signal) {
@@ -1911,8 +1897,7 @@ void DetectCASCADE_New() {
             }
         }
 
-        // L5: H1→M30→M15→M5→M1 → row 4
-        // live_diff > 0.5 + time < 10 min (5×2) → Score 5
+        // L5: H1→M30→M15→M5→M1 → row 4 | -> live_diff > 0.5 + time < 10 min (5×2) → Score 5
         if(g_symbol_data.news_results[4] == 0) {  // Only if Category 1 wrote 0
             if(h1_signal != 0 && m30_signal != 0 && m15_signal != 0 && m5_signal != 0 && m1_signal != 0 &&
                m1_signal == m5_signal && m5_signal == m15_signal && m15_signal == m30_signal && m30_signal == h1_signal) {
@@ -1926,8 +1911,7 @@ void DetectCASCADE_New() {
             }
         }
 
-        // L6: H4→H1→M30→M15→M5→M1 → row 5
-        // live_diff > 0.6 + time < 12 min (6×2) → Score 6
+        // L6: H4→H1→M30→M15→M5→M1 → row 5 | -> live_diff > 0.6 + time < 12 min (6×2) → Score 6
         if(g_symbol_data.news_results[5] == 0) {  // Only if Category 1 wrote 0
             if(h4_signal != 0 && h1_signal != 0 && m30_signal != 0 && m15_signal != 0 && m5_signal != 0 && m1_signal != 0 &&
                m1_signal == m5_signal && m5_signal == m15_signal && m15_signal == m30_signal &&
@@ -1964,8 +1948,7 @@ void DetectCASCADE_New() {
 }
 
 // Main NEWS analysis function - LIVE mode (simplified, no state) | Ham phan tich NEWS - che do LIVE don gian
-// DEPRECATED: DetectCASCADE_New() now writes directly to g_symbol_data.news_results[7]
-// This function kept for compatibility but no longer returns meaningful value
+// DEPRECATED: DetectCASCADE_New() now writes directly to g_symbol_data.news_results[7] | This function kept for compatibility but no longer returns meaningful value
 int AnalyzeNEWS() {
     // Call CASCADE detection (writes directly to array)
     DetectCASCADE_New();
@@ -2705,8 +2688,7 @@ void RunMidnightAndHealthCheck() {
 
 // Dashboard Update
 void RunDashboardUpdate() {
-    // Dashboard updates every even second (no additional cycle check needed)
-    // Giây chẵn đã đủ để cập nhật dashboard mượt mà
+    // Dashboard updates every even second (no additional cycle check needed) | Giây chẵn đã đủ để cập nhật dashboard mượt mà
     PrintDashboard();
 }
 
