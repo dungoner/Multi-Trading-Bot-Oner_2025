@@ -2177,10 +2177,6 @@ void CheckSPYBotHealth() {
     // Get M1 timestamp from CSDL (already available) | Lay timestamp M1 tu CSDL (da co san)
     datetime m1_timestamp = g_ea.timestamp_old[0];
 
-    // CRITICAL FIX: Skip health check if CSDL not read yet (timestamp = 0 on first start)
-    // Without this, EA enters infinite restart loop! | Neu thieu, EA se bi lap vo han khi khoi dong!
-    if(m1_timestamp == 0) return;  // Wait for first CSDL read | Doi doc CSDL lan dau
-
     // Calculate time difference | Tinh chenh lech thoi gian
     int diff_seconds = (int)(current_time - m1_timestamp);
     int diff_hours = diff_seconds / 3600;
@@ -2260,7 +2256,7 @@ int OnInit() {
     // Initialize global state vars (prevent multi-symbol conflicts) | Khoi tao bien trang thai (tranh xung dot da symbol)
     g_ea.first_run_completed = false;
     g_ea.weekend_last_day = -1;
-    g_ea.health_last_check_hour = -1;
+    g_ea.health_last_check_hour = TimeHour(TimeCurrent());  // Skip current hour on startup | Bo qua gio hien tai khi khoi dong
     g_ea.timer_last_run_time = 0;
 
     DebugPrint("[RESET] All position flags (21) & state vars reset to 0");
