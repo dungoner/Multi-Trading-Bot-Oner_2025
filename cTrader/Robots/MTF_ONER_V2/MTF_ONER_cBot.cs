@@ -1794,7 +1794,7 @@ namespace cAlgo.Robots
                 if (!IsTFEnabled(tf)) continue;
 
                 string tfName = TF_NAMES[tf].PadRight(3);
-                string signal = SignalToString(_eaData.Signals[tf]).PadRight(3);
+                string signal = SignalToString(_eaData.CSDLRows[tf].Signal).PadRight(3);
                 string news = $"{(_eaData.NewsDirection[tf] > 0 ? "+" : (_eaData.NewsDirection[tf] < 0 ? "-" : " "))}{_eaData.NewsLevel[tf]}".PadRight(4);
 
                 string s1 = GetPositionStatus(tf, 0);
