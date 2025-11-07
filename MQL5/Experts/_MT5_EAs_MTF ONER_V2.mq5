@@ -241,23 +241,18 @@ void InitMT5Trading() {
     if((filling & 2) == 2) {
         // Broker supports IOC - prefer this (most flexible)
         g_trade.SetTypeFilling(ORDER_FILLING_IOC);
-        Print("[INIT] Fill Policy: IOC (Immediate or Cancel)");
     }
     else if((filling & 1) == 1) {
         // Broker only supports FOK
         g_trade.SetTypeFilling(ORDER_FILLING_FOK);
-        Print("[INIT] Fill Policy: FOK (Fill or Kill)");
     }
     else {
         // Fallback to RETURN mode
         g_trade.SetTypeFilling(ORDER_FILLING_RETURN);
-        Print("[INIT] Fill Policy: RETURN (Market Execution)");
     }
 
     // Set slippage tolerance | Đặt độ trượt giá chấp nhận
     g_trade.SetDeviationInPoints(30);
-
-    Print("[INIT] MT5 Trading initialized successfully | Khởi tạo MT5 Trading thành công");
 }
 
 //=============================================================================
@@ -860,7 +855,6 @@ void InitializeSymbolPrefix() {
     } else {
         // Use exact symbol name from broker (no normalization)
         g_ea.normalized_symbol_name = g_ea.symbol_name;
-        Print("[NORMALIZE] Normalization DISABLED - Using exact symbol: " + g_ea.symbol_name);
     }
 
     // Symbol prefix uses ORIGINAL name (not normalized) for local consistency
@@ -2208,18 +2202,30 @@ int OnInit() {
 
     // PART 1B: Detect symbol type ONCE (FOREX/CRYPTO/METAL/INDEX) | Phat hien loai symbol MOT LAN
     g_ea.symbol_type = DetectSymbolType(_Symbol);
-    Print("[INIT] Symbol type detected: ", g_ea.symbol_type);
 
     // PART 1C: Get all leverages ONCE (FX:500 CR:100 MT:500 IX:250) | Lay tat ca don bay MOT LAN
     g_ea.all_leverages = GetAllLeverages();
-    Print("[INIT] All leverages: ", g_ea.all_leverages);
 
     // PART 1D: Get broker & account info ONCE | Lay thong tin san va tai khoan MOT LAN
     g_ea.broker_name = AccountCompany();
     long acc_type = AccountInfoInteger(ACCOUNT_TRADE_MODE);
     g_ea.account_type = (acc_type == ACCOUNT_TRADE_MODE_DEMO) ? "Demo" :
                         (acc_type == ACCOUNT_TRADE_MODE_REAL) ? "Real" : "Contest";
-    Print("[INIT] Broker: ", g_ea.broker_name, " | Account: ", g_ea.account_type);
+
+    // Compact init summary (Option 2: Readable Style) | Tom tat khoi dong gon nhe
+    // Detect fill policy same way as InitMT5Trading() | Phat hien fill policy giong InitMT5Trading()
+    long filling = SymbolInfoInteger(_Symbol, SYMBOL_FILLING_MODE);
+    string fill_policy = "IOC";
+    if((filling & 2) == 2) fill_policy = "IOC";
+    else if((filling & 1) == 1) fill_policy = "FOK";
+    else fill_policy = "RETURN";
+
+    string norm_status = EnableSymbolNormalization ? "ON" : "OFF";
+
+    Print("[INIT] ", g_ea.symbol_name, " ", g_ea.symbol_type,
+          " | Broker:", g_ea.broker_name, "/", g_ea.account_type,
+          " | Leverage:", g_ea.all_leverages,
+          " | Fill:", fill_policy, " Norm:", norm_status, " ✓");
 
     // PART 2: Folder selection (only for local file mode) | Chon thu muc (chi cho che do file local)
     if(CSDL_Source == FOLDER_1) g_ea.csdl_folder = "DataAutoOner\\";
@@ -2857,9 +2863,11 @@ void OnTimer() {
     g_ea.timer_last_run_time = current_time;
 
     //=============================================================================
-    // GROUP 1: EVEN SECONDS (0,2,4,6...) - TRADING CORE (HIGH PRIORITY) | NHOM 1: GIAY CHAN - GIAO DICH CHINH (UU TIEN CAO)
+    // GROUP 1: EVEN SECONDS (0,2,4,6...) - TRADING CORE (HIGH PRIORITY)
+    // NHOM 1: GIAY CHAN - GIAO DICH CHINH (UU TIEN CAO)
     //=============================================================================
-    // WHY EVEN: SPY Bot writes CSDL on ODD seconds ? EA reads on EVEN ? No file lock conflict | TAI SAO CHAN: SPY Bot ghi CSDL giay LE ? EA doc giay CHAN ? Khong xung dot file
+    // WHY EVEN: SPY Bot writes CSDL on ODD seconds ? EA reads on EVEN ? No file lock conflict
+    // TAI SAO CHAN: SPY Bot ghi CSDL giay LE ? EA doc giay CHAN ? Khong xung dot file
     if(!UseEvenOddMode || (current_second % 2 == 0)) {
 
         // STEP 1: Read CSDL file | Doc file CSDL
