@@ -63,7 +63,7 @@ enum S2_TREND_MODE {
 input S2_TREND_MODE S2_TrendMode = S2_FOLLOW_D1;  // S2: Trend (D1 auto/manual)
 
 //--- B.3 S3 NEWS Configuration (4) | Cau hinh tin tuc
-input int MinNewsLevelS3 = 20;         // S3: Min NEWS level (2-70)
+input int MinNewsLevelS3 = 2;         // S3: Min NEWS level (2-70)
 input bool EnableBonusNews = true;     // S3: Enable Bonus (extra on high NEWS)
 input int BonusOrderCount = 1;         // S3: Bonus count (1-5 orders)
 input int MinNewsLevelBonus = 2;       // S3: Min NEWS for Bonus (threshold)
@@ -82,7 +82,7 @@ input double Layer2_Divisor = 5.0;  // Layer2 divisor (margin/-5 = threshold)
 
 //--- C.2 Take profit (2) | Chot loi
 input bool   UseTakeProfit = false;  // Enable take profit (FALSE=OFF, TRUE=ON)
-input double TakeProfit_Multiplier = 5;  // TP_Multi (Col_mloss x a_lot x b_Multi >> vd=1000 × 0.21 × 5 = 1050 USD)
+input double TakeProfit_Multiplier = 5;  // TP_Multi (Col_mloss x a_lot x b_Multi >> vd=1000 ×0.21 ×5 =1050 USD)
 
 input string ___Sep_D___ = "___D. AUXILIARY SETTINGS ______";  //
 
@@ -1237,6 +1237,9 @@ bool HasValidS2BaseCondition(int tf) {
 //  PART 14: STRATEGY PROCESSING (4 functions) | XU LY CHIEN LUOC
 //=============================================================================
 
+// Static flag to prevent spam print when order fails | Co tinh de tranh spam print khi lenh that bai
+static bool g_print_failed[7][3] = {{false}};  // [TF][Strategy]: Track if already printed error
+
 // S1 Core: Open order (DRY - shared logic for BASIC and NEWS strategies)
 void OpenS1Order(int tf, int signal, string mode) {
     datetime timestamp = (datetime)g_ea.csdl_rows[tf].timestamp;
@@ -1257,6 +1260,7 @@ void OpenS1Order(int tf, int signal, string mode) {
 
     if(ticket > 0) {
         g_ea.position_flags[tf][0] = 1;
+        g_print_failed[tf][0] = false;  // Reset error flag on success | Dat lai co loi khi thanh cong
 
         string log_msg = ">>> [OPEN] S1_" + mode + " TF=" + G_TF_NAMES[tf] +
                          " | #" + IntegerToString(ticket) + " " + type_str + " " +
@@ -1274,7 +1278,12 @@ void OpenS1Order(int tf, int signal, string mode) {
         Print(log_msg);
     } else {
         g_ea.position_flags[tf][0] = 0;
-        Print("[S1_", mode, "_", G_TF_NAMES[tf], "] Failed: ", GetLastError());
+
+        // Print error ONLY ONCE until success | Chi in loi 1 LAN cho den khi thanh cong
+        if(!g_print_failed[tf][0]) {
+            Print("[S1_", mode, "_", G_TF_NAMES[tf], "] Failed: ", GetLastError());
+            g_print_failed[tf][0] = true;
+        }
     }
 }
 
@@ -1361,6 +1370,7 @@ void ProcessS2Strategy(int tf) {
                                    "S2_" + G_TF_NAMES[tf], g_ea.magic_numbers[tf][1]);
         if(ticket > 0) {
             g_ea.position_flags[tf][1] = 1;
+            g_print_failed[tf][1] = false;  // Reset error flag on success | Dat lai co loi khi thanh cong
             string trend_str = trend_to_follow == 1 ? "UP" : "DOWN";
             string mode_str = (S2_TrendMode == 0) ? "AUTO" : (S2_TrendMode == 1) ? "FBUY" : "FSELL";
             Print(">>> [OPEN] S2_TREND TF=", G_TF_NAMES[tf], " | #", ticket, " BUY ",
@@ -1368,7 +1378,12 @@ void ProcessS2Strategy(int tf) {
                   " | Sig=+1 Trend:", trend_str, " Mode:", mode_str, " | Timestamp:", IntegerToString(timestamp), " <<<");
         } else {
             g_ea.position_flags[tf][1] = 0;
-            Print("[S2_", G_TF_NAMES[tf], "] Failed: ", GetLastError());
+
+            // Print error ONLY ONCE until success | Chi in loi 1 LAN cho den khi thanh cong
+            if(!g_print_failed[tf][1]) {
+                Print("[S2_", G_TF_NAMES[tf], "] Failed: ", GetLastError());
+                g_print_failed[tf][1] = true;
+            }
         }
     }
     else if(current_signal == -1) {
@@ -1377,6 +1392,7 @@ void ProcessS2Strategy(int tf) {
                                    "S2_" + G_TF_NAMES[tf], g_ea.magic_numbers[tf][1]);
         if(ticket > 0) {
             g_ea.position_flags[tf][1] = 1;
+            g_print_failed[tf][1] = false;  // Reset error flag on success | Dat lai co loi khi thanh cong
             string trend_str = trend_to_follow == -1 ? "DOWN" : "UP";
             string mode_str = (S2_TrendMode == 0) ? "AUTO" : (S2_TrendMode == 1) ? "FBUY" : "FSELL";
             Print(">>> [OPEN] S2_TREND TF=", G_TF_NAMES[tf], " | #", ticket, " SELL ",
@@ -1384,7 +1400,12 @@ void ProcessS2Strategy(int tf) {
                   " | Sig=-1 Trend:", trend_str, " Mode:", mode_str, " | Timestamp:", IntegerToString(timestamp), " <<<");
         } else {
             g_ea.position_flags[tf][1] = 0;
-            Print("[S2_", G_TF_NAMES[tf], "] Failed: ", GetLastError());
+
+            // Print error ONLY ONCE until success | Chi in loi 1 LAN cho den khi thanh cong
+            if(!g_print_failed[tf][1]) {
+                Print("[S2_", G_TF_NAMES[tf], "] Failed: ", GetLastError());
+                g_print_failed[tf][1] = true;
+            }
         }
     }
 }
@@ -1421,6 +1442,7 @@ void ProcessS3Strategy(int tf) {
                                    "S3_" + G_TF_NAMES[tf], g_ea.magic_numbers[tf][2]);
         if(ticket > 0) {
             g_ea.position_flags[tf][2] = 1;
+            g_print_failed[tf][2] = false;  // Reset error flag on success | Dat lai co loi khi thanh cong
             string arrow = (news_direction > 0) ? "↑" : "↓";
             Print(">>> [OPEN] S3_NEWS TF=", G_TF_NAMES[tf], " | #", ticket, " BUY ",
                   DoubleToStr(g_ea.lot_sizes[tf][2], 2), " @", DoubleToStr(Ask, Digits),
@@ -1428,7 +1450,12 @@ void ProcessS3Strategy(int tf) {
                   " | Timestamp:", IntegerToString(timestamp), " <<<");
         } else {
             g_ea.position_flags[tf][2] = 0;
-            Print("[S3_", G_TF_NAMES[tf], "] Failed: ", GetLastError());
+
+            // Print error ONLY ONCE until success | Chi in loi 1 LAN cho den khi thanh cong
+            if(!g_print_failed[tf][2]) {
+                Print("[S3_", G_TF_NAMES[tf], "] Failed: ", GetLastError());
+                g_print_failed[tf][2] = true;
+            }
         }
     }
     else if(current_signal == -1) {
@@ -1437,6 +1464,7 @@ void ProcessS3Strategy(int tf) {
                                    "S3_" + G_TF_NAMES[tf], g_ea.magic_numbers[tf][2]);
         if(ticket > 0) {
             g_ea.position_flags[tf][2] = 1;
+            g_print_failed[tf][2] = false;  // Reset error flag on success | Dat lai co loi khi thanh cong
             string arrow = (news_direction > 0) ? "↑" : "↓";
             Print(">>> [OPEN] S3_NEWS TF=", G_TF_NAMES[tf], " | #", ticket, " SELL ",
                   DoubleToStr(g_ea.lot_sizes[tf][2], 2), " @", DoubleToStr(Bid, Digits),
@@ -1444,17 +1472,20 @@ void ProcessS3Strategy(int tf) {
                   " | Timestamp:", IntegerToString(timestamp), " <<<");
         } else {
             g_ea.position_flags[tf][2] = 0;
-            Print("[S3_", G_TF_NAMES[tf], "] Failed: ", GetLastError());
+
+            // Print error ONLY ONCE until success | Chi in loi 1 LAN cho den khi thanh cong
+            if(!g_print_failed[tf][2]) {
+                Print("[S3_", G_TF_NAMES[tf], "] Failed: ", GetLastError());
+                g_print_failed[tf][2] = true;
+            }
         }
     }
 }
 
-// Process Bonus NEWS - Scan all 7 TF and open multiple orders if NEWS detected
+// Process Bonus NEWS - Scan all 7 TF and open multiple orders if NEWS detected | 
 // Xu ly tin tuc Bonus - Quet 7 TF va mo nhieu lenh neu phat hien tin tuc
 void ProcessBonusNews() {
     if(!EnableBonusNews) return;
-
-    
 
     // Scan all 7 TF | Quet tat ca 7 TF
     for(int tf = 0; tf < 7; tf++) {
@@ -1550,8 +1581,6 @@ void CheckStoplossAndTakeProfit() {
             for(int s = 0; s < 3; s++) {
                 if(magic == g_ea.magic_numbers[tf][s] &&
                    g_ea.position_flags[tf][s] == 1) {
-
-                    
                     
                     bool order_closed = false;
 
@@ -1653,11 +1682,6 @@ void CheckAllEmergencyConditions() {
 // Smart TF reset for all charts of current symbol (learned from SPY Bot) | Reset thong minh cho tat ca chart cung symbol (hoc tu SPY Bot)
 // Reset theo THU TU CO DINH: M5→M15→M30→H1→H4→D1→M1 (D1 QUAN TRONG NHAT, M1 CUOI CUNG) >> IMPORTANT: D1 must reset BEFORE M1 (D1 has SPY Bot), M1 is LAST (EA runs on M1) | QUAN TRONG: D1 phai reset TRUOC M1 (D1 co SPY Bot), M1 la CUOI CUNG (EA chay tren M1)
 void SmartTFReset() {
-    Print("=======================================================");
-    Print("[SMART_TF_RESET] Resetting all charts of ", g_ea.symbol_name, "...");
-    Print("[SMART_TF_RESET] Order: M5→M15→M30→H1→H4→D1→M1 (D1 before M1, M1 LAST)");
-    Print("=======================================================");
-
     string current_symbol = Symbol();
     int current_period = Period();
     long current_chart_id = ChartID();
@@ -1680,20 +1704,6 @@ void SmartTFReset() {
             if(ChartSymbol(temp_chart) == current_symbol && ChartPeriod(temp_chart) == target_period) {
                 step_count++;
 
-                // Get TF name for log | Lay ten TF cho log
-                string tf_name = "M1";
-                if(target_period == PERIOD_M5) tf_name = "M5";
-                else if(target_period == PERIOD_M15) tf_name = "M15";
-                else if(target_period == PERIOD_M30) tf_name = "M30";
-                else if(target_period == PERIOD_H1) tf_name = "H1";
-                else if(target_period == PERIOD_H4) tf_name = "H4";
-                else if(target_period == PERIOD_D1) tf_name = "D1";
-
-                // If this is M1 (last), add special marker | Neu la M1 (cuoi), them dau hieu dac biet
-                string last_marker = (target_period == PERIOD_M1) ? " (M1 - LAST - EA CHART)" : "";
-
-                Print("[RESET] Step ", step_count, "/7: Chart ", tf_name, last_marker, " (via W1)...");
-
                 // Reset via W1 | Reset qua W1
                 ChartSetSymbolPeriod(temp_chart, current_symbol, PERIOD_W1);
                 Sleep(1000);
@@ -1707,8 +1717,9 @@ void SmartTFReset() {
         }
     }
 
-    Print("[SMART_TF_RESET] ✅ Completed! ", total_reset, " charts reset in order: M5→M15→M30→H1→H4→D1→M1");
-    Print("=======================================================");
+    if(total_reset > 0) {
+        Print("[SMART_TF_RESET] Completed: ", total_reset, " charts reset (M5→M15→M30→H1→H4→D1→M1)");
+    }
 }
 
 // Weekend reset (Saturday 00:03) - Trigger SmartTFReset | Reset cuoi tuan - Goi SmartTFReset >> ONLY M1 chart has permission to reset (master chart) | CHI chart M1 co quyen reset (chart master) >> Time: 00:03 to AVOID conflict with SPY Bot reset at 00:00 | Gio: 00:03 de TRANH xung dot voi SPY Bot reset luc 00:00
@@ -1731,13 +1742,11 @@ void CheckWeekendReset() {
     int current_day = TimeDay(current_time);
     if(current_day == g_ea.weekend_last_day) return;  // Already reset today | Da reset hom nay roi
 
-    Print("[WEEKEND_RESET] Saturday 00:03 - M1 chart triggering weekly reset...");
-    Print("[WEEKEND_RESET] (Delayed 3 minute to avoid SPY Bot conflict at 00:00)");
+    Print("[WEEKEND_RESET] Saturday 00:03 - Triggering weekly chart reset...");
 
     SmartTFReset();  // Call smart reset for all charts | Goi reset thong minh cho tat ca charts
 
     g_ea.weekend_last_day = current_day;
-    Print("[WEEKEND_RESET] ? Weekly reset completed!");
 }
 
 // Health check SPY Bot (8h/16h only, NOT 24h) | Kiem tra suc khoe SPY Bot (chi 8h va 16h, KHONG 24h): ONLY M1 chart has permission to check and reset (master chart) | CHI chart M1 co quyen kiem tra va reset (chart master)
@@ -1766,23 +1775,11 @@ void CheckSPYBotHealth() {
     int diff_hours = diff_seconds / 3600;
     int diff_minutes = (diff_seconds % 3600) / 60;
 
-    Print("[HEALTH_CHECK] Time: ", hour, "h00 | CSDL last update: ", diff_hours, "h", diff_minutes, "m ago");
-
     // If diff > 8 hours (28800 seconds) ? SPY Bot frozen! | Neu chenh lech > 8 gio ? SPY Bot treo!
     if(diff_seconds > 28800) {
-        Print("[HEALTH_CHECK] ? SPY Bot FROZEN!");
-        Print("[HEALTH_CHECK] Server time: ", TimeToStr(current_time, TIME_DATE|TIME_SECONDS));
-        Print("[HEALTH_CHECK] Last CSDL update: ", TimeToStr(m1_timestamp, TIME_DATE|TIME_SECONDS));
-        Print("[HEALTH_CHECK] M1 chart triggering Smart TF Reset...");
-
-        Alert("?? SPY Bot frozen! Auto-reset all ", g_ea.symbol_name, " charts!");
+        Print("[HEALTH_CHECK] ⚠️ SPY Bot frozen (CSDL: ", diff_hours, "h", diff_minutes, "m old) - Auto-reset triggered at ", hour, "h00");
 
         SmartTFReset();  // Call smart reset for all charts | Goi reset thong minh cho tat ca charts
-
-        Print("[HEALTH_CHECK] ? Reset completed");
-
-    } else {
-        Print("[HEALTH_CHECK] ? SPY Bot OK - Recent activity detected");
     }
 }
 
@@ -1829,7 +1826,7 @@ int OnInit() {
     // Initialize global state vars (prevent multi-symbol conflicts) | Khoi tao bien trang thai (tranh xung dot da symbol)
     g_ea.first_run_completed = false;
     g_ea.weekend_last_day = -1;
-    g_ea.health_last_check_hour = -1;
+    g_ea.health_last_check_hour = TimeHour(TimeCurrent());  // Skip current hour on startup | Bo qua gio hien tai khi khoi dong
     g_ea.timer_last_run_time = 0;
 
     DebugPrint("[RESET] All position flags (21) & state vars reset to 0");
@@ -2111,7 +2108,6 @@ void UpdateDashboard() {
         }
         return;
     }
-
 
     int y_start = 150;  // Start 150px from top | Bat dau tu 150px tu tren
     int line_height = 14;  // Line spacing | Khoang cach dong
