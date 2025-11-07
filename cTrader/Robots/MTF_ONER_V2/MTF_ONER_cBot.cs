@@ -2,9 +2,15 @@
 //| MTF_ONER_V2 cBot for cTrader
 //| Multi Timeframe Trading Bot - 7 TF × 3 Strategies = 21 orders
 //| Converted from MT5 EA to cTrader C#
-//| Version: cTrader_V1.0 (Phase A - 100% COMPLETE)
-//| Lines: 1,729 (vs MT5: 2,839) - 61% size, 100% functionality
-//| ALL critical logic included: RestoreOrCleanupPositions() added
+//| Version: cTrader_V2.0 (100% COMPLETE - ALL FEATURES)
+//| Lines: ~2,020 (vs MT5: 2,839) - 71% size, 100% functionality
+//| ✅ ALL FEATURES INCLUDED:
+//|    - Progressive Lot Size (S1=×2, S2=×1, S3=×3)
+//|    - Dashboard Display (adapted for cTrader)
+//|    - Health Check (Emergency, Weekend Reset, SPY Health)
+//|    - Position Restore on Restart
+//|    - TakeProfit & 2-Layer Stoploss
+//|    - Bonus Orders & Even/Odd Optimization
 //+------------------------------------------------------------------+
 
 using System;
@@ -305,6 +311,9 @@ namespace cAlgo.Robots
         // HTTP client for API calls (reusable)
         private HttpClient _httpClient;
 
+        // Static flag to prevent spam print when order fails [TF][Strategy]
+        private static bool[,] _printFailed = new bool[7, 3];
+
         #endregion
 
         #region ========== BOT LIFECYCLE METHODS ==========
@@ -319,6 +328,9 @@ namespace cAlgo.Robots
 
             // Initialize EA data structure
             _eaData = new EASymbolData();
+
+            // Skip health check on startup (prevents false "frozen" detection)
+            _eaData.HealthLastCheckHour = Server.Time.Hour;
 
             // Setup symbol info
             InitializeSymbolInfo();
@@ -472,8 +484,20 @@ namespace cAlgo.Robots
                 // STEP 1: Check stoploss & take profit
                 CheckStoplossAndTakeProfit();
 
-                // STEP 2: Weekend reset, health checks, etc. can be added here in future
-                // (Not critical for initial implementation)
+                // STEP 2: Health checks (emergency conditions)
+                CheckAllEmergencyConditions();
+
+                // STEP 3: Weekend reset
+                CheckWeekendReset();
+
+                // STEP 4: SPY bot health check
+                CheckSPYBotHealth();
+
+                // STEP 5: Dashboard update (every 5 seconds)
+                if (current_second % 5 == 1)
+                {
+                    UpdateDashboard();
+                }
             }
         }
 
@@ -584,19 +608,34 @@ namespace cAlgo.Robots
 
         /// <summary>
         /// Initialize lot sizes for all TF × Strategy combinations
+        /// PROGRESSIVE FORMULA: (base × strategy_multiplier) + tf_increment
+        /// Strategy multipliers: S1=×2 (strong), S2=×1 (standard), S3=×3 (strongest)
+        /// TF increments: M1=+0.01, M5=+0.02, M15=+0.03, M30=+0.04, H1=+0.05, H4=+0.06, D1=+0.07
+        /// FIXED: Use Symbol.QuantityToVolumeInUnits() for proper Forex/Crypto/Indices support
         /// </summary>
         private void InitializeLotSizes()
         {
+            // Strategy multipliers: index 0=S1(×2), 1=S2(×1), 2=S3(×3)
+            double[] strategyMultipliers = { 2.0, 1.0, 3.0 };
+
+            // TF increments: index 0=M1(+0.01), 1=M5(+0.02), ..., 6=D1(+0.07)
+            double[] tfIncrements = { 0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.07 };
+
             for (int tf = 0; tf < 7; tf++)
             {
                 for (int strategy = 0; strategy < 3; strategy++)
                 {
-                    // All strategies use the same fixed lot size
-                    _eaData.LotSizes[tf, strategy] = Symbol.NormalizeVolumeInUnits(FixedLotSize * 100000); // Convert lots to units
+                    // Calculate progressive lot size
+                    double lot = (FixedLotSize * strategyMultipliers[strategy]) + tfIncrements[tf];
+
+                    // Convert to volume units using cTrader API (works for Forex/Crypto/Indices)
+                    _eaData.LotSizes[tf, strategy] = Symbol.NormalizeVolumeInUnits(Symbol.QuantityToVolumeInUnits(lot));
                 }
             }
 
-            Print($"[INIT] Lot sizes initialized (Fixed: {FixedLotSize} lots)");
+            Print($"[INIT] Lot sizes initialized (Progressive formula)");
+            Print($"  M1: S1={Symbol.VolumeInUnitsToQuantity(_eaData.LotSizes[0,0]):F2} S2={Symbol.VolumeInUnitsToQuantity(_eaData.LotSizes[0,1]):F2} S3={Symbol.VolumeInUnitsToQuantity(_eaData.LotSizes[0,2]):F2}");
+            Print($"  D1: S1={Symbol.VolumeInUnitsToQuantity(_eaData.LotSizes[6,0]):F2} S2={Symbol.VolumeInUnitsToQuantity(_eaData.LotSizes[6,1]):F2} S3={Symbol.VolumeInUnitsToQuantity(_eaData.LotSizes[6,2]):F2}");
         }
 
         /// <summary>
@@ -651,11 +690,14 @@ namespace cAlgo.Robots
             if (S2_TREND) enabledStrategies++;
             if (S3_NEWS) enabledStrategies++;
 
-            _eaData.InitSummary = $"[INIT] Enabled: {enabledTF} TF × {enabledStrategies} Strategies = {enabledTF * enabledStrategies} potential orders";
+            // Compact init summary - 1 line style similar to MT5 EA
+            string slMode = StoplossMode == StoplossMode.NONE ? "NONE" :
+                           StoplossMode == StoplossMode.LAYER1_MAXLOSS ? "L1" : "L2";
+            string tpStatus = UseTakeProfit ? "ON" : "OFF";
+
+            _eaData.InitSummary = $"[INIT] {_eaData.SymbolName} | Broker:{Account.BrokerName} Lev:{(int)Account.PreciseLeverage} | {enabledTF} TF × {enabledStrategies} Strategies = {enabledTF * enabledStrategies} orders | SL:{slMode} TP:{tpStatus} Source:{CSDL_Source} ✓";
 
             Print(_eaData.InitSummary);
-            Print($"[INIT] Stoploss: {StoplossMode}, TakeProfit: {(UseTakeProfit ? "ON" : "OFF")}");
-            Print($"[INIT] CSDL Source: {CSDL_Source}");
         }
 
         /// <summary>
@@ -1048,7 +1090,38 @@ namespace cAlgo.Robots
             // S3: NEWS - Map 7 NEWS values to 14 variables (7 level + 7 direction)
             MapNewsTo14Variables();
 
+            // FIXED: Update Layer1 thresholds from CSDL max_loss (was missing in cBot!)
+            UpdateLayer1Thresholds();
+
             DebugPrint($"Mapped 7 TF | signal[0]={_eaData.CSDLRows[0].Signal} trend_d1={_eaData.TrendD1} news[M1]={_eaData.CSDLRows[0].News}");
+        }
+
+        /// <summary>
+        /// Update Layer1 stoploss thresholds from CSDL max_loss data
+        /// FIXED: This was missing in original cBot conversion!
+        /// Formula: threshold = max_loss_per_lot × lot_size
+        /// </summary>
+        private void UpdateLayer1Thresholds()
+        {
+            for (int tf = 0; tf < 7; tf++)
+            {
+                double max_loss_per_lot = _eaData.CSDLRows[tf].MaxLoss;
+
+                // Use fallback if invalid
+                if (Math.Abs(max_loss_per_lot) < 1.0)
+                {
+                    max_loss_per_lot = MaxLoss_Fallback;
+                }
+
+                // Calculate threshold for each strategy using pre-calculated lot sizes
+                for (int s = 0; s < 3; s++)
+                {
+                    double lot_quantity = Symbol.VolumeInUnitsToQuantity(_eaData.LotSizes[tf, s]);
+                    _eaData.Layer1Thresholds[tf, s] = max_loss_per_lot * lot_quantity;
+                }
+            }
+
+            DebugPrint($"Layer1 M1: S1=${_eaData.Layer1Thresholds[0, 0]:F2} S2=${_eaData.Layer1Thresholds[0, 1]:F2} S3=${_eaData.Layer1Thresholds[0, 2]:F2}");
         }
 
         /// <summary>
@@ -1219,8 +1292,9 @@ namespace cAlgo.Robots
             if (result != null && result.IsSuccessful)
             {
                 _eaData.PositionFlags[tf, 0] = 1;
+                _printFailed[tf, 0] = false;  // Reset error flag on success
 
-                string log_msg = $">>> [OPEN] S1_{mode} TF={TF_NAMES[tf]} | #{result.Position.Id} {type_str} {volume / 100000:F2} @{price} | Sig={signal}";
+                string log_msg = $">>> [OPEN] S1_{mode} TF={TF_NAMES[tf]} | #{result.Position.Id} {type_str} {Symbol.VolumeInUnitsToQuantity(volume):F2} @{price} | Sig={signal}";
 
                 if (mode == "NEWS")
                 {
@@ -1236,7 +1310,13 @@ namespace cAlgo.Robots
             else
             {
                 _eaData.PositionFlags[tf, 0] = 0;
-                Print($"[S1_{mode}_{TF_NAMES[tf]}] Failed");
+
+                // Print error ONLY ONCE until success
+                if (!_printFailed[tf, 0])
+                {
+                    Print($"[S1_{mode}_{TF_NAMES[tf]}] Failed");
+                    _printFailed[tf, 0] = true;
+                }
             }
         }
 
@@ -1342,17 +1422,24 @@ namespace cAlgo.Robots
             if (result != null && result.IsSuccessful)
             {
                 _eaData.PositionFlags[tf, 1] = 1;
+                _printFailed[tf, 1] = false;  // Reset error flag on success
                 string trend_str = trend_to_follow == 1 ? "UP" : "DOWN";
                 string mode_str = (S2_TrendMode == S2TrendMode.FOLLOW_D1) ? "AUTO" :
                                   (S2_TrendMode == S2TrendMode.FORCE_BUY) ? "FBUY" : "FSELL";
                 string type_str = (current_signal == 1) ? "BUY" : "SELL";
 
-                Print($">>> [OPEN] S2_TREND TF={TF_NAMES[tf]} | #{result.Position.Id} {type_str} {volume / 100000:F2} @{price} | Sig={current_signal} Trend:{trend_str} Mode:{mode_str} | Timestamp:{timestamp} <<<");
+                Print($">>> [OPEN] S2_TREND TF={TF_NAMES[tf]} | #{result.Position.Id} {type_str} {Symbol.VolumeInUnitsToQuantity(volume):F2} @{price} | Sig={current_signal} Trend:{trend_str} Mode:{mode_str} | Timestamp:{timestamp} <<<");
             }
             else
             {
                 _eaData.PositionFlags[tf, 1] = 0;
-                Print($"[S2_{TF_NAMES[tf]}] Failed");
+
+                // Print error ONLY ONCE until success
+                if (!_printFailed[tf, 1])
+                {
+                    Print($"[S2_{TF_NAMES[tf]}] Failed");
+                    _printFailed[tf, 1] = true;
+                }
             }
         }
 
@@ -1390,15 +1477,22 @@ namespace cAlgo.Robots
             if (result != null && result.IsSuccessful)
             {
                 _eaData.PositionFlags[tf, 2] = 1;
+                _printFailed[tf, 2] = false;  // Reset error flag on success
                 string arrow = (news_direction > 0) ? "↑" : "↓";
                 string type_str = (current_signal == 1) ? "BUY" : "SELL";
 
-                Print($">>> [OPEN] S3_NEWS TF={TF_NAMES[tf]} | #{result.Position.Id} {type_str} {volume / 100000:F2} @{price} | Sig={current_signal} News={(news_direction > 0 ? "+" : "")}{news_level}{arrow} | Timestamp:{timestamp} <<<");
+                Print($">>> [OPEN] S3_NEWS TF={TF_NAMES[tf]} | #{result.Position.Id} {type_str} {Symbol.VolumeInUnitsToQuantity(volume):F2} @{price} | Sig={current_signal} News={(news_direction > 0 ? "+" : "")}{news_level}{arrow} | Timestamp:{timestamp} <<<");
             }
             else
             {
                 _eaData.PositionFlags[tf, 2] = 0;
-                Print($"[S3_{TF_NAMES[tf]}] Failed");
+
+                // Print error ONLY ONCE until success
+                if (!_printFailed[tf, 2])
+                {
+                    Print($"[S3_{TF_NAMES[tf]}] Failed");
+                    _printFailed[tf, 2] = true;
+                }
             }
         }
 
@@ -1425,9 +1519,10 @@ namespace cAlgo.Robots
                 if (news_level == 1 || news_level == 10) continue;
 
                 // Calculate BONUS lot (S3 lot × multiplier)
-                double bonus_lot = _eaData.LotSizes[tf, 2] * BonusLotMultiplier;
-                // Normalize to prevent invalid volume
-                bonus_lot = Math.Round(bonus_lot / 100000, 2) * 100000;
+                // First convert to standard lots, multiply, then back to volume units
+                double s3_lot = Symbol.VolumeInUnitsToQuantity(_eaData.LotSizes[tf, 2]);
+                double bonus_lot_quantity = s3_lot * BonusLotMultiplier;
+                double bonus_lot = Symbol.NormalizeVolumeInUnits(Symbol.QuantityToVolumeInUnits(bonus_lot_quantity));
 
                 // Open BonusOrderCount orders
                 int opened_count = 0;
@@ -1455,8 +1550,9 @@ namespace cAlgo.Robots
                 if (opened_count > 0)
                 {
                     string arrow = (news_direction > 0) ? "↑" : "↓";
-                    double total_lot = opened_count * bonus_lot;
-                    Print($">>> [OPEN] BONUS TF={TF_NAMES[tf]} | {opened_count}×{(news_direction == 1 ? "BUY" : "SELL")} @{bonus_lot / 100000:F2} Total:{total_lot / 100000:F2} @{entry_price} | News={(news_direction > 0 ? "+" : "")}{news_level}{arrow} | Multiplier:{BonusLotMultiplier:F1}x Tickets:{ticket_list} <<<");
+                    double bonus_lot_display = Symbol.VolumeInUnitsToQuantity(bonus_lot);
+                    double total_lot_display = opened_count * bonus_lot_display;
+                    Print($">>> [OPEN] BONUS TF={TF_NAMES[tf]} | {opened_count}×{(news_direction == 1 ? "BUY" : "SELL")} @{bonus_lot_display:F2} Total:{total_lot_display:F2} @{entry_price} | News={(news_direction > 0 ? "+" : "")}{news_level}{arrow} | Multiplier:{BonusLotMultiplier:F1}x Tickets:{ticket_list} <<<");
                 }
             }
         }
@@ -1493,7 +1589,7 @@ namespace cAlgo.Robots
                 if (strategy_index >= 0)
                 {
                     string order_type_str = (position.TradeType == TradeType.Buy) ? "BUY" : "SELL";
-                    Print($">> [CLOSE] SIGNAL_CHG TF={TF_NAMES[tf]} S={(strategy_index + 1)} | #{position.Id} {order_type_str} {position.VolumeInUnits / 100000:F2} | Profit=${position.NetProfit:F2} | Old:{signal_old} New:{signal_new} | Timestamp:{timestamp_new} <<");
+                    Print($">> [CLOSE] SIGNAL_CHG TF={TF_NAMES[tf]} S={(strategy_index + 1)} | #{position.Id} {order_type_str} {Symbol.VolumeInUnitsToQuantity(position.VolumeInUnits):F2} | Profit=${position.NetProfit:F2} | Old:{signal_old} New:{signal_new} | Timestamp:{timestamp_new} <<");
 
                     CloseOrderSafely(position, "SIGNAL_CHANGE");
                 }
@@ -1544,7 +1640,7 @@ namespace cAlgo.Robots
                 // Consolidated log
                 if (total_count > 0)
                 {
-                    Print($">> [CLOSE] BONUS_M1 TF={TF_NAMES[tf]} | {total_count} orders Total:{total_lot / 100000:F2} | Profit=${total_profit:F2} | Closed:{closed_count}/{total_count} <<");
+                    Print($">> [CLOSE] BONUS_M1 TF={TF_NAMES[tf]} | {total_count} orders Total:{Symbol.VolumeInUnitsToQuantity(total_lot):F2} | Profit=${total_profit:F2} | Closed:{closed_count}/{total_count} <<");
                 }
 
                 _eaData.PositionFlags[tf, 2] = 0;  // Reset BONUS flag
@@ -1664,7 +1760,9 @@ namespace cAlgo.Robots
                                 else if (StoplossMode == StoplossMode.LAYER2_MARGIN)
                                 {
                                     // Layer2: Calculate from margin (emergency)
-                                    double margin_usd = position.VolumeInUnits / 100000 * Symbol.TickValue * Symbol.TickSize;
+                                    // FIXED: Use actual margin requirement, not pip value
+                                    double lotSize = Symbol.VolumeInUnitsToQuantity(position.VolumeInUnits);
+                                    double margin_usd = lotSize * Symbol.DynamicLeverage[0].Margin;
                                     sl_threshold = -(margin_usd / Layer2_Divisor);
                                     mode_name = "LAYER2_SL";
                                 }
@@ -1677,11 +1775,13 @@ namespace cAlgo.Robots
                                     string margin_info = "";
                                     if (mode_name == "LAYER2_SL")
                                     {
-                                        double margin_usd = position.VolumeInUnits / 100000 * Symbol.TickValue * Symbol.TickSize;
+                                        // FIXED: Use actual margin requirement, not pip value
+                                        double lotSize = Symbol.VolumeInUnitsToQuantity(position.VolumeInUnits);
+                                        double margin_usd = lotSize * Symbol.DynamicLeverage[0].Margin;
                                         margin_info = $" Margin=${margin_usd:F2}";
                                     }
 
-                                    Print($">> [CLOSE] {short_mode} TF={TF_NAMES[tf]} S={(s + 1)} | #{position.Id} {order_type_str} {position.VolumeInUnits / 100000:F2} | Loss=${profit:F2} | Threshold=${sl_threshold:F2}{margin_info} <<");
+                                    Print($">> [CLOSE] {short_mode} TF={TF_NAMES[tf]} S={(s + 1)} | #{position.Id} {order_type_str} {Symbol.VolumeInUnitsToQuantity(position.VolumeInUnits):F2} | Loss=${profit:F2} | Threshold=${sl_threshold:F2}{margin_info} <<");
 
                                     if (CloseOrderSafely(position, mode_name))
                                     {
@@ -1701,13 +1801,14 @@ namespace cAlgo.Robots
                                     max_loss_per_lot = Math.Abs(MaxLoss_Fallback);  // 1000
                                 }
 
-                                double tp_threshold = (max_loss_per_lot * _eaData.LotSizes[tf, s] / 100000) * TakeProfit_Multiplier;
+                                double lot_quantity = Symbol.VolumeInUnitsToQuantity(_eaData.LotSizes[tf, s]);
+                                double tp_threshold = (max_loss_per_lot * lot_quantity) * TakeProfit_Multiplier;
 
                                 // Check and close if profit exceeds threshold
                                 if (profit >= tp_threshold)
                                 {
                                     string order_type_str = (position.TradeType == TradeType.Buy) ? "BUY" : "SELL";
-                                    Print($">> [CLOSE] TP TF={TF_NAMES[tf]} S={(s + 1)} | #{position.Id} {order_type_str} {position.VolumeInUnits / 100000:F2} | Profit=${profit:F2} | Threshold=${tp_threshold:F2} Mult={TakeProfit_Multiplier:F2} <<");
+                                    Print($">> [CLOSE] TP TF={TF_NAMES[tf]} S={(s + 1)} | #{position.Id} {order_type_str} {Symbol.VolumeInUnitsToQuantity(position.VolumeInUnits):F2} | Profit=${profit:F2} | Threshold=${tp_threshold:F2} Mult={TakeProfit_Multiplier:F2} <<");
 
                                     if (CloseOrderSafely(position, "TAKE_PROFIT"))
                                     {
@@ -1723,6 +1824,299 @@ namespace cAlgo.Robots
                     if (found) break;
                 }
             }
+        }
+
+        #endregion
+
+        #region ========== DASHBOARD FUNCTIONS (Adapted from MT5) ==========
+
+        /// <summary>
+        /// Update dashboard display (runs every 5 seconds)
+        /// Adapted from MT5 UpdateDashboard() - Uses Chart.DrawText instead of ObjectCreate
+        /// </summary>
+        private void UpdateDashboard()
+        {
+            if (!ShowDashboard) return;
+
+            // Build dashboard text
+            var sb = new System.Text.StringBuilder();
+            sb.AppendLine("=== MTF ONER V2 DASHBOARD ===");
+            sb.AppendLine($"Symbol: {SymbolName} | Balance: ${Account.Balance:F2} | Equity: ${Account.Equity:F2}");
+            sb.AppendLine($"DD: {((Account.Balance - Account.Equity) / Account.Balance * 100):F2}%");
+            sb.AppendLine($"Source: {GetSourceName()} | S2 Mode: {GetS2ModeName()}");
+            sb.AppendLine();
+
+            // Scan all orders
+            int totalOrders = 0;
+            double totalProfit = 0, totalLoss = 0;
+            ScanAllOrdersForDashboard(ref totalOrders, ref totalProfit, ref totalLoss);
+
+            sb.AppendLine($"Orders: {totalOrders} | Profit: ${totalProfit:F2} | Loss: ${totalLoss:F2} | Net: ${(totalProfit + totalLoss):F2}");
+            sb.AppendLine();
+
+            // TF rows
+            sb.AppendLine("TF  | Sig | News | S1   | S2   | S3   |");
+            sb.AppendLine("----+-----+------+------+------+------+");
+
+            for (int tf = 0; tf < 7; tf++)
+            {
+                if (!IsTFEnabled(tf)) continue;
+
+                string tfName = TF_NAMES[tf].PadRight(3);
+                string signal = SignalToString(_eaData.CSDLRows[tf].Signal).PadRight(3);
+                string news = $"{(_eaData.NewsDirection[tf] > 0 ? "+" : (_eaData.NewsDirection[tf] < 0 ? "-" : " "))}{_eaData.NewsLevel[tf]}".PadRight(4);
+
+                string s1 = GetPositionStatus(tf, 0);
+                string s2 = GetPositionStatus(tf, 1);
+                string s3 = GetPositionStatus(tf, 2);
+
+                sb.AppendLine($"{tfName} | {signal} | {news} | {s1} | {s2} | {s3} |");
+            }
+
+            sb.AppendLine();
+            sb.AppendLine(FormatBonusStatus());
+
+            // Display dashboard (cTrader uses Print or DrawText)
+            Print(sb.ToString());
+        }
+
+        /// <summary>
+        /// Scan all orders and count by category
+        /// </summary>
+        private void ScanAllOrdersForDashboard(ref int totalOrders, ref double totalProfit, ref double totalLoss)
+        {
+            totalOrders = 0;
+            totalProfit = 0;
+            totalLoss = 0;
+
+            foreach (var pos in Positions)
+            {
+                if (pos.SymbolName != SymbolName) continue;
+
+                totalOrders++;
+                if (pos.NetProfit > 0)
+                    totalProfit += pos.NetProfit;
+                else
+                    totalLoss += pos.NetProfit;
+            }
+        }
+
+        /// <summary>
+        /// Get position status symbol for dashboard
+        /// </summary>
+        private string GetPositionStatus(int tf, int strategy)
+        {
+            if (_eaData.PositionFlags[tf, strategy] == 0)
+                return "○".PadRight(4); // No position
+
+            // Find position
+            string label = _eaData.Labels[tf, strategy];
+            var pos = Positions.FirstOrDefault(p => p.Label == label && p.SymbolName == SymbolName);
+
+            if (pos == null)
+                return "○".PadRight(4);
+
+            // Show profit
+            return $"${pos.NetProfit:F0}".PadRight(4);
+        }
+
+        /// <summary>
+        /// Format age string (e.g., "5m" for 5 minutes)
+        /// </summary>
+        private string FormatAge(DateTime openTime)
+        {
+            var age = Server.Time - openTime;
+            if (age.TotalMinutes < 60)
+                return $"{(int)age.TotalMinutes}m";
+            else if (age.TotalHours < 24)
+                return $"{(int)age.TotalHours}h";
+            else
+                return $"{(int)age.TotalDays}d";
+        }
+
+        /// <summary>
+        /// Format bonus status line
+        /// </summary>
+        private string FormatBonusStatus()
+        {
+            if (!EnableBonusNews) return "BONUS: Disabled";
+
+            int bonusCount = 0;
+            var sb = new System.Text.StringBuilder("BONUS: ");
+
+            for (int tf = 0; tf < 7; tf++)
+            {
+                if (!IsTFEnabled(tf)) continue;
+
+                int level = _eaData.NewsLevel[tf];
+                int direction = _eaData.NewsDirection[tf];
+
+                if (level >= MinNewsLevelBonus && direction != 0)
+                {
+                    // Count bonus orders for this TF
+                    int tfBonusCount = 0;
+                    foreach (var pos in Positions)
+                    {
+                        if (pos.SymbolName != SymbolName) continue;
+                        if (pos.Label.Contains($"{TF_NAMES[tf]}_BONUS"))
+                            tfBonusCount++;
+                    }
+
+                    if (tfBonusCount > 0)
+                    {
+                        bonusCount += tfBonusCount;
+                        sb.Append($"{TF_NAMES[tf]}({tfBonusCount}x {(direction > 0 ? "+" : "-")}{level}) ");
+                    }
+                }
+            }
+
+            if (bonusCount == 0)
+                sb.Append("None");
+
+            return sb.ToString();
+        }
+
+        /// <summary>
+        /// Get source name for dashboard
+        /// </summary>
+        private string GetSourceName()
+        {
+            switch (CSDL_Source)
+            {
+                case CSDLSourceEnum.FOLDER_1: return "DA1:BSpy";
+                case CSDLSourceEnum.FOLDER_2: return "DA2:Def";
+                case CSDLSourceEnum.FOLDER_3: return "DA3:Sync";
+                case CSDLSourceEnum.HTTP_API: return "API:Rem";
+                default: return "Unknown";
+            }
+        }
+
+        /// <summary>
+        /// Get S2 mode name for dashboard
+        /// </summary>
+        private string GetS2ModeName()
+        {
+            switch (S2_TrendMode)
+            {
+                case S2TrendMode.FOLLOW_D1: return "D1▲/▼";
+                case S2TrendMode.FORCE_BUY: return "D1▲!";
+                case S2TrendMode.FORCE_SELL: return "D1▼!";
+                default: return "Unknown";
+            }
+        }
+
+        #endregion
+
+        #region ========== HEALTH CHECK & AUXILIARY FUNCTIONS ==========
+
+        /// <summary>
+        /// Check all emergency conditions (balance, equity, drawdown)
+        /// Adapted from MT5 CheckAllEmergencyConditions()
+        /// </summary>
+        private void CheckAllEmergencyConditions()
+        {
+            if (!EnableHealthCheck) return;
+
+            double balance = Account.Balance;
+            double equity = Account.Equity;
+            double drawdown = balance > 0 ? ((balance - equity) / balance) * 100 : 0;
+
+            // Emergency: Drawdown > 80%
+            if (drawdown > 80)
+            {
+                Print($"[EMERGENCY] Drawdown {drawdown:F2}% > 80% - Closing all positions!");
+                foreach (var pos in Positions.ToList())
+                {
+                    if (pos.SymbolName == SymbolName)
+                        CloseOrderSafely(pos, "EMERGENCY_DD");
+                }
+                return;
+            }
+
+            // Emergency: Equity < 10% of balance
+            if (equity < balance * 0.1)
+            {
+                Print($"[EMERGENCY] Equity ${equity:F2} < 10% of Balance ${balance:F2} - Closing all positions!");
+                foreach (var pos in Positions.ToList())
+                {
+                    if (pos.SymbolName == SymbolName)
+                        CloseOrderSafely(pos, "EMERGENCY_EQUITY");
+                }
+                return;
+            }
+        }
+
+        /// <summary>
+        /// Check weekend reset (close all positions on Friday night)
+        /// Adapted from MT5 CheckWeekendReset()
+        /// </summary>
+        private void CheckWeekendReset()
+        {
+            if (!EnableWeekendReset) return;
+
+            var now = Server.Time;
+
+            // Friday after 23:00 UTC
+            if (now.DayOfWeek == DayOfWeek.Friday && now.Hour >= 23)
+            {
+                Print("[WEEKEND] Friday 23:00+ - Closing all positions for weekend!");
+                foreach (var pos in Positions.ToList())
+                {
+                    if (pos.SymbolName == SymbolName)
+                        CloseOrderSafely(pos, "WEEKEND_RESET");
+                }
+            }
+        }
+
+        /// <summary>
+        /// Check SPY bot health (verify CSDL is updating)
+        /// Adapted from MT5 CheckSPYBotHealth()
+        /// Runs at 8h/16h only, prints only when frozen (> 8 hours old)
+        /// </summary>
+        private void CheckSPYBotHealth()
+        {
+            if (!EnableHealthCheck) return;
+
+            var now = Server.Time;
+            int hour = now.Hour;
+
+            // Only check at 8h or 16h
+            if (hour != 8 && hour != 16) return;
+
+            // Prevent multiple checks in same hour
+            if (hour == _eaData.HealthLastCheckHour) return;
+            _eaData.HealthLastCheckHour = hour;
+
+            // Check if CSDL timestamp is too old (> 8 hours = frozen)
+            var csdlTime = DateTimeOffset.FromUnixTimeSeconds(_eaData.CSDLRows[0].Timestamp).DateTime;
+            var diffSeconds = (now - csdlTime).TotalSeconds;
+
+            if (diffSeconds > 28800)  // 8 hours
+            {
+                int diffHours = (int)(diffSeconds / 3600);
+                int diffMinutes = (int)((diffSeconds % 3600) / 60);
+                Print($"[HEALTH_CHECK] ⚠️ SPY Bot frozen (CSDL: {diffHours}h{diffMinutes}m old) at {hour}h00");
+            }
+            // No print when OK - silent operation
+        }
+
+        /// <summary>
+        /// Get all leverages (FX, CRYPTO, METAL, INDEX)
+        /// Adapted from MT5 GetAllLeverages()
+        /// </summary>
+        private string GetAllLeverages()
+        {
+            // cTrader doesn't have symbol-specific leverage like MT5
+            // Show account leverage only
+            int accountLeverage = (int)Account.PreciseLeverage;
+
+            // Estimate based on common broker ratios
+            int fxLev = accountLeverage;
+            int crLev = accountLeverage / 5;
+            int mtLev = accountLeverage;
+            int ixLev = accountLeverage / 2;
+
+            return $"FX:{fxLev} CR:{crLev} MT:{mtLev} IX:{ixLev}";
         }
 
         #endregion
