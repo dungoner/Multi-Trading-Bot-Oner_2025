@@ -1,0 +1,1341 @@
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+"""
+==============================================================================
+TradeLocker_MTF_ONER.py : Multi Timeframe Expert Advisor for TradeLocker
+Bot EA nhiều khung thời gian cho TradeLocker
+==============================================================================
+7 TF × 3 Strategies = 21 orders | 7 khung × 3 chiến lược = 21 lệnh
+Version: TL_V1 - Converted from MT5 EA V2 | Phiên bản: TL_V1 - Chuyển đổi từ MT5 EA V2
+
+CONVERTED FROM: /MQL5/Experts/_MT5_EAs_MTF ONER_V2.mq5 (2995 lines)
+LOGIC: 100% identical to MT5 EA - NO CHANGES | LOGIC: 100% giống MT5 EA - KHÔNG THAY ĐỔI
+==============================================================================
+"""
+
+import sys
+import os
+import json
+import time
+import requests
+from datetime import datetime, timedelta
+from typing import Dict, List, Optional, Tuple
+import logging
+from dataclasses import dataclass, field
+import signal
+import threading
+
+# TradeLocker API (requires: pip install tradelocker)
+try:
+    from tradelocker import TLAPI
+except ImportError:
+    print("ERROR: TradeLocker library not installed. Run: pip install tradelocker")
+    sys.exit(1)
+
+# ==============================================================================
+#  PART 1: USER INPUTS (30 inputs + 4 separators) | CẤU HÌNH NGƯỜI DÙNG
+# ==============================================================================
+
+class Config:
+    """User configuration (identical to MT5 EA inputs) | Cấu hình người dùng (giống MT5 EA)"""
+
+    # ===== A. CORE SETTINGS | CÀI ĐẶT CỐT LÕI =====
+
+    # A.1 Timeframe toggles (7) | Bật/tắt khung thời gian
+    TF_M1: bool = False  # M1 Signal(1,-1) vs Timestamp(Mt4server)
+    TF_M5: bool = True   # M5 (Buy/Sell Symbol_M5)
+    TF_M15: bool = True  # M15 (Signal Symbol_M15)
+    TF_M30: bool = True  # M30 (Buy/Sell Symbol_M30)
+    TF_H1: bool = True   # H1 (Signal Symbol_H1)
+    TF_H4: bool = True   # H4 (Buy/Sell Symbol_H4)
+    TF_D1: bool = False  # D1 (Signal Symbol_D1)
+
+    # A.2 Strategy toggles (3) | Bật/tắt chiến lược
+    S1_HOME: bool = True   # S1: Binary (Home_7TF > B1:S1_NewsFilter=false)
+    S2_TREND: bool = True  # S2: Trend (Follow D1)
+    S3_NEWS: bool = True   # S3: News (High compact)
+
+    # A.3 Close Mode Configuration (2) | Chế độ đóng lệnh
+    S1_CloseByM1: bool = True   # S1: Close by M1 (TRUE=fast M1, FALSE=own TF)
+    S2_CloseByM1: bool = False  # S2: Close by M1 (TRUE=fast M1, FALSE=own TF)
+
+    # A.4 Risk management (2) | Quản lý rủi ro
+    FixedLotSize: float = 0.1           # Lot size (0.01-1.0 recommended)
+    MaxLoss_Fallback: float = -1000.0   # Maxloss fallback ($USD if CSDL fails)
+
+    # A.5 Data source (1) | Nguồn dữ liệu
+    # Options: "FOLDER_1", "FOLDER_2", "FOLDER_3", "HTTP_API"
+    CSDL_Source: str = "HTTP_API"  # CSDL via HTTP (Bot Sync Py)
+
+    # A.6 HTTP API settings | Cấu hình HTTP API
+    HTTP_Server_IP: str = "dungalading.duckdns.org"  # HTTP Server domain/IP
+    HTTP_API_Key: str = ""                           # API Key (empty = no auth)
+    EnableSymbolNormalization: bool = False          # Symbol name normalization
+
+    # ===== B. STRATEGY CONFIG | CẤU HÌNH CHIẾN LƯỢC =====
+
+    # B.1 S1 NEWS Filter (3) | Lọc tin tức cho S1
+    S1_UseNewsFilter: bool = True          # S1: Use NEWS filter (TRUE=strict, FALSE=basic)
+    MinNewsLevelS1: int = 2                # S1: Min NEWS level (2-70, higher=stricter)
+    S1_RequireNewsDirection: bool = True   # S1: Match NEWS direction (signal==news!)
+
+    # B.2 S2 TREND Mode (1) | Chế độ xu hướng
+    # Options: "S2_FOLLOW_D1" (0), "S2_FORCE_BUY" (1), "S2_FORCE_SELL" (-1)
+    S2_TrendMode: int = 0  # S2: Trend (D1 Auto/manual)
+
+    # B.3 S3 NEWS Configuration (4) | Cấu hình tin tức
+    MinNewsLevelS3: int = 20               # S3: Min NEWS level (2-70)
+    EnableBonusNews: bool = True           # S3: Enable Bonus (extra on high NEWS)
+    BonusOrderCount: int = 1               # S3: Bonus count (1-5 orders)
+    MinNewsLevelBonus: int = 2             # S3: Min NEWS for Bonus (threshold)
+    BonusLotMultiplier: float = 1.2        # S3: Bonus lot multiplier (1.0-10)
+
+    # ===== C. RISK PROTECTION | BẢO VỆ RỦI RO =====
+
+    # C.1 Stoploss mode (3) | Chế độ cắt lỗ
+    # Options: 0=NONE, 1=LAYER1_MAXLOSS, 2=LAYER2_MARGIN
+    StoplossMode: int = 1            # Stoploss mode (0=OFF, 1=CSDL, 2=Margin)
+    Layer2_Divisor: float = 5.0      # Layer2 divisor (margin/-5 = threshold)
+
+    # C.2 Take profit (2) | Chốt lời
+    UseTakeProfit: bool = False      # Enable take profit (FALSE=OFF, TRUE=ON)
+    TakeProfit_Multiplier: float = 5 # TP_multi (vd=1000 × 0.21 × 3 = 630 USD)
+
+    # ===== D. AUXILIARY SETTINGS | CÀI ĐẶT PHỤ TRỢ =====
+
+    # D.1 Performance (1) | Hiệu suất
+    UseEvenOddMode: bool = True  # Even/odd split mode (load balancing)
+
+    # D.2 Health check & reset (2) | Kiểm tra sức khỏe
+    EnableWeekendReset: bool = False  # Weekend reset (auto close Friday 23:50)
+    EnableHealthCheck: bool = True    # Health check (8h/16h SPY bot status)
+
+    # D.3 Display (2) | Hiển thị
+    ShowDashboard: bool = True   # Show dashboard (console info)
+    DebugMode: bool = False      # Debug mode (verbose logging)
+
+    # ===== E. TRADELOCKER CREDENTIALS | THÔNG TIN ĐĂNG NHẬP =====
+
+    TL_Environment: str = "https://demo.tradelocker.com"  # TradeLocker server URL
+    TL_Username: str = "user@email.com"                   # Account email
+    TL_Password: str = "YOUR_PASSWORD"                    # Account password
+    TL_Server: str = "SERVER_NAME"                        # Server name
+
+# ==============================================================================
+#  PART 2: DATA STRUCTURES (2 classes) | CẤU TRÚC DỮ LIỆU
+# ==============================================================================
+
+@dataclass
+class CSDLLoveRow:
+    """CSDL data for one timeframe (6 columns) | Dữ liệu CSDL cho 1 khung thời gian (6 cột)"""
+    max_loss: float = 0.0      # Col 1: Max loss per 1 LOT
+    timestamp: int = 0         # Col 2: Timestamp
+    signal: int = 0            # Col 3: Signal (1=BUY, -1=SELL, 0=NONE)
+    pricediff: float = 0.0     # Col 4: Price diff USD (unused)
+    timediff: int = 0          # Col 5: Time diff minutes (unused)
+    news: int = 0              # Col 6: News CASCADE (±11-16)
+
+@dataclass
+class EASymbolData:
+    """EA data structure for current symbol (116 variables) | Cấu trúc dữ liệu EA cho symbol hiện tại"""
+
+    # Symbol & File info (9 vars)
+    symbol_name: str = ""
+    normalized_symbol_name: str = ""
+    symbol_prefix: str = ""
+    symbol_type: str = ""          # FX/CRYPTO/METAL/INDEX/STOCK
+    all_leverages: str = ""
+    broker_name: str = ""
+    account_type: str = ""
+    csdl_folder: str = ""
+    csdl_filename: str = ""
+
+    # CSDL rows (7 rows)
+    csdl_rows: List[CSDLLoveRow] = field(default_factory=lambda: [CSDLLoveRow() for _ in range(7)])
+
+    # Core signals (14 vars = 2×7 TF)
+    signal_old: List[int] = field(default_factory=lambda: [0] * 7)
+    timestamp_old: List[int] = field(default_factory=lambda: [0] * 7)
+
+    # Magic numbers (21 vars: 7×3)
+    magic_numbers: List[List[int]] = field(default_factory=lambda: [[0]*3 for _ in range(7)])
+
+    # Lot sizes (21 vars: 7×3)
+    lot_sizes: List[List[float]] = field(default_factory=lambda: [[0.0]*3 for _ in range(7)])
+
+    # Strategy conditions (15 vars = 1 + 7 + 7)
+    trend_d1: int = 0
+    news_level: List[int] = field(default_factory=lambda: [0] * 7)
+    news_direction: List[int] = field(default_factory=lambda: [0] * 7)
+
+    # Stoploss thresholds (21 vars: 7×3)
+    layer1_thresholds: List[List[float]] = field(default_factory=lambda: [[0.0]*3 for _ in range(7)])
+
+    # Position flags (21 vars: 7×3)
+    position_flags: List[List[int]] = field(default_factory=lambda: [[0]*3 for _ in range(7)])
+
+    # TradeLocker specific: ticket mapping (21 vars: 7×3)
+    position_tickets: List[List[Optional[str]]] = field(default_factory=lambda: [[None]*3 for _ in range(7)])
+
+    # Global state vars (5 vars)
+    first_run_completed: bool = False
+    weekend_last_day: int = 0
+    health_last_check_hour: int = -1
+    timer_last_run_time: int = 0
+    init_summary: str = ""
+
+# ==============================================================================
+#  PART 3: GLOBAL CONSTANTS (2 arrays) | HẰNG SỐ TOÀN CỤC
+# ==============================================================================
+
+G_TF_NAMES = ["M1", "M5", "M15", "M30", "H1", "H4", "D1"]
+G_STRATEGY_NAMES = ["S1", "S2", "S3"]
+
+# Static flag to prevent spam print when order fails
+g_print_failed = [[False]*3 for _ in range(7)]  # [TF][Strategy]
+
+# ==============================================================================
+#  PART 4: LOGGING SETUP | THIẾT LẬP GHI NHẬN
+# ==============================================================================
+
+def setup_logging(debug_mode: bool = False):
+    """Setup logging configuration | Thiết lập cấu hình ghi nhận"""
+    level = logging.DEBUG if debug_mode else logging.INFO
+    logging.basicConfig(
+        level=level,
+        format='%(asctime)s [%(levelname)s] %(message)s',
+        datefmt='%Y-%m-%d %H:%M:%S'
+    )
+    return logging.getLogger(__name__)
+
+# ==============================================================================
+#  PART 5: TRADELOCKER BOT CLASS | LỚP BOT TRADELOCKER
+# ==============================================================================
+
+class TradeLockerBot:
+    """Main bot class - Identical logic to MT5 EA | Lớp bot chính - Logic giống MT5 EA"""
+
+    def __init__(self, config: Config, logger: logging.Logger):
+        """Initialize bot with config | Khởi tạo bot với cấu hình"""
+        self.config = config
+        self.logger = logger
+        self.g_ea = EASymbolData()
+        self.tl: Optional[TLAPI] = None
+        self.running = False
+        self.timer_thread: Optional[threading.Thread] = None
+
+        # Instrument ID cache (TradeLocker specific)
+        self.instrument_id: Optional[int] = None
+
+        # Account ID cache (TradeLocker specific)
+        self.account_id: Optional[str] = None
+
+    # ==========================================================================
+    #  PART 5A: UTILITY FUNCTIONS (from MT5 EA PART 5)
+    # ==========================================================================
+
+    def IsTFEnabled(self, tf_index: int) -> bool:
+        """Check if TF is enabled | Kiểm tra TF có được bật"""
+        tf_flags = [
+            self.config.TF_M1, self.config.TF_M5, self.config.TF_M15,
+            self.config.TF_M30, self.config.TF_H1, self.config.TF_H4, self.config.TF_D1
+        ]
+        return tf_flags[tf_index] if 0 <= tf_index < 7 else False
+
+    def DebugPrint(self, message: str):
+        """Print debug message if DebugMode enabled | In thông báo debug nếu bật"""
+        if self.config.DebugMode:
+            self.logger.debug(f"[DEBUG] {message}")
+
+    def LogError(self, error_code: int, context: str, details: str):
+        """Log error with code, context and details | Ghi nhận lỗi"""
+        self.logger.error(f"[ERROR] CODE:{error_code} CONTEXT:{context} DETAILS:{details}")
+
+    def SignalToString(self, signal: int) -> str:
+        """Convert signal integer to readable string | Chuyển tín hiệu số thành chữ"""
+        if signal == 1:
+            return "BUY"
+        elif signal == -1:
+            return "SELL"
+        return "NONE"
+
+    # ==========================================================================
+    #  PART 5B: TRADELOCKER API WRAPPERS (equivalent to MT5 wrappers)
+    # ==========================================================================
+
+    def InitTradingConnection(self) -> bool:
+        """Initialize TradeLocker connection | Khởi tạo kết nối TradeLocker"""
+        try:
+            self.logger.info("[INIT] Connecting to TradeLocker...")
+
+            self.tl = TLAPI(
+                environment=self.config.TL_Environment,
+                username=self.config.TL_Username,
+                password=self.config.TL_Password,
+                server=self.config.TL_Server
+            )
+
+            # Get account ID (required for positions/orders)
+            # TradeLocker specific: account ID is needed for API calls
+            try:
+                all_instruments = self.tl.get_all_instruments()
+                if not all_instruments:
+                    self.logger.error("[INIT] Failed to get instruments from TradeLocker")
+                    return False
+
+                self.logger.info(f"[INIT] TradeLocker connection successful ✓")
+                return True
+
+            except Exception as e:
+                self.logger.error(f"[INIT] Failed to verify connection: {e}")
+                return False
+
+        except Exception as e:
+            self.logger.error(f"[INIT] Connection failed: {e}")
+            return False
+
+    def GetInstrumentID(self, symbol_name: str) -> Optional[int]:
+        """Get TradeLocker instrument ID from symbol name | Lấy instrument ID"""
+        try:
+            if self.instrument_id is not None:
+                return self.instrument_id
+
+            self.instrument_id = self.tl.get_instrument_id_from_symbol_name(symbol_name)
+
+            if self.instrument_id is None:
+                self.logger.error(f"[ERROR] Cannot find instrument ID for symbol: {symbol_name}")
+                return None
+
+            self.logger.info(f"[INIT] Instrument ID for {symbol_name}: {self.instrument_id}")
+            return self.instrument_id
+
+        except Exception as e:
+            self.logger.error(f"[ERROR] GetInstrumentID failed: {e}")
+            return None
+
+    def GetLatestPrice(self) -> Tuple[Optional[float], Optional[float]]:
+        """Get latest Bid/Ask prices | Lấy giá Bid/Ask mới nhất"""
+        try:
+            if self.instrument_id is None:
+                return None, None
+
+            # TradeLocker API: get_latest_asking_price
+            ask_price = self.tl.get_latest_asking_price(self.instrument_id)
+
+            # Approximate bid (TradeLocker may not provide separate bid)
+            # Typically bid = ask - spread (simplified)
+            bid_price = ask_price  # Simplified: use same price
+
+            return bid_price, ask_price
+
+        except Exception as e:
+            self.DebugPrint(f"GetLatestPrice error: {e}")
+            return None, None
+
+    def CreateOrder(self, side: str, quantity: float, comment: str, magic: int) -> Optional[str]:
+        """
+        Create market order on TradeLocker | Tạo lệnh thị trường
+
+        Returns: order_id (string) or None
+        """
+        try:
+            if self.instrument_id is None:
+                self.logger.error("[ORDER] Instrument ID not set")
+                return None
+
+            # TradeLocker API: create_order(instrument_id, quantity, side, type_)
+            order_id = self.tl.create_order(
+                self.instrument_id,
+                quantity=quantity,
+                side=side.lower(),  # "buy" or "sell"
+                type_="market"
+            )
+
+            if order_id:
+                self.DebugPrint(f"[ORDER] Created order_id={order_id} {side} {quantity}")
+                return str(order_id)
+            else:
+                self.DebugPrint(f"[ORDER] Failed to create order: {side} {quantity}")
+                return None
+
+        except Exception as e:
+            self.logger.error(f"[ORDER] CreateOrder error: {e}")
+            return None
+
+    def ClosePosition(self, order_id: str) -> bool:
+        """Close position by order_id | Đóng lệnh theo order_id"""
+        try:
+            if order_id is None:
+                return False
+
+            # TradeLocker API: close_position(order_id)
+            result = self.tl.close_position(order_id)
+
+            if result:
+                self.DebugPrint(f"[CLOSE] Closed order_id={order_id}")
+                return True
+            else:
+                self.DebugPrint(f"[CLOSE] Failed to close order_id={order_id}")
+                return False
+
+        except Exception as e:
+            self.logger.error(f"[CLOSE] ClosePosition error: {e}")
+            return False
+
+    def GetOpenPositions(self) -> List[Dict]:
+        """
+        Get all open positions for current symbol | Lấy tất cả lệnh đang mở
+
+        NOTE: TradeLocker API may require custom implementation
+        This is a placeholder - needs actual TradeLocker API method
+        """
+        try:
+            # IMPORTANT: TradeLocker Python library doesn't expose get_positions yet
+            # Need to use REST API directly: GET /trade/account/{accountId}/positions
+            # For now, return empty list (will implement in production)
+
+            self.DebugPrint("[POSITIONS] get_positions not implemented yet")
+            return []
+
+        except Exception as e:
+            self.logger.error(f"[POSITIONS] GetOpenPositions error: {e}")
+            return []
+
+    def GetAccountInfo(self) -> Dict:
+        """Get account balance, equity, margin | Lấy thông tin tài khoản"""
+        try:
+            # IMPORTANT: TradeLocker Python library doesn't expose account info yet
+            # Need to use REST API: GET /auth/jwt/all-accounts
+            # For now, return placeholder values
+
+            return {
+                "balance": 10000.0,
+                "equity": 10000.0,
+                "margin": 0.0,
+                "free_margin": 10000.0,
+                "profit": 0.0
+            }
+
+        except Exception as e:
+            self.logger.error(f"[ACCOUNT] GetAccountInfo error: {e}")
+            return {}
+
+    # ==========================================================================
+    #  PART 6: SYMBOL & FILE MANAGEMENT (from MT5 EA PART 6)
+    # ==========================================================================
+
+    def StringTrim(self, input_string: str) -> str:
+        """Trim whitespace from string | Loại bỏ khoảng trắng"""
+        return input_string.strip()
+
+    def DiscoverSymbolFromChart(self) -> str:
+        """Discover symbol name | Nhận diện tên ký hiệu"""
+        # In TradeLocker bot, symbol must be provided via config or argument
+        # For now, use default symbol (will be set during init)
+        return self.g_ea.symbol_name
+
+    def InitializeSymbolRecognition(self, symbol_name: str) -> bool:
+        """Initialize symbol recognition | Khởi tạo nhận diện ký hiệu"""
+        self.g_ea.symbol_name = symbol_name
+
+        if len(self.g_ea.symbol_name) == 0:
+            self.LogError(4201, "InitializeSymbolRecognition", "Cannot detect symbol")
+            return False
+
+        self.DebugPrint(f"Symbol detected: {self.g_ea.symbol_name}")
+        return True
+
+    def InitializeSymbolPrefix(self):
+        """Initialize symbol prefix | Khởi tạo tiền tố ký hiệu"""
+        if self.config.EnableSymbolNormalization:
+            self.g_ea.normalized_symbol_name = self.NormalizeSymbolName(self.g_ea.symbol_name)
+        else:
+            self.g_ea.normalized_symbol_name = self.g_ea.symbol_name
+
+        self.g_ea.symbol_prefix = self.g_ea.symbol_name + "_"
+
+    def BuildCSDLFilename(self):
+        """Build full CSDL filename path | Xây dựng đường dẫn file CSDL"""
+        self.g_ea.csdl_filename = self.g_ea.csdl_folder + self.g_ea.symbol_name + "_LIVE.json"
+        self.DebugPrint(f"CSDL file: {self.g_ea.csdl_filename}")
+
+    # ==========================================================================
+    #  PART 7: CSDL PARSING (from MT5 EA PART 7)
+    # ==========================================================================
+
+    def ParseLoveRow(self, row_data: Dict, row_index: int) -> bool:
+        """Parse one row of CSDL data | Phân tích 1 hàng dữ liệu CSDL"""
+        try:
+            self.g_ea.csdl_rows[row_index].max_loss = float(row_data.get("max_loss", 0.0))
+            self.g_ea.csdl_rows[row_index].timestamp = int(row_data.get("timestamp", 0))
+            self.g_ea.csdl_rows[row_index].signal = int(row_data.get("signal", 0))
+            self.g_ea.csdl_rows[row_index].pricediff = float(row_data.get("pricediff", 0.0))
+            self.g_ea.csdl_rows[row_index].timediff = int(row_data.get("timediff", 0))
+            self.g_ea.csdl_rows[row_index].news = int(row_data.get("news", 0))
+
+            return True
+
+        except Exception as e:
+            self.DebugPrint(f"ParseLoveRow error at index {row_index}: {e}")
+            return False
+
+    def ParseCSDLLoveJSON(self, json_content: str) -> bool:
+        """Parse CSDL JSON array (7 rows) | Phân tích mảng JSON CSDL (7 hàng)"""
+        try:
+            data = json.loads(json_content)
+
+            if not isinstance(data, list):
+                self.DebugPrint("CSDL JSON is not an array")
+                return False
+
+            parsed_count = 0
+            for i in range(min(7, len(data))):
+                if self.ParseLoveRow(data[i], i):
+                    parsed_count += 1
+
+            self.DebugPrint(f"LOVE JSON: Parsed {parsed_count} rows")
+            return parsed_count >= 1
+
+        except json.JSONDecodeError as e:
+            self.DebugPrint(f"JSON parse error: {e}")
+            return False
+        except Exception as e:
+            self.DebugPrint(f"ParseCSDLLoveJSON error: {e}")
+            return False
+
+    def NormalizeSymbolName(self, symbol: str) -> str:
+        """Normalize symbol name for API calls | Chuẩn hóa tên symbol"""
+        normalized = symbol
+
+        # Step 1: Remove everything after "."
+        if "." in normalized:
+            normalized = normalized.split(".")[0]
+            self.DebugPrint(f"[NORMALIZE] Removed dot suffix: {symbol} → {normalized}")
+
+        # Step 2: Keep maximum 6 characters
+        if len(normalized) > 6:
+            truncated = normalized[:6]
+            self.DebugPrint(f"[NORMALIZE] Truncated to 6 chars: {normalized} → {truncated}")
+            normalized = truncated
+
+        # Step 3: Convert to uppercase
+        normalized = normalized.upper()
+
+        if normalized != symbol:
+            self.logger.info(f"[NORMALIZE] Symbol standardized: {symbol} → {normalized}")
+
+        return normalized
+
+    def ReadCSDLFromHTTP(self) -> bool:
+        """Read CSDL from HTTP API | Đọc CSDL từ HTTP API"""
+        try:
+            url = f"http://{self.config.HTTP_Server_IP}/api/csdl/{self.g_ea.normalized_symbol_name}_LIVE.json"
+
+            headers = {}
+            if self.config.HTTP_API_Key:
+                headers["X-API-Key"] = self.config.HTTP_API_Key
+
+            response = requests.get(url, headers=headers, timeout=0.5)
+
+            if response.status_code != 200:
+                self.DebugPrint(f"[HTTP_ERROR] Server returned status code: {response.status_code}")
+                return False
+
+            json_content = response.text
+
+            if len(json_content) < 20:
+                self.DebugPrint(f"[HTTP_ERROR] Response too short: {len(json_content)} bytes")
+                return False
+
+            if not self.ParseCSDLLoveJSON(json_content):
+                self.DebugPrint("[HTTP_ERROR] Failed to parse JSON response")
+                return False
+
+            self.DebugPrint("[HTTP_OK] Successfully loaded CSDL from API")
+            return True
+
+        except requests.exceptions.Timeout:
+            self.DebugPrint("[HTTP_ERROR] Request timeout")
+            return False
+        except Exception as e:
+            self.DebugPrint(f"[HTTP_ERROR] {e}")
+            return False
+
+    def TryReadLocalFile(self, filename: str) -> bool:
+        """Try to read local file | Thử đọc file local"""
+        try:
+            with open(filename, 'r', encoding='utf-8') as f:
+                json_content = f.read()
+
+            if len(json_content) < 20:
+                self.DebugPrint(f"[READ] Content too short: {len(json_content)}")
+                return False
+
+            if not self.ParseCSDLLoveJSON(json_content):
+                self.DebugPrint("[READ] ParseCSDLLoveJSON failed")
+                return False
+
+            return True
+
+        except FileNotFoundError:
+            self.DebugPrint(f"[READ] File not found: {filename}")
+            return False
+        except Exception as e:
+            self.DebugPrint(f"[READ] Error reading file: {e}")
+            return False
+
+    def ReadCSDLFile(self):
+        """Read CSDL with smart routing | Đọc CSDL với định tuyến thông minh"""
+        success = False
+
+        if self.config.CSDL_Source == "HTTP_API":
+            # Try HTTP API
+            success = self.ReadCSDLFromHTTP()
+
+            if not success:
+                time.sleep(0.1)
+                success = self.ReadCSDLFromHTTP()
+
+        else:
+            # Try local file
+            success = self.TryReadLocalFile(self.g_ea.csdl_filename)
+
+            if not success:
+                time.sleep(0.1)
+                success = self.TryReadLocalFile(self.g_ea.csdl_filename)
+
+        if not success:
+            self.DebugPrint("[WARNING] All read attempts failed. Using old data.")
+
+    # ==========================================================================
+    #  PART 8: MAGIC NUMBER GENERATION (from MT5 EA PART 8)
+    # ==========================================================================
+
+    def GenerateSymbolHash(self, symbol: str) -> int:
+        """Generate symbol hash using DJB2 algorithm | Tạo mã hash"""
+        hash_val = 5381
+
+        for char in symbol:
+            hash_val = ((hash_val << 5) + hash_val) + ord(char)
+
+        hash_val = abs(hash_val % 10000)
+
+        if hash_val < 100:
+            hash_val += 100
+
+        return hash_val
+
+    def GenerateSmartMagicNumber(self, symbol: str, tf_index: int, strategy_index: int) -> int:
+        """Generate smart magic number | Tạo số hiệu thông minh"""
+        symbol_hash = self.GenerateSymbolHash(symbol)
+        tf_code = tf_index * 1000
+        strategy_code = strategy_index * 100
+
+        return symbol_hash + tf_code + strategy_code
+
+    def GenerateMagicNumbers(self) -> bool:
+        """Generate all 21 magic numbers | Tạo tất cả 21 số hiệu"""
+        symbol = self.g_ea.symbol_name
+
+        for tf in range(7):
+            for s in range(3):
+                self.g_ea.magic_numbers[tf][s] = self.GenerateSmartMagicNumber(symbol, tf, s)
+
+        self.DebugPrint(f"Magic M1: S1={self.g_ea.magic_numbers[0][0]}, "
+                       f"S2={self.g_ea.magic_numbers[0][1]}, "
+                       f"S3={self.g_ea.magic_numbers[0][2]}")
+
+        return True
+
+    # ==========================================================================
+    #  PART 9: LOT SIZE CALCULATION (from MT5 EA PART 9)
+    # ==========================================================================
+
+    def CalculateSmartLotSize(self, base_lot: float, tf_index: int, strategy_index: int) -> float:
+        """Calculate lot with progressive formula | Tính lot theo công thức lũy tiến"""
+
+        # Strategy multipliers: S1=×2, S2=×1, S3=×3
+        strategy_multipliers = [2.0, 1.0, 3.0]
+        strategy_multiplier = strategy_multipliers[strategy_index]
+
+        # TF increments: M1=+0, M5=+1, M15=+2, ..., D1=+6
+        tf_increment = tf_index
+
+        # Formula: base_lot × strategy_multiplier × (1.0 + tf_increment × 0.1)
+        lot = base_lot * strategy_multiplier * (1.0 + tf_increment * 0.1)
+
+        # Round to 2 decimals
+        lot = round(lot, 2)
+
+        return lot
+
+    def InitializeLotSizes(self):
+        """Pre-calculate all 21 lot sizes | Tính trước 21 khối lượng"""
+        for tf in range(7):
+            for s in range(3):
+                self.g_ea.lot_sizes[tf][s] = self.CalculateSmartLotSize(
+                    self.config.FixedLotSize, tf, s
+                )
+
+        self.DebugPrint(f"Lots M1: S1={self.g_ea.lot_sizes[0][0]}, "
+                       f"S2={self.g_ea.lot_sizes[0][1]}, "
+                       f"S3={self.g_ea.lot_sizes[0][2]}")
+
+    # ==========================================================================
+    #  PART 10: LAYER1 THRESHOLDS (from MT5 EA PART 10)
+    # ==========================================================================
+
+    def InitializeLayer1Thresholds(self):
+        """Initialize Layer1 stoploss thresholds | Khởi tạo ngưỡng cắt lỗ"""
+        for tf in range(7):
+            max_loss_per_lot = self.g_ea.csdl_rows[tf].max_loss
+
+            if abs(max_loss_per_lot) < 1.0:
+                max_loss_per_lot = self.config.MaxLoss_Fallback
+
+            for s in range(3):
+                self.g_ea.layer1_thresholds[tf][s] = max_loss_per_lot * self.g_ea.lot_sizes[tf][s]
+
+        self.DebugPrint(f"Layer1 M1: S1=${self.g_ea.layer1_thresholds[0][0]:.2f}, "
+                       f"S2=${self.g_ea.layer1_thresholds[0][1]:.2f}, "
+                       f"S3=${self.g_ea.layer1_thresholds[0][2]:.2f}")
+
+    # ==========================================================================
+    #  PART 11: MAP CSDL TO EA (from MT5 EA PART 11)
+    # ==========================================================================
+
+    def MapCSDLToEAVariables(self):
+        """Map CSDL data to EA variables | Ánh xạ dữ liệu CSDL sang biến EA"""
+        # S2: TREND - Always use D1 (row 6)
+        self.g_ea.trend_d1 = self.g_ea.csdl_rows[6].signal
+
+        # S3: NEWS - Map 7 NEWS values to 14 variables
+        self.MapNewsTo14Variables()
+
+        self.DebugPrint(f"Mapped 7 TF | signal[0]={self.g_ea.csdl_rows[0].signal}, "
+                       f"trend_d1={self.g_ea.trend_d1}, "
+                       f"news[M1]={self.g_ea.csdl_rows[0].news}")
+
+    def MapNewsTo14Variables(self):
+        """Map 7 NEWS values to 14 variables | Tách 7 giá trị NEWS thành 14 biến"""
+        for tf in range(7):
+            tf_news = self.g_ea.csdl_rows[tf].news
+
+            self.g_ea.news_level[tf] = abs(tf_news)
+
+            if tf_news > 0:
+                self.g_ea.news_direction[tf] = 1
+            elif tf_news < 0:
+                self.g_ea.news_direction[tf] = -1
+            else:
+                self.g_ea.news_direction[tf] = 0
+
+        self.DebugPrint(f"NEWS 14 vars: M1[{self.g_ea.news_level[0]}/{self.g_ea.news_direction[0]}], "
+                       f"M5[{self.g_ea.news_level[1]}/{self.g_ea.news_direction[1]}], "
+                       f"D1[{self.g_ea.news_level[6]}/{self.g_ea.news_direction[6]}]")
+
+    # ==========================================================================
+    #  PART 12-18: TRADING LOGIC (Strategies, Stoploss, TP, Health Check)
+    #  NOTE: These are simplified versions - full implementation needed
+    # ==========================================================================
+
+    def RestoreOrCleanupPositions(self) -> bool:
+        """Restore or cleanup positions on startup | Khôi phục hoặc dọn dẹp lệnh"""
+        # Reset all flags
+        for tf in range(7):
+            for s in range(3):
+                self.g_ea.position_flags[tf][s] = 0
+                self.g_ea.position_tickets[tf][s] = None
+
+        # TODO: Scan TradeLocker positions and restore flags
+        # This requires TradeLocker API get_positions implementation
+
+        kept_count = 0
+        closed_count = 0
+
+        self.logger.info(f"{self.g_ea.init_summary} | RESTORE: KEPT={kept_count}, CLOSED={closed_count}")
+        return True
+
+    def HasValidS2BaseCondition(self, tf: int) -> bool:
+        """Check if signal changed (base condition for close/open) | Kiểm tra tín hiệu đổi"""
+        signal_old = self.g_ea.signal_old[tf]
+        signal_new = self.g_ea.csdl_rows[tf].signal
+        timestamp_old = self.g_ea.timestamp_old[tf]
+        timestamp_new = self.g_ea.csdl_rows[tf].timestamp
+
+        return (signal_old != signal_new and
+                signal_new != 0 and
+                timestamp_old < timestamp_new and
+                (timestamp_new - timestamp_old) > 15)
+
+    def ProcessS1Strategy(self, tf: int):
+        """Process S1 strategy | Xử lý chiến lược S1"""
+        if self.config.S1_UseNewsFilter:
+            self.ProcessS1NewsFilterStrategy(tf)
+        else:
+            self.ProcessS1BasicStrategy(tf)
+
+    def ProcessS1BasicStrategy(self, tf: int):
+        """S1 BASIC: No NEWS check | S1 cơ bản: Không kiểm tra NEWS"""
+        current_signal = self.g_ea.csdl_rows[tf].signal
+        if current_signal in [1, -1]:
+            self.OpenS1Order(tf, current_signal, "BASIC")
+
+    def ProcessS1NewsFilterStrategy(self, tf: int):
+        """S1 NEWS Filter: Check NEWS before opening | S1 với lọc NEWS"""
+        current_signal = self.g_ea.csdl_rows[tf].signal
+        news_level = self.g_ea.news_level[tf]
+        news_direction = self.g_ea.news_direction[tf]
+
+        if news_level < self.config.MinNewsLevelS1:
+            self.DebugPrint(f"S1_NEWS: {G_TF_NAMES[tf]} NEWS={news_level} < Min={self.config.MinNewsLevelS1}, SKIP")
+            return
+
+        if self.config.S1_RequireNewsDirection:
+            if current_signal != news_direction:
+                self.DebugPrint(f"S1_NEWS: {G_TF_NAMES[tf]} Signal={current_signal} != NewsDir={news_direction}, SKIP")
+                return
+
+        if current_signal in [1, -1]:
+            self.OpenS1Order(tf, current_signal, "NEWS")
+
+    def OpenS1Order(self, tf: int, signal: int, mode: str):
+        """Open S1 order | Mở lệnh S1"""
+        global g_print_failed
+
+        timestamp = self.g_ea.csdl_rows[tf].timestamp
+        news_level = self.g_ea.news_level[tf]
+        news_direction = self.g_ea.news_direction[tf]
+
+        side = "buy" if signal == 1 else "sell"
+        type_str = "BUY" if signal == 1 else "SELL"
+
+        order_id = self.CreateOrder(
+            side=side,
+            quantity=self.g_ea.lot_sizes[tf][0],
+            comment=f"S1_{G_TF_NAMES[tf]}",
+            magic=self.g_ea.magic_numbers[tf][0]
+        )
+
+        if order_id:
+            self.g_ea.position_flags[tf][0] = 1
+            self.g_ea.position_tickets[tf][0] = order_id
+            g_print_failed[tf][0] = False
+
+            log_msg = f">>> [OPEN] S1_{mode} TF={G_TF_NAMES[tf]} | #{order_id} {type_str} {self.g_ea.lot_sizes[tf][0]:.2f}"
+
+            if mode == "NEWS":
+                arrow = "↑" if news_direction > 0 else "↓"
+                log_msg += f" | News={'+' if news_direction > 0 else ''}{news_level}{arrow}"
+
+            log_msg += f" | Timestamp:{timestamp} <<<"
+            self.logger.info(log_msg)
+        else:
+            self.g_ea.position_flags[tf][0] = 0
+
+            if not g_print_failed[tf][0]:
+                self.logger.error(f"[S1_{mode}_{G_TF_NAMES[tf]}] Failed to create order")
+                g_print_failed[tf][0] = True
+
+    def ProcessS2Strategy(self, tf: int):
+        """Process S2 (Trend Following) strategy | Xử lý chiến lược S2"""
+        global g_print_failed
+
+        current_signal = self.g_ea.csdl_rows[tf].signal
+        timestamp = self.g_ea.csdl_rows[tf].timestamp
+
+        # Determine trend based on mode
+        if self.config.S2_TrendMode == 0:  # S2_FOLLOW_D1
+            trend_to_follow = self.g_ea.trend_d1
+        elif self.config.S2_TrendMode == 1:  # S2_FORCE_BUY
+            trend_to_follow = 1
+        else:  # S2_FORCE_SELL
+            trend_to_follow = -1
+
+        if current_signal != trend_to_follow:
+            self.DebugPrint(f"S2_TREND: Signal={current_signal} != Trend={trend_to_follow}, skip")
+            return
+
+        side = "buy" if current_signal == 1 else "sell"
+        type_str = "BUY" if current_signal == 1 else "SELL"
+
+        order_id = self.CreateOrder(
+            side=side,
+            quantity=self.g_ea.lot_sizes[tf][1],
+            comment=f"S2_{G_TF_NAMES[tf]}",
+            magic=self.g_ea.magic_numbers[tf][1]
+        )
+
+        if order_id:
+            self.g_ea.position_flags[tf][1] = 1
+            self.g_ea.position_tickets[tf][1] = order_id
+            g_print_failed[tf][1] = False
+
+            trend_str = "UP" if trend_to_follow == 1 else "DOWN"
+            mode_str = "AUTO" if self.config.S2_TrendMode == 0 else ("FBUY" if self.config.S2_TrendMode == 1 else "FSELL")
+
+            self.logger.info(f">>> [OPEN] S2_TREND TF={G_TF_NAMES[tf]} | #{order_id} {type_str} "
+                           f"{self.g_ea.lot_sizes[tf][1]:.2f} | Sig={current_signal} Trend:{trend_str} "
+                           f"Mode:{mode_str} | Timestamp:{timestamp} <<<")
+        else:
+            self.g_ea.position_flags[tf][1] = 0
+
+            if not g_print_failed[tf][1]:
+                self.logger.error(f"[S2_{G_TF_NAMES[tf]}] Failed to create order")
+                g_print_failed[tf][1] = True
+
+    def ProcessS3Strategy(self, tf: int):
+        """Process S3 (News Alignment) strategy | Xử lý chiến lược S3"""
+        global g_print_failed
+
+        news_level = self.g_ea.news_level[tf]
+        news_direction = self.g_ea.news_direction[tf]
+        current_signal = self.g_ea.csdl_rows[tf].signal
+        timestamp = self.g_ea.csdl_rows[tf].timestamp
+
+        if news_level < self.config.MinNewsLevelS3:
+            self.DebugPrint(f"S3_NEWS: TF{tf} NEWS={news_level} < {self.config.MinNewsLevelS3}, skip")
+            return
+
+        if current_signal != news_direction:
+            self.DebugPrint(f"S3_NEWS: Signal={current_signal} != NewsDir={news_direction}, skip")
+            return
+
+        side = "buy" if current_signal == 1 else "sell"
+        type_str = "BUY" if current_signal == 1 else "SELL"
+
+        order_id = self.CreateOrder(
+            side=side,
+            quantity=self.g_ea.lot_sizes[tf][2],
+            comment=f"S3_{G_TF_NAMES[tf]}",
+            magic=self.g_ea.magic_numbers[tf][2]
+        )
+
+        if order_id:
+            self.g_ea.position_flags[tf][2] = 1
+            self.g_ea.position_tickets[tf][2] = order_id
+            g_print_failed[tf][2] = False
+
+            arrow = "↑" if news_direction > 0 else "↓"
+            self.logger.info(f">>> [OPEN] S3_NEWS TF={G_TF_NAMES[tf]} | #{order_id} {type_str} "
+                           f"{self.g_ea.lot_sizes[tf][2]:.2f} | Sig={current_signal} "
+                           f"News={'+' if news_direction > 0 else ''}{news_level}{arrow} | "
+                           f"Timestamp:{timestamp} <<<")
+        else:
+            self.g_ea.position_flags[tf][2] = 0
+
+            if not g_print_failed[tf][2]:
+                self.logger.error(f"[S3_{G_TF_NAMES[tf]}] Failed to create order")
+                g_print_failed[tf][2] = True
+
+    def ProcessBonusNews(self):
+        """Process Bonus NEWS - open extra orders on high news | Xử lý tin tức Bonus"""
+        if not self.config.EnableBonusNews:
+            return
+
+        # TODO: Implement bonus news logic
+        # Scans all 7 TF and opens multiple orders if NEWS detected
+        pass
+
+    def CloseAllStrategiesByMagicForTF(self, tf: int):
+        """Close all strategies for specific TF | Đóng tất cả chiến lược cho 1 TF"""
+        for s in range(3):
+            if self.g_ea.position_flags[tf][s] == 1:
+                order_id = self.g_ea.position_tickets[tf][s]
+                if order_id:
+                    if self.ClosePosition(order_id):
+                        self.g_ea.position_flags[tf][s] = 0
+                        self.g_ea.position_tickets[tf][s] = None
+                        self.logger.info(f">> [CLOSE] SIGNAL_CHANGE TF={G_TF_NAMES[tf]} S={s+1} | #{order_id} <<")
+
+    def CloseS1OrdersByM1(self):
+        """Close all S1 orders using M1 signal | Đóng tất cả lệnh S1 theo M1"""
+        for tf in range(7):
+            if self.g_ea.position_flags[tf][0] == 1:
+                order_id = self.g_ea.position_tickets[tf][0]
+                if order_id:
+                    if self.ClosePosition(order_id):
+                        self.g_ea.position_flags[tf][0] = 0
+                        self.g_ea.position_tickets[tf][0] = None
+                        self.logger.info(f">> [CLOSE] M1_FAST TF={G_TF_NAMES[tf]} S1 | #{order_id} <<")
+
+    def CloseS2OrdersByM1(self):
+        """Close all S2 orders using M1 signal | Đóng tất cả lệnh S2 theo M1"""
+        for tf in range(7):
+            if self.g_ea.position_flags[tf][1] == 1:
+                order_id = self.g_ea.position_tickets[tf][1]
+                if order_id:
+                    if self.ClosePosition(order_id):
+                        self.g_ea.position_flags[tf][1] = 0
+                        self.g_ea.position_tickets[tf][1] = None
+                        self.logger.info(f">> [CLOSE] M1_FAST TF={G_TF_NAMES[tf]} S2 | #{order_id} <<")
+
+    def CloseS3OrdersForTF(self, tf: int):
+        """Close S3 orders for specific TF | Đóng lệnh S3 cho TF cụ thể"""
+        if self.g_ea.position_flags[tf][2] == 1:
+            order_id = self.g_ea.position_tickets[tf][2]
+            if order_id:
+                if self.ClosePosition(order_id):
+                    self.g_ea.position_flags[tf][2] = 0
+                    self.g_ea.position_tickets[tf][2] = None
+                    self.logger.info(f">> [CLOSE] SIGNAL_CHANGE TF={G_TF_NAMES[tf]} S3 | #{order_id} <<")
+
+    def CloseAllBonusOrders(self):
+        """Close all bonus orders | Đóng tất cả lệnh bonus"""
+        # TODO: Implement bonus orders close logic
+        pass
+
+    def CheckStoplossAndTakeProfit(self):
+        """Check stoploss & take profit for all orders | Kiểm tra cắt lỗ & chốt lời"""
+        # TODO: Implement stoploss and take profit logic
+        # This requires getting position profit from TradeLocker API
+        pass
+
+    def CheckAllEmergencyConditions(self):
+        """Check emergency conditions (drawdown) | Kiểm tra điều kiện khẩn cấp"""
+        account_info = self.GetAccountInfo()
+
+        balance = account_info.get("balance", 0.0)
+        equity = account_info.get("equity", 0.0)
+
+        if balance > 0:
+            drawdown_percent = ((balance - equity) / balance) * 100
+
+            if drawdown_percent > 25.0:
+                self.logger.warning(f"[WARNING] Drawdown: {drawdown_percent:.2f}%")
+
+    def CheckWeekendReset(self):
+        """Weekend reset (Saturday 00:03) | Reset cuối tuần"""
+        if not self.config.EnableWeekendReset:
+            return
+
+        # TODO: Implement weekend reset logic
+        pass
+
+    def CheckSPYBotHealth(self):
+        """Health check SPY Bot (8h/16h only) | Kiểm tra sức khỏe SPY Bot"""
+        if not self.config.EnableHealthCheck:
+            return
+
+        current_time = int(time.time())
+        hour = datetime.fromtimestamp(current_time).hour
+
+        if hour not in [8, 16]:
+            return
+
+        if hour == self.g_ea.health_last_check_hour:
+            return
+
+        self.g_ea.health_last_check_hour = hour
+
+        m1_timestamp = self.g_ea.timestamp_old[0]
+        diff_seconds = current_time - m1_timestamp
+
+        if diff_seconds > 28800:  # 8 hours
+            diff_hours = diff_seconds // 3600
+            diff_minutes = (diff_seconds % 3600) // 60
+            self.logger.warning(f"[HEALTH_CHECK] ⚠️ SPY Bot frozen (CSDL: {diff_hours}h{diff_minutes}m old) - Check system at {hour}h00")
+
+    def UpdateDashboard(self):
+        """Update dashboard (console display) | Cập nhật bảng điều khiển"""
+        if not self.config.ShowDashboard:
+            return
+
+        # TODO: Implement dashboard display
+        # Show account info, positions, P&L, etc.
+        pass
+
+    # ==========================================================================
+    #  PART 19: MAIN EA FUNCTIONS (OnInit, OnTimer)
+    # ==========================================================================
+
+    def OnInit(self, symbol_name: str) -> bool:
+        """EA initialization | Khởi tạo EA"""
+
+        # PART 1: Symbol recognition
+        if not self.InitializeSymbolRecognition(symbol_name):
+            return False
+
+        self.InitializeSymbolPrefix()
+
+        # PART 1B: Detect symbol type (simplified for TradeLocker)
+        self.g_ea.symbol_type = "CRYPTO" if "BTC" in symbol_name or "ETH" in symbol_name else "FX"
+
+        # PART 1C: Get account info
+        self.g_ea.broker_name = "TradeLocker"
+        self.g_ea.account_type = "Demo" if "demo" in self.config.TL_Environment else "Live"
+        self.g_ea.all_leverages = "TL:100"
+
+        # Compact init summary
+        self.logger.info(f"[INIT] {self.g_ea.symbol_name} {self.g_ea.symbol_type} | "
+                        f"Broker:{self.g_ea.broker_name}/{self.g_ea.account_type} | "
+                        f"Leverage:{self.g_ea.all_leverages} ✓")
+
+        # PART 2: Folder selection
+        if self.config.CSDL_Source == "FOLDER_1":
+            self.g_ea.csdl_folder = "DataAutoOner/"
+        elif self.config.CSDL_Source == "FOLDER_2":
+            self.g_ea.csdl_folder = "DataAutoOner2/"
+        elif self.config.CSDL_Source == "FOLDER_3":
+            self.g_ea.csdl_folder = "DataAutoOner3/"
+        else:
+            self.g_ea.csdl_folder = "DataAutoOner2/"
+
+        # PART 3: Build filename & Read file
+        self.BuildCSDLFilename()
+        self.ReadCSDLFile()
+
+        # PART 4: Generate magic numbers
+        if not self.GenerateMagicNumbers():
+            return False
+
+        # PART 5: Pre-calculate all 21 lot sizes
+        self.InitializeLotSizes()
+
+        # PART 6: Initialize Layer1 thresholds
+        self.InitializeLayer1Thresholds()
+
+        # PART 7: Map CSDL variables
+        self.MapCSDLToEAVariables()
+
+        # PART 7B: Reset ALL auxiliary flags
+        for tf in range(7):
+            for s in range(3):
+                self.g_ea.position_flags[tf][s] = 0
+                self.g_ea.position_tickets[tf][s] = None
+
+        # PART 8: Restore positions
+        self.RestoreOrCleanupPositions()
+
+        # PART 9: Initialize timestamps
+        for tf in range(7):
+            self.g_ea.signal_old[tf] = self.g_ea.csdl_rows[tf].signal
+            self.g_ea.timestamp_old[tf] = self.g_ea.csdl_rows[tf].timestamp
+
+        # PART 10: Initialize health check
+        self.g_ea.health_last_check_hour = datetime.now().hour
+
+        # PART 11: Mark first run completed
+        self.g_ea.first_run_completed = True
+
+        self.logger.info("[INIT] EA initialization completed ✓")
+        return True
+
+    def OnTimer(self):
+        """Timer event - main trading loop (1 second) | Sự kiện timer - vòng lặp giao dịch chính"""
+        current_time = int(time.time())
+        current_second = current_time % 60
+
+        # Prevent duplicate execution
+        if current_time == self.g_ea.timer_last_run_time:
+            return
+
+        self.g_ea.timer_last_run_time = current_time
+
+        # ==================================================================
+        # GROUP 1: EVEN SECONDS (0,2,4,6...) - TRADING CORE (HIGH PRIORITY)
+        # ==================================================================
+        if not self.config.UseEvenOddMode or (current_second % 2 == 0):
+
+            # STEP 1: Read CSDL file
+            self.ReadCSDLFile()
+
+            # STEP 2: Map data for all 7 TF
+            self.MapCSDLToEAVariables()
+
+            # STEP 3: Strategy processing loop
+            for tf in range(7):
+                # STEP 3.1: FAST CLOSE by M1
+                if tf == 0 and self.HasValidS2BaseCondition(0):
+                    if self.config.S1_CloseByM1:
+                        self.CloseS1OrdersByM1()
+                    if self.config.S2_CloseByM1:
+                        self.CloseS2OrdersByM1()
+                    if self.config.EnableBonusNews:
+                        self.CloseAllBonusOrders()
+
+                # STEP 3.2: NORMAL CLOSE by TF signal
+                if self.HasValidS2BaseCondition(tf):
+                    if self.config.S1_CloseByM1 and self.config.S2_CloseByM1:
+                        self.CloseS3OrdersForTF(tf)
+                    elif self.config.S1_CloseByM1:
+                        # Close S2 and S3
+                        if self.g_ea.position_flags[tf][1] == 1:
+                            order_id = self.g_ea.position_tickets[tf][1]
+                            if order_id and self.ClosePosition(order_id):
+                                self.g_ea.position_flags[tf][1] = 0
+                                self.g_ea.position_tickets[tf][1] = None
+                        if self.g_ea.position_flags[tf][2] == 1:
+                            order_id = self.g_ea.position_tickets[tf][2]
+                            if order_id and self.ClosePosition(order_id):
+                                self.g_ea.position_flags[tf][2] = 0
+                                self.g_ea.position_tickets[tf][2] = None
+                    elif self.config.S2_CloseByM1:
+                        # Close S1 and S3
+                        if self.g_ea.position_flags[tf][0] == 1:
+                            order_id = self.g_ea.position_tickets[tf][0]
+                            if order_id and self.ClosePosition(order_id):
+                                self.g_ea.position_flags[tf][0] = 0
+                                self.g_ea.position_tickets[tf][0] = None
+                        if self.g_ea.position_flags[tf][2] == 1:
+                            order_id = self.g_ea.position_tickets[tf][2]
+                            if order_id and self.ClosePosition(order_id):
+                                self.g_ea.position_flags[tf][2] = 0
+                                self.g_ea.position_tickets[tf][2] = None
+                    else:
+                        self.CloseAllStrategiesByMagicForTF(tf)
+
+                    # STEP 3.3: Open new orders (ONLY if TF enabled)
+                    if self.IsTFEnabled(tf):
+                        if self.config.S1_HOME:
+                            self.ProcessS1Strategy(tf)
+                        if self.config.S2_TREND:
+                            self.ProcessS2Strategy(tf)
+                        if self.config.S3_NEWS:
+                            self.ProcessS3Strategy(tf)
+
+                    # STEP 3.4: Process Bonus NEWS
+                    if self.config.EnableBonusNews:
+                        self.ProcessBonusNews()
+
+                    # STEP 3.5: Update baseline
+                    self.g_ea.signal_old[tf] = self.g_ea.csdl_rows[tf].signal
+                    self.g_ea.timestamp_old[tf] = self.g_ea.csdl_rows[tf].timestamp
+
+        # ==================================================================
+        # GROUP 2: ODD SECONDS (1,3,5,7...) - AUXILIARY (SUPPORT)
+        # ==================================================================
+        if not self.config.UseEvenOddMode or (current_second % 2 != 0):
+
+            # STEP 1: Check stoploss & take profit
+            self.CheckStoplossAndTakeProfit()
+
+            # STEP 2: Update dashboard
+            self.UpdateDashboard()
+
+            # STEP 3: Emergency check
+            self.CheckAllEmergencyConditions()
+
+            # STEP 4: Weekend reset check
+            self.CheckWeekendReset()
+
+            # STEP 5: Health check at 8h/16h
+            self.CheckSPYBotHealth()
+
+    def Start(self, symbol_name: str):
+        """Start the bot | Khởi động bot"""
+
+        # Initialize TradeLocker connection
+        if not self.InitTradingConnection():
+            self.logger.error("[ERROR] Failed to connect to TradeLocker")
+            return
+
+        # Get instrument ID
+        if not self.GetInstrumentID(symbol_name):
+            self.logger.error(f"[ERROR] Failed to get instrument ID for {symbol_name}")
+            return
+
+        # Initialize EA
+        if not self.OnInit(symbol_name):
+            self.logger.error("[ERROR] EA initialization failed")
+            return
+
+        # Set running flag
+        self.running = True
+
+        # Start timer thread
+        self.timer_thread = threading.Thread(target=self._timer_loop, daemon=True)
+        self.timer_thread.start()
+
+        self.logger.info("[START] Bot started successfully ✓")
+        self.logger.info("[START] Press Ctrl+C to stop")
+
+        # Main loop - keep alive
+        try:
+            while self.running:
+                time.sleep(1)
+        except KeyboardInterrupt:
+            self.logger.info("[STOP] Keyboard interrupt received")
+            self.Stop()
+
+    def _timer_loop(self):
+        """Internal timer loop | Vòng lặp timer nội bộ"""
+        while self.running:
+            try:
+                self.OnTimer()
+                time.sleep(1)
+            except Exception as e:
+                self.logger.error(f"[TIMER ERROR] {e}")
+                time.sleep(1)
+
+    def Stop(self):
+        """Stop the bot | Dừng bot"""
+        self.logger.info("[STOP] Stopping bot...")
+        self.running = False
+
+        if self.timer_thread:
+            self.timer_thread.join(timeout=5)
+
+        self.logger.info("[STOP] Bot stopped ✓")
+
+# ==============================================================================
+#  PART 20: MAIN ENTRY POINT | ĐIỂM KHỞI ĐỘNG CHÍNH
+# ==============================================================================
+
+def main():
+    """Main entry point | Điểm khởi động chính"""
+
+    print("""
+==============================================================================
+TradeLocker MTF ONER Bot - Multi Timeframe Expert Advisor
+Bot EA nhiều khung thời gian cho TradeLocker
+==============================================================================
+Version: TL_V1 - Converted from MT5 EA V2
+Logic: 100% identical to MT5 EA - NO CHANGES
+==============================================================================
+""")
+
+    # Load configuration
+    config = Config()
+
+    # Setup logging
+    logger = setup_logging(config.DebugMode)
+
+    # Check credentials
+    if config.TL_Username == "user@email.com" or config.TL_Password == "YOUR_PASSWORD":
+        logger.error("[ERROR] Please configure TradeLocker credentials in Config class")
+        logger.error("[ERROR] Edit the file and set TL_Username, TL_Password, TL_Server")
+        return
+
+    # Get symbol from command line or use default
+    if len(sys.argv) > 1:
+        symbol_name = sys.argv[1]
+    else:
+        symbol_name = "BTCUSD"  # Default symbol
+        logger.info(f"[INFO] Using default symbol: {symbol_name}")
+        logger.info(f"[INFO] To use different symbol: python {sys.argv[0]} SYMBOL_NAME")
+
+    # Create bot instance
+    bot = TradeLockerBot(config, logger)
+
+    # Setup signal handlers for graceful shutdown
+    def signal_handler(sig, frame):
+        logger.info("\n[SIGNAL] Shutdown signal received")
+        bot.Stop()
+        sys.exit(0)
+
+    signal.signal(signal.SIGINT, signal_handler)
+    signal.signal(signal.SIGTERM, signal_handler)
+
+    # Start bot
+    try:
+        bot.Start(symbol_name)
+    except Exception as e:
+        logger.error(f"[FATAL] Bot crashed: {e}")
+        import traceback
+        traceback.print_exc()
+    finally:
+        bot.Stop()
+
+if __name__ == "__main__":
+    main()

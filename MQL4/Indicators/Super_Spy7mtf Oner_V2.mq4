@@ -2831,7 +2831,9 @@ void SmartTFReset() {
     ChartSetSymbolPeriod(current_chart_id, current_symbol, current_period);
     Sleep(2000);  // Delay 2s (slower for MT4 stability)
 
-    Print("SmartTFReset: ", current_symbol, " | ", (total_charts + 1), " charts reset");
+    if(total_charts >= 0) {
+        Print("[SMART_TF_RESET] Completed: ", (total_charts + 1), " charts reset (", current_symbol, ")");
+    }
 }
 
 // Health check for CSDL1 file activity (called at 8h and 16h) | Kiem tra hoat dong file CSDL1 (goi luc 8h va 16h)
@@ -2856,8 +2858,7 @@ void HealthCheck() {
 
     // Check if file unchanged (bot stuck) | Kiem tra file khong doi (bot treo)
     if(current_modified == g_last_csdl1_modified) {
-        Print("HealthCheck: ", g_target_symbol, " STUCK | Auto-reset triggered");
-        Alert("Bot SPY stuck - Auto reset!");
+        Print("[HEALTH_CHECK] ", g_target_symbol, " STUCK - Auto-reset triggered");
         SmartTFReset();
         g_last_csdl1_modified = TimeCurrent();
     } else {
@@ -2889,7 +2890,7 @@ void MidnightReset() {
        current_minute == 0 &&
        (current_time - last_reset) >= 3600) {
 
-        Print("MidnightReset: ", g_target_symbol, " | New day at 0h:0m");
+        Print("[MIDNIGHT_RESET] ", g_target_symbol, " - Triggering daily chart reset at 0h:0m");
         SmartTFReset();
 
         // Cập nhật thời gian reset
