@@ -1726,7 +1726,9 @@ namespace cAlgo.Robots
                                 else if (StoplossMode == StoplossMode.LAYER2_MARGIN)
                                 {
                                     // Layer2: Calculate from margin (emergency)
-                                    double margin_usd = position.VolumeInUnits / 100000 * Symbol.TickValue * Symbol.TickSize;
+                                    // FIXED: Use actual margin requirement, not pip value
+                                    double lotSize = position.VolumeInUnits / 100000.0;
+                                    double margin_usd = lotSize * Symbol.DynamicLeverage[0].Margin;
                                     sl_threshold = -(margin_usd / Layer2_Divisor);
                                     mode_name = "LAYER2_SL";
                                 }
@@ -1739,7 +1741,9 @@ namespace cAlgo.Robots
                                     string margin_info = "";
                                     if (mode_name == "LAYER2_SL")
                                     {
-                                        double margin_usd = position.VolumeInUnits / 100000 * Symbol.TickValue * Symbol.TickSize;
+                                        // FIXED: Use actual margin requirement, not pip value
+                                        double lotSize = position.VolumeInUnits / 100000.0;
+                                        double margin_usd = lotSize * Symbol.DynamicLeverage[0].Margin;
                                         margin_info = $" Margin=${margin_usd:F2}";
                                     }
 
