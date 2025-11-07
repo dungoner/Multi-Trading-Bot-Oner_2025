@@ -468,12 +468,14 @@ class TradeLockerBot:
                 self.logger.error("[ORDER] Instrument ID not set")
                 return None
 
-            # TradeLocker API: create_order(instrument_id, quantity, side, type_)
+            # TradeLocker API: create_order(instrument_id, quantity, side, type_, label)
+            # Use label to store comment (for position identification in RestoreOrCleanupPositions)
             order_id = self.tl.create_order(
                 self.instrument_id,
                 quantity=quantity,
                 side=side.lower(),  # "buy" or "sell"
-                type_="market"
+                type_="market",
+                label=comment  # Store comment as label for position tracking
             )
 
             if order_id:
@@ -549,7 +551,8 @@ class TradeLockerBot:
                         'lots': float(pos.get('qty', 0.0)),
                         'profit': float(pos.get('pnl', 0.0)),
                         'magic': 0,  # TradeLocker doesn't support magic numbers natively
-                        'open_price': float(pos.get('openPrice', 0.0))
+                        'open_price': float(pos.get('openPrice', 0.0)),
+                        'comment': str(pos.get('label', ''))  # Use label as comment
                     }
                     result.append(formatted_pos)
 
@@ -669,6 +672,34 @@ class TradeLockerBot:
             self.g_ea.normalized_symbol_name = self.g_ea.symbol_name
 
         self.g_ea.symbol_prefix = self.g_ea.symbol_name + "_"
+
+    def DetectSymbolType(self, symbol: str) -> str:
+        """
+        Detect symbol type by pattern matching | Phát hiện loại symbol bằng pattern matching
+
+        Returns: "CRYPTO", "METAL", "ENERGY", "INDEX", or "FX" (default)
+        Logic matches MT5 EA DetectSymbolType() function exactly
+        """
+        sym = symbol.upper()
+
+        # CRYPTO patterns | Các pattern CRYPTO
+        if any(crypto in sym for crypto in ["BTC", "ETH", "LTC", "XRP", "BNB"]):
+            return "CRYPTO"
+
+        # METAL patterns | Các pattern KIM LOẠI
+        if any(metal in sym for metal in ["XAU", "XAG", "GOLD", "SILVER"]):
+            return "METAL"
+
+        # ENERGY patterns | Các pattern NĂNG LƯỢNG
+        if any(energy in sym for energy in ["OIL", "WTI", "BRENT"]):
+            return "ENERGY"
+
+        # INDEX patterns | Các pattern CHỈ SỐ
+        if any(index in sym for index in ["SPX", "NAS", "DOW", "DAX"]):
+            return "INDEX"
+
+        # Default to FOREX | Mặc định là FOREX
+        return "FX"
 
     def BuildCSDLFilename(self):
         """Build full CSDL filename path | Xây dựng đường dẫn file CSDL"""
@@ -967,20 +998,122 @@ class TradeLockerBot:
     # ==========================================================================
 
     def RestoreOrCleanupPositions(self) -> bool:
-        """Restore or cleanup positions on startup | Khôi phục hoặc dọn dẹp lệnh"""
-        # Reset all flags
+        """Restore or cleanup positions on startup | Khôi phục hoặc dọn dẹp lệnh
+
+        NOTE: TradeLocker doesn't support magic numbers natively.
+        We use position comment field to identify TF and Strategy (e.g., "S1_M5", "S2_H1").
+        """
+        # Step 1: Reset all flags first | Bước 1: Reset tất cả cờ trước
         for tf in range(7):
             for s in range(3):
                 self.g_ea.position_flags[tf][s] = 0
                 self.g_ea.position_tickets[tf][s] = None
 
-        # TODO: Scan TradeLocker positions and restore flags
-        # This requires TradeLocker API get_positions implementation
-
         kept_count = 0
         closed_count = 0
 
+        # Step 2: Get all open positions | Bước 2: Lấy tất cả lệnh đang mở
+        positions = self.GetOpenPositions()
+
+        # Step 3: Scan each position and decide KEEP or CLOSE | Bước 3: Quét từng lệnh và quyết định GIỮ hoặc ĐÓNG
+        for pos in positions:
+            ticket = pos.get('ticket', '')
+            order_type = pos.get('type', 0)  # 0=BUY, 1=SELL
+
+            # Get order signal from position type
+            order_signal = 1 if order_type == 0 else -1  # BUY=+1, SELL=-1
+
+            # Try to parse comment to get TF and Strategy
+            # Comment format: "S1_M5", "S2_H1", "S3_M15", "BONUS_M5", etc.
+            comment = pos.get('comment', '')
+
+            # Find matching TF and Strategy
+            found = False
+            found_tf = -1
+            found_s = -1
+
+            # Try to parse comment (e.g., "S1_M5" -> strategy=0, tf=1)
+            if comment.startswith("S1_"):
+                found_s = 0
+                tf_name = comment[3:]  # "M5", "H1", etc.
+                for i, name in enumerate(G_TF_NAMES):
+                    if name == tf_name:
+                        found_tf = i
+                        break
+            elif comment.startswith("S2_"):
+                found_s = 1
+                tf_name = comment[3:]
+                for i, name in enumerate(G_TF_NAMES):
+                    if name == tf_name:
+                        found_tf = i
+                        break
+            elif comment.startswith("S3_"):
+                found_s = 2
+                tf_name = comment[3:]
+                for i, name in enumerate(G_TF_NAMES):
+                    if name == tf_name:
+                        found_tf = i
+                        break
+
+            # If we found TF and Strategy from comment, validate all conditions
+            if found_tf >= 0 and found_s >= 0:
+                # CONDITION 1: TF enabled | Điều kiện 1: TF được bật
+                cond1_tf_enabled = self.IsTFEnabled(found_tf)
+
+                # CONDITION 2: Signal pair match | Điều kiện 2: Cặp tín hiệu khớp
+                # Order signal == OLD == CSDL (triple match) AND timestamp OLD == CSDL (locked)
+                cond2_signal_pair = (
+                    order_signal == self.g_ea.signal_old[found_tf] and
+                    order_signal == self.g_ea.csdl_rows[found_tf].signal and
+                    self.g_ea.timestamp_old[found_tf] == self.g_ea.csdl_rows[found_tf].timestamp
+                )
+
+                # CONDITION 3: Strategy enabled | Điều kiện 3: Chiến lược được bật
+                cond3_strategy = False
+                if found_s == 0:
+                    cond3_strategy = self.config.S1_HOME
+                elif found_s == 1:
+                    cond3_strategy = self.config.S2_TREND
+                elif found_s == 2:
+                    cond3_strategy = self.config.S3_NEWS
+
+                # CONDITION 4: Not duplicate (flag must be 0) | Điều kiện 4: Không trùng lặp
+                cond4_unique = (self.g_ea.position_flags[found_tf][found_s] == 0)
+
+                # CONSOLIDATED CHECK: ALL with AND | KIỂM TRA GỘP: Tất cả với AND
+                if cond1_tf_enabled and cond2_signal_pair and cond3_strategy and cond4_unique:
+                    found = True
+
+            # Step 4: Decide KEEP or CLOSE | Bước 4: Quyết định GIỮ hoặc ĐÓNG
+            if found:
+                # ✓ KEEP: All conditions passed → Restore flag | GIỮ: Tất cả điều kiện qua → Khôi phục cờ
+                self.g_ea.position_flags[found_tf][found_s] = 1
+                self.g_ea.position_tickets[found_tf][found_s] = ticket
+                kept_count += 1
+
+                self.DebugPrint(f"[RESTORE_KEEP] #{ticket} TF:{found_tf} S:{found_s + 1} "
+                              f"Signal:{order_signal} | Flag=1")
+
+            else:
+                # ✗ CLOSE: ANY condition failed → Close order | ĐÓNG: Bất kỳ điều kiện sai → Đóng lệnh
+                self.ClosePosition(ticket)
+                closed_count += 1
+
+                self.DebugPrint(f"[RESTORE_CLOSE] #{ticket} Signal:{order_signal} | INVALID")
+
+        # Step 5: Final summary report | Bước 5: Báo cáo tóm tắt cuối cùng
         self.logger.info(f"{self.g_ea.init_summary} | RESTORE: KEPT={kept_count}, CLOSED={closed_count}")
+
+        # Debug: Print restored flags (optional) | In cờ đã khôi phục (tùy chọn)
+        if self.config.DebugMode and kept_count > 0:
+            for tf in range(7):
+                has_flag = any(self.g_ea.position_flags[tf][s] == 1 for s in range(3))
+                if has_flag:
+                    self.logger.debug(f"[RESTORE_FLAGS] {G_TF_NAMES[tf]}: "
+                                    f"S1={self.g_ea.position_flags[tf][0]} "
+                                    f"S2={self.g_ea.position_flags[tf][1]} "
+                                    f"S3={self.g_ea.position_flags[tf][2]}")
+
         return True
 
     def HasValidS2BaseCondition(self, tf: int) -> bool:
@@ -1732,8 +1865,8 @@ class TradeLockerBot:
 
         self.InitializeSymbolPrefix()
 
-        # PART 1B: Detect symbol type (simplified for TradeLocker)
-        self.g_ea.symbol_type = "CRYPTO" if "BTC" in symbol_name or "ETH" in symbol_name else "FX"
+        # PART 1B: Detect symbol type (pattern matching like MT5 EA)
+        self.g_ea.symbol_type = self.DetectSymbolType(symbol_name)
 
         # PART 1C: Get account info
         self.g_ea.broker_name = "TradeLocker"
