@@ -142,64 +142,88 @@ Kết quả phải hiện 2 dòng chứa `tradelocker` và `requests`.
 ### Bước 5.1: Mở file cấu hình
 
 1. Mở **Notepad** hoặc **Notepad++** (recommended)
-2. Mở file: `C:\TradingBots\Multi-Trading-Bot-Oner_2025\TradeLocker\TradeLocker_MTF_ONER.py`
-3. Tìm đến dòng `class Config:` (khoảng dòng 39)
+2. Mở file: `C:\TradingBots\Multi-Trading-Bot-Oner_2025\TradeLocker\config.json`
+
+⚠️ **Lưu ý**: Bot sử dụng file `config.json` để cấu hình, không cần chỉnh sửa file `.py` nữa!
 
 ### Bước 5.2: Cấu hình TradeLocker credentials
 
-Tìm và thay đổi các dòng sau:
+Tìm và thay đổi phần `"tradelocker"`:
 
-```python
-# ===== E. TRADELOCKER CREDENTIALS | THÔNG TIN ĐĂNG NHẬP =====
-
-TL_Environment: str = "https://demo.tradelocker.com"  # DEMO hoặc LIVE
-TL_Username: str = "user@email.com"                   # Thay bằng email của bạn
-TL_Password: str = "YOUR_PASSWORD"                    # Thay bằng password của bạn
-TL_Server: str = "SERVER_NAME"                        # Thay bằng tên server (ví dụ: "Demo")
+```json
+"tradelocker": {
+  "_comment": "TradeLocker Account Credentials",
+  "environment": "https://demo.tradelocker.com",
+  "username": "your_email@example.com",        ← Thay bằng email của bạn
+  "password": "YOUR_PASSWORD",                 ← Thay bằng password của bạn
+  "server": "Demo"                             ← Thay bằng tên server
+}
 ```
 
 **Ví dụ cấu hình DEMO:**
 
-```python
-TL_Environment: str = "https://demo.tradelocker.com"
-TL_Username: str = "john.trader@gmail.com"
-TL_Password: str = "MySecurePass123"
-TL_Server: str = "Demo"
+```json
+"tradelocker": {
+  "_comment": "TradeLocker Account Credentials",
+  "environment": "https://demo.tradelocker.com",
+  "username": "john.trader@gmail.com",
+  "password": "MySecurePass123",
+  "server": "Demo"
+}
 ```
 
 ### Bước 5.3: Cấu hình HTTP API (CSDL Data Source)
 
-Tìm và kiểm tra dòng:
+Tìm và kiểm tra phần `"csdl"`:
 
-```python
-# A.6 HTTP API settings | Cấu hình HTTP API
-HTTP_Server_IP: str = "dungalading.duckdns.org"  # HTTP Server domain/IP
-HTTP_API_Key: str = ""                           # API Key (empty = no auth)
-EnableSymbolNormalization: bool = False          # Symbol name normalization
+```json
+"csdl": {
+  "_comment": "CSDL Data Source: FOLDER_1, FOLDER_2, FOLDER_3, or HTTP_API",
+  "source": "HTTP_API",
+  "HTTP_Server_IP": "dungalading.duckdns.org",
+  "HTTP_API_Key": "",
+  "EnableSymbolNormalization": false
+}
 ```
 
 ⚠️ **Lưu ý**: Nếu bạn có VPS riêng chạy SPY Bot, thay đổi `HTTP_Server_IP` thành IP/domain của bạn.
 
 ### Bước 5.4: Cấu hình Trading Settings (Tùy chọn)
 
-```python
-# A.1 Timeframe toggles (7) | Bật/tắt khung thời gian
-TF_M1: bool = False  # M1 (không khuyến nghị cho TradeLocker)
-TF_M5: bool = True   # M5 ✓ Bật
-TF_M15: bool = True  # M15 ✓ Bật
-TF_M30: bool = True  # M30 ✓ Bật
-TF_H1: bool = True   # H1 ✓ Bật
-TF_H4: bool = True   # H4 ✓ Bật
-TF_D1: bool = False  # D1 (không khuyến nghị cho TradeLocker)
+**Bật/tắt Timeframes:**
 
-# A.2 Strategy toggles (3) | Bật/tắt chiến lược
-S1_HOME: bool = True   # S1: Binary/News
-S2_TREND: bool = True  # S2: Trend D1
-S3_NEWS: bool = True   # S3: News Alignment
+```json
+"timeframes": {
+  "_comment": "Enable/Disable Timeframes (true/false)",
+  "M1": false,   ← M1 (không khuyến nghị)
+  "M5": true,    ← M5 ✓ Bật
+  "M15": true,   ← M15 ✓ Bật
+  "M30": true,   ← M30 ✓ Bật
+  "H1": true,    ← H1 ✓ Bật
+  "H4": true,    ← H4 ✓ Bật
+  "D1": false    ← D1 (không khuyến nghị)
+}
+```
 
-# A.4 Risk management (2) | Quản lý rủi ro
-FixedLotSize: float = 0.1           # Lot size (0.01-1.0 recommended)
-MaxLoss_Fallback: float = -1000.0   # Maxloss fallback ($USD)
+**Bật/tắt Strategies:**
+
+```json
+"strategies": {
+  "_comment": "Enable/Disable Strategies (true/false)",
+  "S1_HOME": true,   ← S1: Binary/News
+  "S2_TREND": true,  ← S2: Trend D1
+  "S3_NEWS": true    ← S3: News Alignment
+}
+```
+
+**Risk Management:**
+
+```json
+"risk": {
+  "_comment": "Risk Management Settings",
+  "FixedLotSize": 0.1,        ← Lot size (0.01-1.0)
+  "MaxLoss_Fallback": -1000.0 ← Max loss fallback ($USD)
+}
 ```
 
 ### Bước 5.5: Lưu file

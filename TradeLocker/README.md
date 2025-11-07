@@ -37,31 +37,44 @@ pip install tradelocker requests
 
 ### 3. Configuration | Cấu hình
 
-Edit `TradeLocker_MTF_ONER.py` and update the Config class:
+Edit `config.json` and update your settings:
 
-```python
-class Config:
-    # TradeLocker credentials
-    TL_Environment = "https://demo.tradelocker.com"  # Or live URL
-    TL_Username = "your_email@example.com"
-    TL_Password = "your_password"
-    TL_Server = "SERVER_NAME"  # Your server name
+```json
+{
+  "tradelocker": {
+    "environment": "https://demo.tradelocker.com",  // Or live URL
+    "username": "your_email@example.com",
+    "password": "your_password",
+    "server": "Demo"  // Your server name
+  },
 
-    # HTTP API (for CSDL data)
-    HTTP_Server_IP = "dungalading.duckdns.org"  # Your VPS domain/IP
-    HTTP_API_Key = ""  # Optional API key
+  "timeframes": {
+    "M1": false, "M5": true, "M15": true,
+    "M30": true, "H1": true, "H4": true, "D1": false
+  },
 
-    # Trading settings
-    FixedLotSize = 0.1
-    MaxLoss_Fallback = -1000.0
+  "strategies": {
+    "S1_HOME": true,   // Binary/News
+    "S2_TREND": true,  // Trend D1
+    "S3_NEWS": true    // News Alignment
+  },
 
-    # Strategies (enable/disable)
-    S1_HOME = True
-    S2_TREND = True
-    S3_NEWS = True
+  "risk": {
+    "FixedLotSize": 0.1,
+    "MaxLoss_Fallback": -1000.0
+  },
 
-    # ... other settings
+  "csdl": {
+    "source": "HTTP_API",
+    "HTTP_Server_IP": "dungalading.duckdns.org",
+    "HTTP_API_Key": ""
+  }
+
+  // ... see config.json for all 30 settings
+}
 ```
+
+**Note**: Bot automatically loads settings from `config.json` on startup.
 
 ### 4. Run | Chạy bot
 
@@ -72,7 +85,7 @@ python TradeLocker_MTF_ONER.py
 # Run with specific symbol
 python TradeLocker_MTF_ONER.py EURUSD
 
-# Run with debug mode (edit Config.DebugMode = True)
+# Run with debug mode (edit "DebugMode": true in config.json)
 python TradeLocker_MTF_ONER.py XAUUSD
 ```
 

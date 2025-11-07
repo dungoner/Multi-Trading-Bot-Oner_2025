@@ -37,7 +37,7 @@ except ImportError:
 # ==============================================================================
 
 class Config:
-    """User configuration (identical to MT5 EA inputs) | Cấu hình người dùng (giống MT5 EA)"""
+    """User configuration (loads from config.json) | Cấu hình người dùng (đọc từ config.json)"""
 
     # ===== A. CORE SETTINGS | CÀI ĐẶT CỐT LÕI =====
 
@@ -120,6 +120,131 @@ class Config:
     TL_Username: str = "user@email.com"                   # Account email
     TL_Password: str = "YOUR_PASSWORD"                    # Account password
     TL_Server: str = "SERVER_NAME"                        # Server name
+
+    @classmethod
+    def load_from_json(cls, json_path: str = "config.json"):
+        """Load configuration from JSON file | Đọc cấu hình từ file JSON
+
+        Args:
+            json_path: Path to config.json file
+
+        Returns:
+            Config instance with loaded settings
+        """
+        config = cls()
+
+        # Try to load from JSON file
+        try:
+            # Get script directory
+            script_dir = os.path.dirname(os.path.abspath(__file__))
+            full_path = os.path.join(script_dir, json_path)
+
+            if not os.path.exists(full_path):
+                print(f"⚠️  Config file not found: {full_path}")
+                print(f"⚠️  Using default configuration (edit {json_path} to customize)")
+                return config
+
+            with open(full_path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+
+            # Load TradeLocker credentials
+            if 'tradelocker' in data:
+                tl = data['tradelocker']
+                config.TL_Environment = tl.get('environment', config.TL_Environment)
+                config.TL_Username = tl.get('username', config.TL_Username)
+                config.TL_Password = tl.get('password', config.TL_Password)
+                config.TL_Server = tl.get('server', config.TL_Server)
+
+            # Load timeframes
+            if 'timeframes' in data:
+                tf = data['timeframes']
+                config.TF_M1 = tf.get('M1', config.TF_M1)
+                config.TF_M5 = tf.get('M5', config.TF_M5)
+                config.TF_M15 = tf.get('M15', config.TF_M15)
+                config.TF_M30 = tf.get('M30', config.TF_M30)
+                config.TF_H1 = tf.get('H1', config.TF_H1)
+                config.TF_H4 = tf.get('H4', config.TF_H4)
+                config.TF_D1 = tf.get('D1', config.TF_D1)
+
+            # Load strategies
+            if 'strategies' in data:
+                strat = data['strategies']
+                config.S1_HOME = strat.get('S1_HOME', config.S1_HOME)
+                config.S2_TREND = strat.get('S2_TREND', config.S2_TREND)
+                config.S3_NEWS = strat.get('S3_NEWS', config.S3_NEWS)
+
+            # Load close mode
+            if 'close_mode' in data:
+                cm = data['close_mode']
+                config.S1_CloseByM1 = cm.get('S1_CloseByM1', config.S1_CloseByM1)
+                config.S2_CloseByM1 = cm.get('S2_CloseByM1', config.S2_CloseByM1)
+
+            # Load risk settings
+            if 'risk' in data:
+                risk = data['risk']
+                config.FixedLotSize = risk.get('FixedLotSize', config.FixedLotSize)
+                config.MaxLoss_Fallback = risk.get('MaxLoss_Fallback', config.MaxLoss_Fallback)
+
+            # Load CSDL settings
+            if 'csdl' in data:
+                csdl = data['csdl']
+                config.CSDL_Source = csdl.get('source', config.CSDL_Source)
+                config.HTTP_Server_IP = csdl.get('HTTP_Server_IP', config.HTTP_Server_IP)
+                config.HTTP_API_Key = csdl.get('HTTP_API_Key', config.HTTP_API_Key)
+                config.EnableSymbolNormalization = csdl.get('EnableSymbolNormalization', config.EnableSymbolNormalization)
+
+            # Load S1 strategy settings
+            if 'strategy_s1' in data:
+                s1 = data['strategy_s1']
+                config.S1_UseNewsFilter = s1.get('UseNewsFilter', config.S1_UseNewsFilter)
+                config.MinNewsLevelS1 = s1.get('MinNewsLevel', config.MinNewsLevelS1)
+                config.S1_RequireNewsDirection = s1.get('RequireNewsDirection', config.S1_RequireNewsDirection)
+
+            # Load S2 strategy settings
+            if 'strategy_s2' in data:
+                s2 = data['strategy_s2']
+                config.S2_TrendMode = s2.get('TrendMode', config.S2_TrendMode)
+
+            # Load S3 strategy settings
+            if 'strategy_s3' in data:
+                s3 = data['strategy_s3']
+                config.MinNewsLevelS3 = s3.get('MinNewsLevel', config.MinNewsLevelS3)
+                config.EnableBonusNews = s3.get('EnableBonusNews', config.EnableBonusNews)
+                config.BonusOrderCount = s3.get('BonusOrderCount', config.BonusOrderCount)
+                config.MinNewsLevelBonus = s3.get('MinNewsLevelBonus', config.MinNewsLevelBonus)
+                config.BonusLotMultiplier = s3.get('BonusLotMultiplier', config.BonusLotMultiplier)
+
+            # Load stoploss settings
+            if 'stoploss' in data:
+                sl = data['stoploss']
+                config.StoplossMode = sl.get('Mode', config.StoplossMode)
+                config.Layer2_Divisor = sl.get('Layer2_Divisor', config.Layer2_Divisor)
+
+            # Load take profit settings
+            if 'takeprofit' in data:
+                tp = data['takeprofit']
+                config.UseTakeProfit = tp.get('Enable', config.UseTakeProfit)
+                config.TakeProfit_Multiplier = tp.get('Multiplier', config.TakeProfit_Multiplier)
+
+            # Load auxiliary settings
+            if 'auxiliary' in data:
+                aux = data['auxiliary']
+                config.UseEvenOddMode = aux.get('UseEvenOddMode', config.UseEvenOddMode)
+                config.EnableWeekendReset = aux.get('EnableWeekendReset', config.EnableWeekendReset)
+                config.EnableHealthCheck = aux.get('EnableHealthCheck', config.EnableHealthCheck)
+                config.ShowDashboard = aux.get('ShowDashboard', config.ShowDashboard)
+                config.DebugMode = aux.get('DebugMode', config.DebugMode)
+
+            print(f"✅ Configuration loaded from: {json_path}")
+
+        except json.JSONDecodeError as e:
+            print(f"❌ ERROR: Invalid JSON in {json_path}: {e}")
+            print(f"⚠️  Using default configuration")
+        except Exception as e:
+            print(f"❌ ERROR: Failed to load config: {e}")
+            print(f"⚠️  Using default configuration")
+
+        return config
 
 # ==============================================================================
 #  PART 2: DATA STRUCTURES (2 classes) | CẤU TRÚC DỮ LIỆU
@@ -1833,16 +1958,16 @@ Logic: 100% identical to MT5 EA - NO CHANGES
 ==============================================================================
 """)
 
-    # Load configuration
-    config = Config()
+    # Load configuration from config.json
+    config = Config.load_from_json("config.json")
 
     # Setup logging
     logger = setup_logging(config.DebugMode)
 
     # Check credentials
-    if config.TL_Username == "user@email.com" or config.TL_Password == "YOUR_PASSWORD":
-        logger.error("[ERROR] Please configure TradeLocker credentials in Config class")
-        logger.error("[ERROR] Edit the file and set TL_Username, TL_Password, TL_Server")
+    if config.TL_Username == "your_email@example.com" or config.TL_Password == "YOUR_PASSWORD":
+        logger.error("[ERROR] Please configure TradeLocker credentials in config.json")
+        logger.error("[ERROR] Edit config.json and set your username, password, and server")
         return
 
     # Get symbol from command line or use default

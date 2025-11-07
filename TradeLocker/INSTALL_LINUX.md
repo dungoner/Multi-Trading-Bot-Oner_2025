@@ -231,46 +231,54 @@ requests       2.31.0
 ### Bước 6.1: Mở file cấu hình
 
 ```bash
-nano TradeLocker_MTF_ONER.py
+nano config.json
 ```
 
-**Lưu ý**: Có thể dùng `vi` hoặc `vim` thay cho `nano` nếu quen.
+**Lưu ý**:
+- Có thể dùng `vi` hoặc `vim` thay cho `nano` nếu quen
+- Bot sử dụng file `config.json` để cấu hình, không cần chỉnh sửa file `.py` nữa!
 
-### Bước 6.2: Tìm và chỉnh sửa credentials
+### Bước 6.2: Cấu hình TradeLocker credentials
 
-Nhấn `Ctrl + W` (trong nano), gõ `class Config`, nhấn Enter để tìm.
+Tìm và chỉnh sửa phần `"tradelocker"`:
 
-Tìm đến phần `# ===== E. TRADELOCKER CREDENTIALS`:
-
-```python
-# ===== E. TRADELOCKER CREDENTIALS | THÔNG TIN ĐĂNG NHẬP =====
-
-TL_Environment: str = "https://demo.tradelocker.com"  # DEMO hoặc LIVE
-TL_Username: str = "user@email.com"                   # Thay bằng email của bạn
-TL_Password: str = "YOUR_PASSWORD"                    # Thay bằng password của bạn
-TL_Server: str = "SERVER_NAME"                        # Thay bằng tên server (ví dụ: "Demo")
+```json
+"tradelocker": {
+  "_comment": "TradeLocker Account Credentials",
+  "environment": "https://demo.tradelocker.com",
+  "username": "your_email@example.com",        ← Thay bằng email của bạn
+  "password": "YOUR_PASSWORD",                 ← Thay bằng password của bạn
+  "server": "Demo"                             ← Thay bằng tên server
+}
 ```
 
 **Ví dụ cấu hình DEMO:**
 
-```python
-TL_Environment: str = "https://demo.tradelocker.com"
-TL_Username: str = "john.trader@gmail.com"
-TL_Password: str = "MySecurePass123"
-TL_Server: str = "Demo"
+```json
+"tradelocker": {
+  "_comment": "TradeLocker Account Credentials",
+  "environment": "https://demo.tradelocker.com",
+  "username": "john.trader@gmail.com",
+  "password": "MySecurePass123",
+  "server": "Demo"
+}
 ```
 
 ### Bước 6.3: Cấu hình HTTP API (CSDL)
 
-Tìm và kiểm tra:
+Tìm và kiểm tra phần `"csdl"`:
 
-```python
-# A.6 HTTP API settings | Cấu hình HTTP API
-HTTP_Server_IP: str = "dungalading.duckdns.org"  # HTTP Server domain/IP
-HTTP_API_Key: str = ""                           # API Key (empty = no auth)
+```json
+"csdl": {
+  "_comment": "CSDL Data Source: FOLDER_1, FOLDER_2, FOLDER_3, or HTTP_API",
+  "source": "HTTP_API",
+  "HTTP_Server_IP": "dungalading.duckdns.org",
+  "HTTP_API_Key": "",
+  "EnableSymbolNormalization": false
+}
 ```
 
-⚠️ **Lưu ý**: Nếu bạn có VPS riêng chạy SPY Bot, thay đổi `HTTP_Server_IP`.
+⚠️ **Lưu ý**: Nếu bạn có VPS riêng chạy SPY Bot, thay đổi `HTTP_Server_IP` thành IP/domain của bạn.
 
 ### Bước 6.4: Lưu file
 

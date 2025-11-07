@@ -1,0 +1,93 @@
+{
+  "_comment": "TradeLocker MTF ONER Bot - Configuration File",
+  "_description": "Edit this file to configure the bot. All 30 settings from MT5 EA are here.",
+  "_version": "TL_V1",
+
+  "tradelocker": {
+    "_comment": "TradeLocker Account Credentials",
+    "environment": "https://demo.tradelocker.com",
+    "username": "your_email@example.com",
+    "password": "YOUR_PASSWORD",
+    "server": "Demo"
+  },
+
+  "timeframes": {
+    "_comment": "Enable/Disable Timeframes (true/false)",
+    "M1": false,
+    "M5": true,
+    "M15": true,
+    "M30": true,
+    "H1": true,
+    "H4": true,
+    "D1": false
+  },
+
+  "strategies": {
+    "_comment": "Enable/Disable Strategies (true/false)",
+    "S1_HOME": true,
+    "S2_TREND": true,
+    "S3_NEWS": true
+  },
+
+  "close_mode": {
+    "_comment": "Close Mode Configuration",
+    "S1_CloseByM1": true,
+    "S2_CloseByM1": false
+  },
+
+  "risk": {
+    "_comment": "Risk Management Settings",
+    "FixedLotSize": 0.1,
+    "MaxLoss_Fallback": -1000.0
+  },
+
+  "csdl": {
+    "_comment": "CSDL Data Source: FOLDER_1, FOLDER_2, FOLDER_3, or HTTP_API",
+    "source": "HTTP_API",
+    "HTTP_Server_IP": "dungalading.duckdns.org",
+    "HTTP_API_Key": "",
+    "EnableSymbolNormalization": false
+  },
+
+  "strategy_s1": {
+    "_comment": "S1 Strategy: Binary/News Filter",
+    "UseNewsFilter": true,
+    "MinNewsLevel": 2,
+    "RequireNewsDirection": true
+  },
+
+  "strategy_s2": {
+    "_comment": "S2 Strategy: Trend Following. Mode: 0=Follow D1, 1=Force BUY, -1=Force SELL",
+    "TrendMode": 0
+  },
+
+  "strategy_s3": {
+    "_comment": "S3 Strategy: News Alignment + Bonus",
+    "MinNewsLevel": 20,
+    "EnableBonusNews": true,
+    "BonusOrderCount": 1,
+    "MinNewsLevelBonus": 2,
+    "BonusLotMultiplier": 1.2
+  },
+
+  "stoploss": {
+    "_comment": "Stoploss Mode: 0=NONE, 1=LAYER1_MAXLOSS, 2=LAYER2_MARGIN",
+    "Mode": 1,
+    "Layer2_Divisor": 5.0
+  },
+
+  "takeprofit": {
+    "_comment": "Take Profit Settings",
+    "Enable": false,
+    "Multiplier": 5.0
+  },
+
+  "auxiliary": {
+    "_comment": "Auxiliary Settings",
+    "UseEvenOddMode": true,
+    "EnableWeekendReset": false,
+    "EnableHealthCheck": true,
+    "ShowDashboard": true,
+    "DebugMode": false
+  }
+}
