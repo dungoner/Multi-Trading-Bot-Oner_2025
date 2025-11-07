@@ -2213,10 +2213,12 @@ int OnInit() {
                         (acc_type == ACCOUNT_TRADE_MODE_REAL) ? "Real" : "Contest";
 
     // Compact init summary (Option 2: Readable Style) | Tom tat khoi dong gon nhe
+    // Detect fill policy same way as InitMT5Trading() | Phat hien fill policy giong InitMT5Trading()
+    long filling = SymbolInfoInteger(_Symbol, SYMBOL_FILLING_MODE);
     string fill_policy = "IOC";
-    ENUM_ORDER_TYPE_FILLING fill_mode = g_trade.FillingMode();
-    if(fill_mode == ORDER_FILLING_FOK) fill_policy = "FOK";
-    else if(fill_mode == ORDER_FILLING_RETURN) fill_policy = "RETURN";
+    if((filling & 2) == 2) fill_policy = "IOC";
+    else if((filling & 1) == 1) fill_policy = "FOK";
+    else fill_policy = "RETURN";
 
     string norm_status = EnableSymbolNormalization ? "ON" : "OFF";
 
