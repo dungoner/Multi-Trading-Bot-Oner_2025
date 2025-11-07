@@ -1653,11 +1653,6 @@ void CheckAllEmergencyConditions() {
 // Smart TF reset for all charts of current symbol (learned from SPY Bot) | Reset thong minh cho tat ca chart cung symbol (hoc tu SPY Bot)
 // Reset theo THU TU CO DINH: M5→M15→M30→H1→H4→D1→M1 (D1 QUAN TRONG NHAT, M1 CUOI CUNG) >> IMPORTANT: D1 must reset BEFORE M1 (D1 has SPY Bot), M1 is LAST (EA runs on M1) | QUAN TRONG: D1 phai reset TRUOC M1 (D1 co SPY Bot), M1 la CUOI CUNG (EA chay tren M1)
 void SmartTFReset() {
-    Print("=======================================================");
-    Print("[SMART_TF_RESET] Resetting all charts of ", g_ea.symbol_name, "...");
-    Print("[SMART_TF_RESET] Order: M5→M15→M30→H1→H4→D1→M1 (D1 before M1, M1 LAST)");
-    Print("=======================================================");
-
     string current_symbol = Symbol();
     int current_period = Period();
     long current_chart_id = ChartID();
@@ -1680,20 +1675,6 @@ void SmartTFReset() {
             if(ChartSymbol(temp_chart) == current_symbol && ChartPeriod(temp_chart) == target_period) {
                 step_count++;
 
-                // Get TF name for log | Lay ten TF cho log
-                string tf_name = "M1";
-                if(target_period == PERIOD_M5) tf_name = "M5";
-                else if(target_period == PERIOD_M15) tf_name = "M15";
-                else if(target_period == PERIOD_M30) tf_name = "M30";
-                else if(target_period == PERIOD_H1) tf_name = "H1";
-                else if(target_period == PERIOD_H4) tf_name = "H4";
-                else if(target_period == PERIOD_D1) tf_name = "D1";
-
-                // If this is M1 (last), add special marker | Neu la M1 (cuoi), them dau hieu dac biet
-                string last_marker = (target_period == PERIOD_M1) ? " (M1 - LAST - EA CHART)" : "";
-
-                Print("[RESET] Step ", step_count, "/7: Chart ", tf_name, last_marker, " (via W1)...");
-
                 // Reset via W1 | Reset qua W1
                 ChartSetSymbolPeriod(temp_chart, current_symbol, PERIOD_W1);
                 Sleep(1000);
@@ -1707,8 +1688,9 @@ void SmartTFReset() {
         }
     }
 
-    Print("[SMART_TF_RESET] ✅ Completed! ", total_reset, " charts reset in order: M5→M15→M30→H1→H4→D1→M1");
-    Print("=======================================================");
+    if(total_reset > 0) {
+        Print("[SMART_TF_RESET] Completed: ", total_reset, " charts reset (M5→M15→M30→H1→H4→D1→M1)");
+    }
 }
 
 // Weekend reset (Saturday 00:03) - Trigger SmartTFReset | Reset cuoi tuan - Goi SmartTFReset >> ONLY M1 chart has permission to reset (master chart) | CHI chart M1 co quyen reset (chart master) >> Time: 00:03 to AVOID conflict with SPY Bot reset at 00:00 | Gio: 00:03 de TRANH xung dot voi SPY Bot reset luc 00:00
@@ -1731,13 +1713,11 @@ void CheckWeekendReset() {
     int current_day = TimeDay(current_time);
     if(current_day == g_ea.weekend_last_day) return;  // Already reset today | Da reset hom nay roi
 
-    Print("[WEEKEND_RESET] Saturday 00:03 - M1 chart triggering weekly reset...");
-    Print("[WEEKEND_RESET] (Delayed 3 minute to avoid SPY Bot conflict at 00:00)");
+    Print("[WEEKEND_RESET] Saturday 00:03 - Triggering weekly chart reset...");
 
     SmartTFReset();  // Call smart reset for all charts | Goi reset thong minh cho tat ca charts
 
     g_ea.weekend_last_day = current_day;
-    Print("[WEEKEND_RESET] ? Weekly reset completed!");
 }
 
 // Health check SPY Bot (8h/16h only, NOT 24h) | Kiem tra suc khoe SPY Bot (chi 8h va 16h, KHONG 24h): ONLY M1 chart has permission to check and reset (master chart) | CHI chart M1 co quyen kiem tra va reset (chart master)
@@ -1766,23 +1746,11 @@ void CheckSPYBotHealth() {
     int diff_hours = diff_seconds / 3600;
     int diff_minutes = (diff_seconds % 3600) / 60;
 
-    Print("[HEALTH_CHECK] Time: ", hour, "h00 | CSDL last update: ", diff_hours, "h", diff_minutes, "m ago");
-
     // If diff > 8 hours (28800 seconds) ? SPY Bot frozen! | Neu chenh lech > 8 gio ? SPY Bot treo!
     if(diff_seconds > 28800) {
-        Print("[HEALTH_CHECK] ? SPY Bot FROZEN!");
-        Print("[HEALTH_CHECK] Server time: ", TimeToStr(current_time, TIME_DATE|TIME_SECONDS));
-        Print("[HEALTH_CHECK] Last CSDL update: ", TimeToStr(m1_timestamp, TIME_DATE|TIME_SECONDS));
-        Print("[HEALTH_CHECK] M1 chart triggering Smart TF Reset...");
-
-        Alert("?? SPY Bot frozen! Auto-reset all ", g_ea.symbol_name, " charts!");
+        Print("[HEALTH_CHECK] ⚠️ SPY Bot frozen (CSDL: ", diff_hours, "h", diff_minutes, "m old) - Auto-reset triggered at ", hour, "h00");
 
         SmartTFReset();  // Call smart reset for all charts | Goi reset thong minh cho tat ca charts
-
-        Print("[HEALTH_CHECK] ? Reset completed");
-
-    } else {
-        Print("[HEALTH_CHECK] ? SPY Bot OK - Recent activity detected");
     }
 }
 
@@ -1829,7 +1797,7 @@ int OnInit() {
     // Initialize global state vars (prevent multi-symbol conflicts) | Khoi tao bien trang thai (tranh xung dot da symbol)
     g_ea.first_run_completed = false;
     g_ea.weekend_last_day = -1;
-    g_ea.health_last_check_hour = -1;
+    g_ea.health_last_check_hour = TimeHour(TimeCurrent());  // Skip current hour on startup | Bo qua gio hien tai khi khoi dong
     g_ea.timer_last_run_time = 0;
 
     DebugPrint("[RESET] All position flags (21) & state vars reset to 0");
