@@ -56,7 +56,7 @@ enum CSDL_SOURCE_ENUM {
     FOLDER_3 = 2,  // DataAutoOner3 (_Sync/_Ea)
     HTTP_API = 3   // HTTP API (Remote VPS via Bot Python)
 };
-input CSDL_SOURCE_ENUM CSDL_Source = FOLDER_2;  // CSDL folder (signal source)
+input CSDL_SOURCE_ENUM CSDL_Source = HTTP_API;  // CSDL via HTTP (Bot Sync Py)
 
 //--- A.6 HTTP API settings (only used if CSDL_Source = HTTP_API) | Cau hinh HTTP API
 // IMPORTANT: MT5 must allow URL in Tools->Options->Expert Advisors | QUAN TRONG: MT5 phai cho phep URL
@@ -64,7 +64,7 @@ input CSDL_SOURCE_ENUM CSDL_Source = FOLDER_2;  // CSDL folder (signal source)
 // DuckDNS domain for easy IP management (update IP at duckdns.org only) | Domain DuckDNS de quan ly IP de dang
 input string HTTP_Server_IP = "dungalading.duckdns.org";  // HTTP Server domain/IP (Bot Python VPS)
 input string HTTP_API_Key = "";                    // API Key (empty = no auth | de trong = khong xac thuc)
-input bool EnableSymbolNormalization = true;       // Normalize symbol name (LTCUSDC→LTCUSD, FALSE=use exact name)
+input bool EnableSymbolNormalization = false;       // Normal symbol name (LTCUSDC→LTCUSD, FALSE=use exact name)
 
 input string ___Sep_B___ = "___B. STRATEGY CONFIG ________";  //
 
@@ -79,14 +79,14 @@ enum S2_TREND_MODE {
     S2_FORCE_BUY = 1,    // Force BUY (override=1)
     S2_FORCE_SELL = -1   // Force SELL (override=-1)
 };
-input S2_TREND_MODE S2_TrendMode = S2_FOLLOW_D1;  // S2: Trend (D1 auto/manual)
+input S2_TREND_MODE S2_TrendMode = S2_FOLLOW_D1;  // S2: Trend (D1 Auto/manual)
 
 //--- B.3 S3 NEWS Configuration (4) | Cau hinh tin tuc
 input int MinNewsLevelS3 = 20;         // S3: Min NEWS level (2-70)
 input bool EnableBonusNews = true;     // S3: Enable Bonus (extra on high NEWS)
 input int BonusOrderCount = 1;         // S3: Bonus count (1-5 orders)
-input int MinNewsLevelBonus = 2;      // S3: Min NEWS for Bonus (threshold)
-input double BonusLotMultiplier = 1.2; // S3: Bonus lot multiplier (1.0-10.0)
+input int MinNewsLevelBonus = 2;       // S3: Min NEWS for Bonus (threshold)
+input double BonusLotMultiplier = 1.2; // S3: Bonus lot multiplier (1.0-10)
 
 input string ___Sep_C___ = "___C. RISK PROTECTION _________";  //
 
@@ -101,7 +101,7 @@ input double Layer2_Divisor = 5.0;  // Layer2 divisor (margin/-5 = threshold)
 
 //--- C.2 Take profit (2) | Chot loi
 input bool   UseTakeProfit = false;  // Enable take profit (FALSE=OFF, TRUE=ON)
-input double TakeProfit_Multiplier = 3;  // TP multiplier (0.5=5%, 1.0=10%, 5.0=50%)
+input double TakeProfit_Multiplier = 3;  // TP_multi = Maxloss x A_lot x T_Profit
 
 input string ___Sep_D___ = "___D. AUXILIARY SETTINGS ______";  //
 
@@ -124,15 +124,15 @@ input bool DebugMode = false;      // Debug mode (verbose logging)
 // These will display as Unicode symbols in MT5 dashboard using Segoe UI font
 //=============================================================================
 
-#define ARROW_UP     "▲"   // U+25B2 - Up triangle
-#define ARROW_DOWN   "▼"   // U+25BC - Down triangle
-#define BULLET       "•"   // U+2022 - Bullet point (neutral)
+#define ARROW_UP     "↗"   // U+25B2 - Up triangle
+#define ARROW_DOWN   "ↆ"   // U+25BC - Down triangle
+#define BULLET       "ᴥ"   // U+2022 - Bullet point (neutral)
 #define CIRCLE_FULL  "●"   // U+25CF - Filled circle (position active)
-#define CIRCLE_EMPTY "○"   // U+25CB - Empty circle (no position)
+#define CIRCLE_EMPTY "◌"   // U+25CB - Empty circle (no position)
 #define LINE_H       "─"   // U+2500 - Horizontal line (separator)
 #define MULTIPLY     "×"   // U+00D7 - Multiplication sign
 #define MIDDOT       "·"   // U+00B7 - Middle dot (separator)
-#define EM_DASH      "—"   // U+2014 - Em dash (for empty values)
+#define EM_DASH      "…"   // U+2014 - Em dash (for empty values)
 
 //=============================================================================
 //  PART 2: DATA STRUCTURES (1 struct) | CAU TRUC DU LIEU
@@ -2360,6 +2360,12 @@ void OnDeinit(const int reason) {
     EventKillTimer();
     Comment("");  // Clear Comment | Xoa Comment
 
+    // Delete background panel FIRST | Xoa nen truoc tien
+    string bg_name = g_ea.symbol_prefix + "dash_bg";
+    if(::ObjectFind(0, bg_name) >= 0) {
+        ::ObjectDelete(0, bg_name);
+    }
+
     // Delete all dashboard labels (15 labels: dash_0 to dash_14) | Xoa tat ca label dashboard
     // ✅ FIX: Use g_ea.symbol_prefix to delete objects correctly | Su dung g_ea.symbol_prefix de xoa dung
     // IMPORTANT: Use direct MT5 call (not wrapper) to ensure objects are deleted
@@ -2616,48 +2622,17 @@ string FormatBonusStatus() {
 
 // Get all leverage types for account (FX, CRYPTO, METAL, INDEX) | Lay tat ca cac loai don bay cua tai khoan
 string GetAllLeverages() {
-    // Simplified: Display estimated leverages based on account leverage | Don gian: Hien thi don bay uoc tinh tu don bay tai khoan
+    // Display estimated leverages based on account leverage | Hien thi don bay uoc tinh tu don bay tai khoan
     // Most brokers use: FX=Full, Crypto=1/5, Metal=Full, Index=1/2 | Hau het san dung: FX=Day du, Crypto=1/5, Metal=Day du, Index=1/2
+    // SIMPLIFIED: Always show all 4 types (most brokers support all) | DON GIAN: Luon hien thi ca 4 loai (hau het san deu ho tro)
 
     int base_lev = (int)AccountLeverage();
-    string result = "";
 
-    // Check which symbol types are available by trying to select them | Kiem tra loai symbol nao co san
-    bool has_fx = false, has_crypto = false, has_metal = false, has_index = false;
-
-    // Try common FX symbols | Thu cac symbol FX pho bien
-    if(SymbolSelect("EURUSD", false) || SymbolSelect("GBPUSD", false) || SymbolSelect("USDJPY", false)) {
-        has_fx = true;
-    }
-
-    // Try common Crypto symbols | Thu cac symbol Crypto pho bien
-    if(SymbolSelect("BTCUSD", false) || SymbolSelect("BTCUSDT", false) || SymbolSelect("ETHUSD", false)) {
-        has_crypto = true;
-    }
-
-    // Try common Metal symbols | Thu cac symbol Metal pho bien
-    if(SymbolSelect("XAUUSD", false) || SymbolSelect("XAGUSD", false)) {
-        has_metal = true;
-    }
-
-    // Try common Index symbols | Thu cac symbol Index pho bien
-    if(SymbolSelect("SPX500", false) || SymbolSelect("US30", false) || SymbolSelect("NAS100", false)) {
-        has_index = true;
-    }
-
-    // Build result string with estimated leverages | Xay dung chuoi ket qua voi don bay uoc tinh
-    if(has_fx) result += "FX:" + IntegerToString(base_lev) + " ";
-    if(has_crypto) result += "CR:" + IntegerToString(base_lev / 5) + " ";
-    if(has_metal) result += "MT:" + IntegerToString(base_lev) + " ";
-    if(has_index) result += "IX:" + IntegerToString(base_lev / 2);
-
-    // Remove trailing space if exists | Xoa khoang trang cuoi neu co
-    if(StringLen(result) > 0 && StringGetCharacter(result, StringLen(result) - 1) == 32) {
-        result = StringSubstr(result, 0, StringLen(result) - 1);
-    }
-
-    // Fallback if nothing found | Du phong neu khong tim thay gi
-    if(result == "") result = "Lev:1:" + IntegerToString(base_lev);
+    // Build result with all 4 common leverage types | Xay dung ket qua voi 4 loai don bay pho bien
+    string result = "FX:" + IntegerToString(base_lev) + " " +
+                   "CR:" + IntegerToString(base_lev / 5) + " " +
+                   "MT:" + IntegerToString(base_lev) + " " +
+                   "IX:" + IntegerToString(base_lev / 2);
 
     return result;
 }
@@ -2669,8 +2644,8 @@ void CreateDashboardBackground(int y_start, int line_height, int total_rows) {
     // Calculate panel dimensions | Tinh kich thuoc panel
     int panel_x = 5;              // 5px from left edge | 5px tu canh trai
     int panel_y = y_start - 5;    // 5px above dashboard start | 5px phia tren dashboard
-    int panel_width = 500;        // 2/3 of original (750 * 2/3 = 500) | 2/3 kich thuoc cu
-    int panel_height = (total_rows * line_height) + 20;  // Height + extra padding for last row | Chieu cao + padding them cho dong cuoi
+    int panel_width = 490;        // 2/3 of original (750 * 2/3 = 500) | 2/3 kich thuoc cu
+    int panel_height = (total_rows * line_height) + 35;  // Height + extra padding for last row | Chieu cao + padding them cho dong cuoi
 
     // Dark brown color (professional look) | Mau nau dam (nhin chuyen nghiep)
     color bg_color = C'30,25,20';  // RGB: Very dark brown | Nau rat dam
@@ -2784,7 +2759,7 @@ void UpdateDashboard() {
 
     // ===== ROW 1: SEPARATOR (White) | HANG 1: DUONG PHAN CACH (Trang)
     string separator = "";
-    for(int i = 0; i < 55; i++) separator += LINE_H;  // 55 chars of ─
+    for(int i = 0; i < 60; i++) separator += LINE_H;  // 60 chars of ─
     CreateOrUpdateLabel(g_ea.symbol_prefix + "dash_1", separator, 10, y_pos, clrWhite, 8);
     y_pos += line_height;
 
@@ -2833,18 +2808,18 @@ void UpdateDashboard() {
 
         // Add padding to TF name for relative column alignment | Them padding cho ten TF de canh cot tuong doi
         string tf_padded = "";
-        if(G_TF_NAMES[tf] == "M1")  tf_padded = "M1__";   // 2 underscores
-        else if(G_TF_NAMES[tf] == "M5")  tf_padded = "M5__";
-        else if(G_TF_NAMES[tf] == "M15") tf_padded = "M15_";  // 1 underscore
-        else if(G_TF_NAMES[tf] == "M30") tf_padded = "M30_";
-        else if(G_TF_NAMES[tf] == "H1")  tf_padded = "H1__";  // 2 underscores
-        else if(G_TF_NAMES[tf] == "H4")  tf_padded = "H4__";
-        else if(G_TF_NAMES[tf] == "D1")  tf_padded = "D1__";
+        if(G_TF_NAMES[tf] == "M1")  tf_padded = " >> M1 .....";          // 2 underscores
+        else if(G_TF_NAMES[tf] == "M5")  tf_padded = " >> M5 .....";
+        else if(G_TF_NAMES[tf] == "M15") tf_padded = " >> M15...";    // 1 underscore
+        else if(G_TF_NAMES[tf] == "M30") tf_padded = " >> M30...";
+        else if(G_TF_NAMES[tf] == "H1")  tf_padded = " >> H1 .....";  // 2 underscores
+        else if(G_TF_NAMES[tf] == "H4")  tf_padded = " >> H4 .....";
+        else if(G_TF_NAMES[tf] == "D1")  tf_padded = " >> D1 .....";
 
         // Build row with | SEPARATORS for visual clarity | Xay dung dong voi | PHAN CACH de de doc
         // Format: |TF__ signal |pricediff| |timediff||s1||s2||s3||pnl||news||bonus|
-        string row = "|" + tf_padded + " " + sig + " |" + pd_str + "| |" + td_str + "||" +
-                     s1 + "||" + s2 + "||" + s3 + "||" + pnl_str + "||" + nw + "||" + bonus_str + "|";
+        string row = "|" + tf_padded + " " + sig + " |" + pd_str + "] [" + td_str + "] [" +
+                     s1 + "] [" + s2 + "] [" + s3 + "] [" + pnl_str + "] [" + nw + "] [" + bonus_str + "]";
 
         // Alternating colors | Mau xen ke
         color row_color = (tf % 2 == 0) ? clrDodgerBlue : clrWhite;
@@ -2883,10 +2858,11 @@ void UpdateDashboard() {
 
     // ===== ROW 11: BROKER INFO with ALL Leverage Types (Yellow) | HANG 11: THONG TIN SAN voi TAT CA Don bay (Vang)
     // Use cached values from g_ea (calculated ONCE in OnInit) | Dung gia tri cache tu g_ea (tinh MOT LAN trong OnInit)
+    // Format: Exness | Demo | FX:500 CR:100 MT:500 IX:250 | Sp:2 2s
     double current_spread = SymbolInfoInteger(_Symbol, SYMBOL_SPREAD) * SymbolInfoDouble(_Symbol, SYMBOL_POINT);
     string spread_str = DoubleToString(current_spread / SymbolInfoDouble(_Symbol, SYMBOL_POINT), 0);
 
-    string broker_info = g_ea.broker_name + " " + g_ea.account_type + " " + g_ea.all_leverages + " Sp:" + spread_str + " 2s";
+    string broker_info = g_ea.broker_name + " | " + g_ea.account_type + " | " + g_ea.all_leverages + " | Sp:" + spread_str + " 2s";
     CreateOrUpdateLabel(g_ea.symbol_prefix + "dash_11", broker_info, 10, y_pos, clrYellow, 7);
 
     // Clean up old unused labels (dash_12-dash_16) | Don dep nhan cu khong dung
@@ -3017,4 +2993,3 @@ void OnTimer() {
         CheckSPYBotHealth();
     }
 }
-
