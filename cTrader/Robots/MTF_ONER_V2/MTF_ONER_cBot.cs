@@ -611,6 +611,7 @@ namespace cAlgo.Robots
         /// PROGRESSIVE FORMULA: (base × strategy_multiplier) + tf_increment
         /// Strategy multipliers: S1=×2 (strong), S2=×1 (standard), S3=×3 (strongest)
         /// TF increments: M1=+0.01, M5=+0.02, M15=+0.03, M30=+0.04, H1=+0.05, H4=+0.06, D1=+0.07
+        /// FIXED: Use Symbol.QuantityToVolumeInUnits() for proper Forex/Crypto/Indices support
         /// </summary>
         private void InitializeLotSizes()
         {
@@ -627,14 +628,14 @@ namespace cAlgo.Robots
                     // Calculate progressive lot size
                     double lot = (FixedLotSize * strategyMultipliers[strategy]) + tfIncrements[tf];
 
-                    // Convert to volume units (cTrader uses micro units)
-                    _eaData.LotSizes[tf, strategy] = Symbol.NormalizeVolumeInUnits(lot * 100000);
+                    // Convert to volume units using cTrader API (works for Forex/Crypto/Indices)
+                    _eaData.LotSizes[tf, strategy] = Symbol.NormalizeVolumeInUnits(Symbol.QuantityToVolumeInUnits(lot));
                 }
             }
 
             Print($"[INIT] Lot sizes initialized (Progressive formula)");
-            Print($"  M1: S1={_eaData.LotSizes[0,0]/100000:F2} S2={_eaData.LotSizes[0,1]/100000:F2} S3={_eaData.LotSizes[0,2]/100000:F2}");
-            Print($"  D1: S1={_eaData.LotSizes[6,0]/100000:F2} S2={_eaData.LotSizes[6,1]/100000:F2} S3={_eaData.LotSizes[6,2]/100000:F2}");
+            Print($"  M1: S1={Symbol.VolumeInUnitsToQuantity(_eaData.LotSizes[0,0]):F2} S2={Symbol.VolumeInUnitsToQuantity(_eaData.LotSizes[0,1]):F2} S3={Symbol.VolumeInUnitsToQuantity(_eaData.LotSizes[0,2]):F2}");
+            Print($"  D1: S1={Symbol.VolumeInUnitsToQuantity(_eaData.LotSizes[6,0]):F2} S2={Symbol.VolumeInUnitsToQuantity(_eaData.LotSizes[6,1]):F2} S3={Symbol.VolumeInUnitsToQuantity(_eaData.LotSizes[6,2]):F2}");
         }
 
         /// <summary>
@@ -1089,7 +1090,38 @@ namespace cAlgo.Robots
             // S3: NEWS - Map 7 NEWS values to 14 variables (7 level + 7 direction)
             MapNewsTo14Variables();
 
+            // FIXED: Update Layer1 thresholds from CSDL max_loss (was missing in cBot!)
+            UpdateLayer1Thresholds();
+
             DebugPrint($"Mapped 7 TF | signal[0]={_eaData.CSDLRows[0].Signal} trend_d1={_eaData.TrendD1} news[M1]={_eaData.CSDLRows[0].News}");
+        }
+
+        /// <summary>
+        /// Update Layer1 stoploss thresholds from CSDL max_loss data
+        /// FIXED: This was missing in original cBot conversion!
+        /// Formula: threshold = max_loss_per_lot × lot_size
+        /// </summary>
+        private void UpdateLayer1Thresholds()
+        {
+            for (int tf = 0; tf < 7; tf++)
+            {
+                double max_loss_per_lot = _eaData.CSDLRows[tf].MaxLoss;
+
+                // Use fallback if invalid
+                if (Math.Abs(max_loss_per_lot) < 1.0)
+                {
+                    max_loss_per_lot = MaxLoss_Fallback;
+                }
+
+                // Calculate threshold for each strategy using pre-calculated lot sizes
+                for (int s = 0; s < 3; s++)
+                {
+                    double lot_quantity = Symbol.VolumeInUnitsToQuantity(_eaData.LotSizes[tf, s]);
+                    _eaData.Layer1Thresholds[tf, s] = max_loss_per_lot * lot_quantity;
+                }
+            }
+
+            DebugPrint($"Layer1 M1: S1=${_eaData.Layer1Thresholds[0, 0]:F2} S2=${_eaData.Layer1Thresholds[0, 1]:F2} S3=${_eaData.Layer1Thresholds[0, 2]:F2}");
         }
 
         /// <summary>
@@ -1262,7 +1294,7 @@ namespace cAlgo.Robots
                 _eaData.PositionFlags[tf, 0] = 1;
                 _printFailed[tf, 0] = false;  // Reset error flag on success
 
-                string log_msg = $">>> [OPEN] S1_{mode} TF={TF_NAMES[tf]} | #{result.Position.Id} {type_str} {volume / 100000:F2} @{price} | Sig={signal}";
+                string log_msg = $">>> [OPEN] S1_{mode} TF={TF_NAMES[tf]} | #{result.Position.Id} {type_str} {Symbol.VolumeInUnitsToQuantity(volume):F2} @{price} | Sig={signal}";
 
                 if (mode == "NEWS")
                 {
@@ -1396,7 +1428,7 @@ namespace cAlgo.Robots
                                   (S2_TrendMode == S2TrendMode.FORCE_BUY) ? "FBUY" : "FSELL";
                 string type_str = (current_signal == 1) ? "BUY" : "SELL";
 
-                Print($">>> [OPEN] S2_TREND TF={TF_NAMES[tf]} | #{result.Position.Id} {type_str} {volume / 100000:F2} @{price} | Sig={current_signal} Trend:{trend_str} Mode:{mode_str} | Timestamp:{timestamp} <<<");
+                Print($">>> [OPEN] S2_TREND TF={TF_NAMES[tf]} | #{result.Position.Id} {type_str} {Symbol.VolumeInUnitsToQuantity(volume):F2} @{price} | Sig={current_signal} Trend:{trend_str} Mode:{mode_str} | Timestamp:{timestamp} <<<");
             }
             else
             {
@@ -1449,7 +1481,7 @@ namespace cAlgo.Robots
                 string arrow = (news_direction > 0) ? "↑" : "↓";
                 string type_str = (current_signal == 1) ? "BUY" : "SELL";
 
-                Print($">>> [OPEN] S3_NEWS TF={TF_NAMES[tf]} | #{result.Position.Id} {type_str} {volume / 100000:F2} @{price} | Sig={current_signal} News={(news_direction > 0 ? "+" : "")}{news_level}{arrow} | Timestamp:{timestamp} <<<");
+                Print($">>> [OPEN] S3_NEWS TF={TF_NAMES[tf]} | #{result.Position.Id} {type_str} {Symbol.VolumeInUnitsToQuantity(volume):F2} @{price} | Sig={current_signal} News={(news_direction > 0 ? "+" : "")}{news_level}{arrow} | Timestamp:{timestamp} <<<");
             }
             else
             {
@@ -1487,9 +1519,10 @@ namespace cAlgo.Robots
                 if (news_level == 1 || news_level == 10) continue;
 
                 // Calculate BONUS lot (S3 lot × multiplier)
-                double bonus_lot = _eaData.LotSizes[tf, 2] * BonusLotMultiplier;
-                // Normalize to prevent invalid volume
-                bonus_lot = Math.Round(bonus_lot / 100000, 2) * 100000;
+                // First convert to standard lots, multiply, then back to volume units
+                double s3_lot = Symbol.VolumeInUnitsToQuantity(_eaData.LotSizes[tf, 2]);
+                double bonus_lot_quantity = s3_lot * BonusLotMultiplier;
+                double bonus_lot = Symbol.NormalizeVolumeInUnits(Symbol.QuantityToVolumeInUnits(bonus_lot_quantity));
 
                 // Open BonusOrderCount orders
                 int opened_count = 0;
@@ -1517,8 +1550,9 @@ namespace cAlgo.Robots
                 if (opened_count > 0)
                 {
                     string arrow = (news_direction > 0) ? "↑" : "↓";
-                    double total_lot = opened_count * bonus_lot;
-                    Print($">>> [OPEN] BONUS TF={TF_NAMES[tf]} | {opened_count}×{(news_direction == 1 ? "BUY" : "SELL")} @{bonus_lot / 100000:F2} Total:{total_lot / 100000:F2} @{entry_price} | News={(news_direction > 0 ? "+" : "")}{news_level}{arrow} | Multiplier:{BonusLotMultiplier:F1}x Tickets:{ticket_list} <<<");
+                    double bonus_lot_display = Symbol.VolumeInUnitsToQuantity(bonus_lot);
+                    double total_lot_display = opened_count * bonus_lot_display;
+                    Print($">>> [OPEN] BONUS TF={TF_NAMES[tf]} | {opened_count}×{(news_direction == 1 ? "BUY" : "SELL")} @{bonus_lot_display:F2} Total:{total_lot_display:F2} @{entry_price} | News={(news_direction > 0 ? "+" : "")}{news_level}{arrow} | Multiplier:{BonusLotMultiplier:F1}x Tickets:{ticket_list} <<<");
                 }
             }
         }
@@ -1555,7 +1589,7 @@ namespace cAlgo.Robots
                 if (strategy_index >= 0)
                 {
                     string order_type_str = (position.TradeType == TradeType.Buy) ? "BUY" : "SELL";
-                    Print($">> [CLOSE] SIGNAL_CHG TF={TF_NAMES[tf]} S={(strategy_index + 1)} | #{position.Id} {order_type_str} {position.VolumeInUnits / 100000:F2} | Profit=${position.NetProfit:F2} | Old:{signal_old} New:{signal_new} | Timestamp:{timestamp_new} <<");
+                    Print($">> [CLOSE] SIGNAL_CHG TF={TF_NAMES[tf]} S={(strategy_index + 1)} | #{position.Id} {order_type_str} {Symbol.VolumeInUnitsToQuantity(position.VolumeInUnits):F2} | Profit=${position.NetProfit:F2} | Old:{signal_old} New:{signal_new} | Timestamp:{timestamp_new} <<");
 
                     CloseOrderSafely(position, "SIGNAL_CHANGE");
                 }
@@ -1606,7 +1640,7 @@ namespace cAlgo.Robots
                 // Consolidated log
                 if (total_count > 0)
                 {
-                    Print($">> [CLOSE] BONUS_M1 TF={TF_NAMES[tf]} | {total_count} orders Total:{total_lot / 100000:F2} | Profit=${total_profit:F2} | Closed:{closed_count}/{total_count} <<");
+                    Print($">> [CLOSE] BONUS_M1 TF={TF_NAMES[tf]} | {total_count} orders Total:{Symbol.VolumeInUnitsToQuantity(total_lot):F2} | Profit=${total_profit:F2} | Closed:{closed_count}/{total_count} <<");
                 }
 
                 _eaData.PositionFlags[tf, 2] = 0;  // Reset BONUS flag
@@ -1727,7 +1761,7 @@ namespace cAlgo.Robots
                                 {
                                     // Layer2: Calculate from margin (emergency)
                                     // FIXED: Use actual margin requirement, not pip value
-                                    double lotSize = position.VolumeInUnits / 100000.0;
+                                    double lotSize = Symbol.VolumeInUnitsToQuantity(position.VolumeInUnits);
                                     double margin_usd = lotSize * Symbol.DynamicLeverage[0].Margin;
                                     sl_threshold = -(margin_usd / Layer2_Divisor);
                                     mode_name = "LAYER2_SL";
@@ -1742,12 +1776,12 @@ namespace cAlgo.Robots
                                     if (mode_name == "LAYER2_SL")
                                     {
                                         // FIXED: Use actual margin requirement, not pip value
-                                        double lotSize = position.VolumeInUnits / 100000.0;
+                                        double lotSize = Symbol.VolumeInUnitsToQuantity(position.VolumeInUnits);
                                         double margin_usd = lotSize * Symbol.DynamicLeverage[0].Margin;
                                         margin_info = $" Margin=${margin_usd:F2}";
                                     }
 
-                                    Print($">> [CLOSE] {short_mode} TF={TF_NAMES[tf]} S={(s + 1)} | #{position.Id} {order_type_str} {position.VolumeInUnits / 100000:F2} | Loss=${profit:F2} | Threshold=${sl_threshold:F2}{margin_info} <<");
+                                    Print($">> [CLOSE] {short_mode} TF={TF_NAMES[tf]} S={(s + 1)} | #{position.Id} {order_type_str} {Symbol.VolumeInUnitsToQuantity(position.VolumeInUnits):F2} | Loss=${profit:F2} | Threshold=${sl_threshold:F2}{margin_info} <<");
 
                                     if (CloseOrderSafely(position, mode_name))
                                     {
@@ -1767,13 +1801,14 @@ namespace cAlgo.Robots
                                     max_loss_per_lot = Math.Abs(MaxLoss_Fallback);  // 1000
                                 }
 
-                                double tp_threshold = (max_loss_per_lot * _eaData.LotSizes[tf, s] / 100000) * TakeProfit_Multiplier;
+                                double lot_quantity = Symbol.VolumeInUnitsToQuantity(_eaData.LotSizes[tf, s]);
+                                double tp_threshold = (max_loss_per_lot * lot_quantity) * TakeProfit_Multiplier;
 
                                 // Check and close if profit exceeds threshold
                                 if (profit >= tp_threshold)
                                 {
                                     string order_type_str = (position.TradeType == TradeType.Buy) ? "BUY" : "SELL";
-                                    Print($">> [CLOSE] TP TF={TF_NAMES[tf]} S={(s + 1)} | #{position.Id} {order_type_str} {position.VolumeInUnits / 100000:F2} | Profit=${profit:F2} | Threshold=${tp_threshold:F2} Mult={TakeProfit_Multiplier:F2} <<");
+                                    Print($">> [CLOSE] TP TF={TF_NAMES[tf]} S={(s + 1)} | #{position.Id} {order_type_str} {Symbol.VolumeInUnitsToQuantity(position.VolumeInUnits):F2} | Profit=${profit:F2} | Threshold=${tp_threshold:F2} Mult={TakeProfit_Multiplier:F2} <<");
 
                                     if (CloseOrderSafely(position, "TAKE_PROFIT"))
                                     {
