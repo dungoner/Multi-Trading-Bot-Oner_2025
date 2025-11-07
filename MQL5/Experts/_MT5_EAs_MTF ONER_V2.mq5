@@ -2177,6 +2177,10 @@ void CheckSPYBotHealth() {
     // Get M1 timestamp from CSDL (already available) | Lay timestamp M1 tu CSDL (da co san)
     datetime m1_timestamp = g_ea.timestamp_old[0];
 
+    // CRITICAL FIX: Skip health check if CSDL not read yet (timestamp = 0 on first start)
+    // Without this, EA enters infinite restart loop! | Neu thieu, EA se bi lap vo han khi khoi dong!
+    if(m1_timestamp == 0) return;  // Wait for first CSDL read | Doi doc CSDL lan dau
+
     // Calculate time difference | Tinh chenh lech thoi gian
     int diff_seconds = (int)(current_time - m1_timestamp);
     int diff_hours = diff_seconds / 3600;
