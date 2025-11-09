@@ -2004,8 +2004,8 @@ if mode == 0:
         else:
             sender_config = bot_config.get("sender", {
                 "vps_ip": "",
-                "csdl_folder": "E:/PRO_ONER/MQL4/Files/DataAutoOner3/",
-                "history_folder": "E:/PRO_ONER/MQL4/Files/DataAutoOner/HISTORY/",
+                "csdl_folder": "",
+                "history_folder": "",
                 "polling_interval": 1,
                 "server_timezone_offset": 2,
                 "vietnam_timezone_offset": 7
@@ -2014,8 +2014,8 @@ if mode == 0:
         # Load receiver settings (Mode 1) - fallback to defaults
         receiver_config = bot_config.get("receiver", {
             "bot1_url": "",
-            "output_folder": "C:/PRO_ONER/MQL4/Files/DataAutoOner3/",
-            "output_folder2": "C:/PRO_ONER/MQL4/Files/DataAutoOner2/",
+            "output_folder": "",
+            "output_folder2": "",
             "polling_interval": 1,
             "http_timeout": 5
         })
@@ -3717,8 +3717,8 @@ elif mode == 1:
     RECEIVER_CONFIG = bot_config.get('receiver', {
         "bot1_url": "",
         "polling_interval": 1,
-        "output_folder": "C:/PRO_ONER/MQL4/Files/DataAutoOner3/",
-        "output_folder2": "C:/PRO_ONER/MQL4/Files/DataAutoOner2/",
+        "output_folder": "",
+        "output_folder2": "",
         "dashboard_port": 9070,
         "http_timeout": 5,
     })
@@ -4237,8 +4237,8 @@ elif mode == 1:
         # Load sender settings (Mode 0) - fallback to defaults
         sender_config = bot_config.get("sender", {
             "vps_ip": "",
-            "csdl_folder": "E:/PRO_ONER/MQL4/Files/DataAutoOner3/",
-            "history_folder": "E:/PRO_ONER/MQL4/Files/DataAutoOner/HISTORY/",
+            "csdl_folder": "",
+            "history_folder": "",
             "polling_interval": 1,
             "server_timezone_offset": 2,
             "vietnam_timezone_offset": 7
@@ -4250,8 +4250,8 @@ elif mode == 1:
         else:
             receiver_config = bot_config.get("receiver", {
                 "bot1_url": "",
-                "output_folder": "C:/PRO_ONER/MQL4/Files/DataAutoOner3/",
-                "output_folder2": "C:/PRO_ONER/MQL4/Files/DataAutoOner2/",
+                "output_folder": "",
+                "output_folder2": "",
                 "polling_interval": 1,
                 "http_timeout": 5
             })

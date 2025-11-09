@@ -62,8 +62,8 @@ bot_config = load_bot_config()
 RECEIVER_CONFIG = bot_config.get('receiver', {
     "bot1_url": "",
     "polling_interval": 1,
-    "output_folder": "C:/PRO_ONER/MQL4/Files/DataAutoOner3/",
-    "output_folder2": "C:/PRO_ONER/MQL4/Files/DataAutoOner2/",
+    "output_folder": "",
+    "output_folder2": "",
     "dashboard_port": 9070,
     "http_timeout": 5,
 })
