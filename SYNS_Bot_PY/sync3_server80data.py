@@ -2094,7 +2094,7 @@ if mode == 0:
                             <div class="panel-body">
                                 <div class="form-group">
                                     <label>VPS IP Address</label>
-                                    <input type="text" name="sender_vps_ip" value="{sender_config.get('vps_ip', '147.189.173.121')}" placeholder="147.189.173.121">
+                                    <input type="text" name="sender_vps_ip" value="{sender_config.get('vps_ip', '147.189.173.121')}" placeholder="{sender_config.get('vps_ip', '147.189.173.121')}">
                                 </div>
                                 <div class="form-group">
                                     <label>CSDL Folder Path (Source from SPY Bot)</label>
@@ -2151,7 +2151,7 @@ if mode == 0:
                             <div class="panel-body">
                                 <div class="form-group">
                                     <label>Bot 1 URL (VPS Address with Port 80)</label>
-                                    <input type="text" name="receiver_bot1_url" value="{receiver_config.get('bot1_url', 'http://147.189.173.121:80')}" placeholder="http://147.189.173.121:80">
+                                    <input type="text" name="receiver_bot1_url" value="{receiver_config.get('bot1_url', 'http://147.189.173.121:80')}" placeholder="{receiver_config.get('bot1_url', 'http://147.189.173.121:80')}">
                                 </div>
                                 <div class="form-group">
                                     <label>Output Folder 3 (Main - DataAutoOner3)</label>
@@ -4330,7 +4330,7 @@ elif mode == 1:
                             <div class="panel-body">
                                 <div class="form-group">
                                     <label>VPS IP Address</label>
-                                    <input type="text" name="sender_vps_ip" value="{sender_config.get('vps_ip', '147.189.173.121')}" placeholder="147.189.173.121">
+                                    <input type="text" name="sender_vps_ip" value="{sender_config.get('vps_ip', '147.189.173.121')}" placeholder="{sender_config.get('vps_ip', '147.189.173.121')}">
                                 </div>
                                 <div class="form-group">
                                     <label>CSDL Folder Path (Source from SPY Bot)</label>
@@ -4387,7 +4387,7 @@ elif mode == 1:
                             <div class="panel-body">
                                 <div class="form-group">
                                     <label>Bot 1 URL (VPS Address with Port 80)</label>
-                                    <input type="text" name="receiver_bot1_url" value="{receiver_config.get('bot1_url', 'http://147.189.173.121:80')}" placeholder="http://147.189.173.121:80">
+                                    <input type="text" name="receiver_bot1_url" value="{receiver_config.get('bot1_url', 'http://147.189.173.121:80')}" placeholder="{receiver_config.get('bot1_url', 'http://147.189.173.121:80')}">
                                 </div>
                                 <div class="form-group">
                                     <label>Output Folder 3 (Main - DataAutoOner3)</label>
