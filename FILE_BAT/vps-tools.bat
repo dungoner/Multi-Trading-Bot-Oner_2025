@@ -3,7 +3,7 @@ REM ============================================================
 REM VPS TOOLS - TICH HOP 3 CHUC NANG STANDALONE
 REM 0. Chinh Timezone (0-5)
 REM 1. Quan ly Startup Folder (10-13)
-REM 2. Them App vao Startup (20, 21, 23, 24)
+REM 2. Them App vao Startup (20, 21, 23)
 REM MENU PHANG - TAT CA OPTIONS TRONG 1 MAN HINH
 REM ============================================================
 
@@ -30,8 +30,7 @@ echo.
 echo 2. THEM APP VAO STARTUP
 echo   20. MetaTrader 4 (MT4)
 echo   21. MetaTrader 5 (MT5)
-echo   23. Batch File (.bat)
-echo   24. Custom Executable (.exe)
+echo   23. Them bat ky file nao (bat, exe, py, docx...)
 echo.
 echo X. Thoat
 echo.
@@ -52,11 +51,10 @@ if "%CHOICE%"=="11" goto :func_11
 if "%CHOICE%"=="12" goto :func_12
 if "%CHOICE%"=="13" goto :func_13
 
-REM Add to Startup options (20, 21, 23, 24)
+REM Add to Startup options (20, 21, 23)
 if "%CHOICE%"=="20" goto :func_20
 if "%CHOICE%"=="21" goto :func_21
 if "%CHOICE%"=="23" goto :func_23
-if "%CHOICE%"=="24" goto :func_24
 
 REM Exit
 if /i "%CHOICE%"=="X" goto :exit_program
@@ -349,58 +347,27 @@ goto :create_shortcut
 :func_23
 cls
 echo ========================================
-echo   [23] THEM BATCH FILE VAO STARTUP
+echo   [23] THEM BAT KY FILE NAO VAO STARTUP
 echo ========================================
 echo.
-echo Nhap duong dan day du den file .bat:
+echo Nhap duong dan day du den file:
 echo Vi du: C:\Trading\start_bot.bat
+echo        C:\MyApp\app.exe
+echo        C:\Data\report.py
 echo.
-set /p BAT_PATH="Duong dan .bat: "
+set /p FILE_PATH="Duong dan file: "
 
-if not exist "%BAT_PATH%" (
+if not exist "%FILE_PATH%" (
     echo.
-    echo [LOI] File khong ton tai: %BAT_PATH%
-    echo.
-    pause
-    goto :main_menu
-)
-
-set STARTUP_FOLDER=%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup
-copy "%BAT_PATH%" "%STARTUP_FOLDER%\" >nul 2>&1
-
-echo.
-echo [OK] Da copy file vao Startup folder!
-echo File .bat se tu dong chay khi login!
-echo.
-pause
-goto :main_menu
-
-:func_24
-cls
-echo ========================================
-echo   [24] THEM CUSTOM EXE VAO STARTUP
-echo ========================================
-echo.
-echo Nhap duong dan day du den file .exe:
-echo Vi du: C:\Program Files\MyApp\app.exe
-echo.
-set /p EXE_PATH="Duong dan .exe: "
-
-if not exist "%EXE_PATH%" (
-    echo.
-    echo [LOI] File khong ton tai: %EXE_PATH%
+    echo [LOI] File khong ton tai: %FILE_PATH%
     echo.
     pause
     goto :main_menu
 )
 
-echo.
-echo Nhap ten shortcut (khong can .lnk):
-echo Vi du: MyTradingApp
-echo.
-set /p APP_NAME="Ten shortcut: "
-
-set APP_PATH=%EXE_PATH%
+REM Lay ten file (khong co extension)
+for %%F in ("%FILE_PATH%") do set APP_NAME=%%~nF
+set APP_PATH=%FILE_PATH%
 goto :create_shortcut
 
 :create_shortcut
@@ -455,9 +422,9 @@ echo 1. QUAN LY STARTUP FOLDER (10-13)
 echo   - Mo User/System Startup folders
 echo   - Xem danh sach apps tu dong chay
 echo.
-echo 2. THEM APP VAO STARTUP (20, 21, 23, 24)
+echo 2. THEM APP VAO STARTUP (20, 21, 23)
 echo   - MetaTrader 4/5
-echo   - Batch files, Custom executables
+echo   - Bat ky file nao (bat, exe, py, docx...)
 echo   - Tu dong tao shortcuts
 echo.
 echo ========================================
