@@ -137,7 +137,7 @@ def create_default_bot_config():
     return {
         "quiet_mode": False,
         "sender": {
-            "api_key": "9016",
+            "api_key": "",
             "vps_ip": "dungalading.duckdns.org",
             "api_port": 80,
             "dashboard_port": 9070,
