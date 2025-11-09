@@ -416,7 +416,6 @@ echo Set oWS = WScript.CreateObject("WScript.Shell") > "%VBS_FILE%"
 echo sLinkFile = "%STARTUP_FOLDER%\%APP_NAME%.lnk" >> "%VBS_FILE%"
 echo Set oLink = oWS.CreateShortcut(sLinkFile) >> "%VBS_FILE%"
 echo oLink.TargetPath = "%APP_PATH%" >> "%VBS_FILE%"
-echo oLink.WorkingDirectory = "%%~dp0" >> "%VBS_FILE%"
 echo oLink.Description = "%APP_NAME% - Auto-start on login" >> "%VBS_FILE%"
 echo oLink.Save >> "%VBS_FILE%"
 
