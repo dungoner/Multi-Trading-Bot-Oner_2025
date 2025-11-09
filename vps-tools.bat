@@ -2,8 +2,8 @@
 REM ============================================================
 REM VPS TOOLS - TICH HOP 3 CHUC NANG STANDALONE
 REM 0. Chinh Timezone (0-5)
-REM 1. Quan ly Startup Folder (10-14)
-REM 2. Them App vao Startup (20-25)
+REM 1. Quan ly Startup Folder (10-13)
+REM 2. Them App vao Startup (20, 21, 23, 24)
 REM MENU PHANG - TAT CA OPTIONS TRONG 1 MAN HINH
 REM ============================================================
 
@@ -30,7 +30,6 @@ echo.
 echo 2. THEM APP VAO STARTUP
 echo   20. MetaTrader 4 (MT4)
 echo   21. MetaTrader 5 (MT5)
-echo   22. Python Script (.py)
 echo   23. Batch File (.bat)
 echo   24. Custom Executable (.exe)
 echo.
@@ -53,10 +52,9 @@ if "%CHOICE%"=="11" goto :func_11
 if "%CHOICE%"=="12" goto :func_12
 if "%CHOICE%"=="13" goto :func_13
 
-REM Add to Startup options (20-24)
+REM Add to Startup options (20, 21, 23, 24)
 if "%CHOICE%"=="20" goto :func_20
 if "%CHOICE%"=="21" goto :func_21
-if "%CHOICE%"=="22" goto :func_22
 if "%CHOICE%"=="23" goto :func_23
 if "%CHOICE%"=="24" goto :func_24
 
@@ -348,37 +346,6 @@ set APP_NAME=MetaTrader 5
 set APP_PATH=%MT5_PATH%
 goto :create_shortcut
 
-:func_22
-cls
-echo ========================================
-echo   [22] THEM PYTHON SCRIPT VAO STARTUP
-echo ========================================
-echo.
-echo Nhap duong dan day du den file .py:
-echo Vi du: C:\Trading\bot.py
-echo.
-set /p PY_PATH="Duong dan .py: "
-
-if not exist "%PY_PATH%" (
-    echo.
-    echo [LOI] File khong ton tai: %PY_PATH%
-    echo.
-    pause
-    goto :main_menu
-)
-
-set STARTUP_FOLDER=%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup
-set BAT_WRAPPER=%STARTUP_FOLDER%\run_python_bot.bat
-echo @echo off > "%BAT_WRAPPER%"
-echo python "%PY_PATH%" >> "%BAT_WRAPPER%"
-
-echo.
-echo [OK] Da tao file wrapper: %BAT_WRAPPER%
-echo Python script se tu dong chay khi login!
-echo.
-pause
-goto :main_menu
-
 :func_23
 cls
 echo ========================================
@@ -489,9 +456,9 @@ echo 1. QUAN LY STARTUP FOLDER (10-13)
 echo   - Mo User/System Startup folders
 echo   - Xem danh sach apps tu dong chay
 echo.
-echo 2. THEM APP VAO STARTUP (20-24)
+echo 2. THEM APP VAO STARTUP (20, 21, 23, 24)
 echo   - MetaTrader 4/5
-echo   - Python scripts, Batch files, Custom executables
+echo   - Batch files, Custom executables
 echo   - Tu dong tao shortcuts
 echo.
 echo ========================================
