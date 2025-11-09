@@ -7,7 +7,7 @@ echo      SYNC SERVER - CHON BOT DE CHAY (4 OPTIONS)
 echo ============================================================
 echo.
 echo  [0] Bot 0 - SENDER (Variant)
-echo      File: sync0_http80_sender.py
+echo      File: sync_http80_sender.py
 echo      Port 80 + 9070
 echo.
 echo  [1] Bot 1 - SENDER (Optimized) - KHUYEN NGHI
@@ -20,7 +20,7 @@ echo      Port 9070
 echo      Pull from: dungalading.duckdns.org:80
 echo.
 echo  [3] Bot 3 - INTEGRATED (2-in-1)
-echo      File: sync3_server80data.py
+echo      File: sync_server80data.py
 echo      - Mode 0: SENDER (Bot 1)
 echo      - Mode 1: RECEIVER (Bot 2)
 echo      - Chon mode trong bot_config.json
@@ -42,12 +42,12 @@ cls
 echo ============================================================
 echo  DANG CHAY BOT 0 - SENDER (Variant)
 echo ============================================================
-echo  File: sync0_http80_sender.py
+echo  File: sync_http80_sender.py
 echo  Port: 80 (API) + 9070 (Dashboard)
 echo ============================================================
 echo.
 cd /d "%~dp0"
-python\python.exe sync0_http80_sender.py
+python\python.exe sync_http80_sender.py
 pause
 exit
 
@@ -86,7 +86,7 @@ cls
 echo ============================================================
 echo  DANG CHAY BOT 3 - INTEGRATED (2-in-1)
 echo ============================================================
-echo  File: sync3_server80data.py
+echo  File: sync_server80data.py
 echo.
 echo  Kiem tra file bot_config.json:
 echo  - "mode": 0 -^> SENDER (Bot 1)
@@ -94,6 +94,6 @@ echo  - "mode": 1 -^> RECEIVER (Bot 2)
 echo ============================================================
 echo.
 cd /d "%~dp0"
-python\python.exe sync3_server80data.py
+python\python.exe sync_server80data.py
 pause
 exit

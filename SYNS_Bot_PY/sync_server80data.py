@@ -171,8 +171,8 @@ if mode == 0:
         """Create default unified bot configuration"""
         return {
             "server": {
-                "api_key": "",
-                "vps_ip": "dungalading.duckdns.org",
+                "api_key": "9016",
+                "vps_ip": "147.189.173.121",
                 "api_port": 80,
                 "dashboard_port": 9070,
                 "server_ip": "0.0.0.0",
@@ -2094,15 +2094,15 @@ if mode == 0:
                             <div class="panel-body">
                                 <div class="form-group">
                                     <label>VPS IP Address</label>
-                                    <input type="text" name="sender_vps_ip" value="{sender_config.get('vps_ip', '')}" placeholder="your-domain.duckdns.org">
+                                    <input type="text" name="sender_vps_ip" value="{sender_config.get('vps_ip', '147.189.173.121')}" placeholder="147.189.173.121">
                                 </div>
                                 <div class="form-group">
                                     <label>CSDL Folder Path (Source from SPY Bot)</label>
-                                    <input type="text" name="sender_csdl_folder" value="{sender_config.get('csdl_folder', '')}" placeholder="{sender_config.get('csdl_folder', '')}">
+                                    <input type="text" name="sender_csdl_folder" value="{sender_config.get('csdl_folder', 'E:/PRO_ONER/MQL4/Files/DataAutoOner3/')}" placeholder="E:/PRO_ONER/MQL4/Files/DataAutoOner3/">
                                 </div>
                                 <div class="form-group">
                                     <label>History Folder Path</label>
-                                    <input type="text" name="sender_history_folder" value="{sender_config.get('history_folder', '')}" placeholder="{sender_config.get('history_folder', '')}">
+                                    <input type="text" name="sender_history_folder" value="{sender_config.get('history_folder', 'E:/PRO_ONER/MQL4/Files/DataAutoOner/HISTORY/')}" placeholder="E:/PRO_ONER/MQL4/Files/DataAutoOner/HISTORY/">
                                 </div>
                                 <div class="form-group">
                                     <label>File Polling Interval (Check CSDL changes)</label>
@@ -2151,15 +2151,15 @@ if mode == 0:
                             <div class="panel-body">
                                 <div class="form-group">
                                     <label>Bot 1 URL (VPS Address with Port 80)</label>
-                                    <input type="text" name="receiver_bot1_url" value="{receiver_config.get('bot1_url', '')}" placeholder="http://your-domain.duckdns.org:80">
+                                    <input type="text" name="receiver_bot1_url" value="{receiver_config.get('bot1_url', 'http://147.189.173.121:80')}" placeholder="http://147.189.173.121:80">
                                 </div>
                                 <div class="form-group">
                                     <label>Output Folder 3 (Main - DataAutoOner3)</label>
-                                    <input type="text" name="receiver_output_folder" value="{receiver_config.get('output_folder', '')}" placeholder="{receiver_config.get('output_folder', '')}">
+                                    <input type="text" name="receiver_output_folder" value="{receiver_config.get('output_folder', 'C:/PRO_ONER/MQL4/Files/DataAutoOner3/')}" placeholder="C:/PRO_ONER/MQL4/Files/DataAutoOner3/">
                                 </div>
                                 <div class="form-group">
                                     <label>Output Folder 2 (Backup - DataAutoOner2)</label>
-                                    <input type="text" name="receiver_output_folder2" value="{receiver_config.get('output_folder2', '')}" placeholder="{receiver_config.get('output_folder2', '')}">
+                                    <input type="text" name="receiver_output_folder2" value="{receiver_config.get('output_folder2', 'C:/PRO_ONER/MQL4/Files/DataAutoOner2/')}" placeholder="C:/PRO_ONER/MQL4/Files/DataAutoOner2/">
                                 </div>
                                 <div class="form-group">
                                     <label>Polling Interval (Pull from Bot 1)</label>
@@ -3033,15 +3033,15 @@ if mode == 0:
                         </h3>
                         <div class="form-group">
                             <label>Files Source Folder</label>
-                            <input type="text" id="source_files" value="{symlink_cfg['source_folders']['files']}" placeholder="{symlink_cfg['source_folders'].get('files', '')}">
+                            <input type="text" id="source_files" value="{symlink_cfg['source_folders']['files']}" placeholder="E:/PRO_ONER/MQL4/Files">
                         </div>
                         <div class="form-group">
                             <label>Presets Source Folder</label>
-                            <input type="text" id="source_presets" value="{symlink_cfg['source_folders']['presets']}" placeholder="{symlink_cfg['source_folders'].get('presets', '')}">
+                            <input type="text" id="source_presets" value="{symlink_cfg['source_folders']['presets']}" placeholder="E:/PRO_ONER/MQL4/Presets">
                         </div>
                         <div class="form-group">
                             <label>Data Oner Source Folder</label>
-                            <input type="text" id="source_data_oner" value="{symlink_cfg['source_folders']['data_oner']}" placeholder="{symlink_cfg['source_folders'].get('data_oner', '')}">
+                            <input type="text" id="source_data_oner" value="{symlink_cfg['source_folders']['data_oner']}" placeholder="E:/PRO_ONER/MQL4/Data Oner">
                         </div>
                         <div style="text-align: center; margin: 20px 0;">
                             <button class="btn btn-primary" onclick="saveSourceConfig()">💾 SAVE SOURCE CONFIG</button>
@@ -4330,15 +4330,15 @@ elif mode == 1:
                             <div class="panel-body">
                                 <div class="form-group">
                                     <label>VPS IP Address</label>
-                                    <input type="text" name="sender_vps_ip" value="{sender_config.get('vps_ip', '')}" placeholder="your-domain.duckdns.org">
+                                    <input type="text" name="sender_vps_ip" value="{sender_config.get('vps_ip', '147.189.173.121')}" placeholder="147.189.173.121">
                                 </div>
                                 <div class="form-group">
                                     <label>CSDL Folder Path (Source from SPY Bot)</label>
-                                    <input type="text" name="sender_csdl_folder" value="{sender_config.get('csdl_folder', '')}" placeholder="{sender_config.get('csdl_folder', '')}">
+                                    <input type="text" name="sender_csdl_folder" value="{sender_config.get('csdl_folder', 'E:/PRO_ONER/MQL4/Files/DataAutoOner3/')}" placeholder="E:/PRO_ONER/MQL4/Files/DataAutoOner3/">
                                 </div>
                                 <div class="form-group">
                                     <label>History Folder Path</label>
-                                    <input type="text" name="sender_history_folder" value="{sender_config.get('history_folder', '')}" placeholder="{sender_config.get('history_folder', '')}">
+                                    <input type="text" name="sender_history_folder" value="{sender_config.get('history_folder', 'E:/PRO_ONER/MQL4/Files/DataAutoOner/HISTORY/')}" placeholder="E:/PRO_ONER/MQL4/Files/DataAutoOner/HISTORY/">
                                 </div>
                                 <div class="form-group">
                                     <label>File Polling Interval (Check CSDL changes)</label>
@@ -4387,15 +4387,15 @@ elif mode == 1:
                             <div class="panel-body">
                                 <div class="form-group">
                                     <label>Bot 1 URL (VPS Address with Port 80)</label>
-                                    <input type="text" name="receiver_bot1_url" value="{receiver_config.get('bot1_url', '')}" placeholder="http://your-domain.duckdns.org:80">
+                                    <input type="text" name="receiver_bot1_url" value="{receiver_config.get('bot1_url', 'http://147.189.173.121:80')}" placeholder="http://147.189.173.121:80">
                                 </div>
                                 <div class="form-group">
                                     <label>Output Folder 3 (Main - DataAutoOner3)</label>
-                                    <input type="text" name="receiver_output_folder" value="{receiver_config.get('output_folder', '')}" placeholder="{receiver_config.get('output_folder', '')}">
+                                    <input type="text" name="receiver_output_folder" value="{receiver_config.get('output_folder', 'C:/PRO_ONER/MQL4/Files/DataAutoOner3/')}" placeholder="C:/PRO_ONER/MQL4/Files/DataAutoOner3/">
                                 </div>
                                 <div class="form-group">
                                     <label>Output Folder 2 (Backup - DataAutoOner2)</label>
-                                    <input type="text" name="receiver_output_folder2" value="{receiver_config.get('output_folder2', '')}" placeholder="{receiver_config.get('output_folder2', '')}">
+                                    <input type="text" name="receiver_output_folder2" value="{receiver_config.get('output_folder2', 'C:/PRO_ONER/MQL4/Files/DataAutoOner2/')}" placeholder="C:/PRO_ONER/MQL4/Files/DataAutoOner2/">
                                 </div>
                                 <div class="form-group">
                                     <label>Polling Interval (Pull from Bot 1)</label>

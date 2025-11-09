@@ -137,8 +137,8 @@ def create_default_bot_config():
     return {
         "quiet_mode": False,
         "sender": {
-            "api_key": "",
-            "vps_ip": "dungalading.duckdns.org",
+            "api_key": "9016",
+            "vps_ip": "147.189.173.121",
             "api_port": 80,
             "dashboard_port": 9070,
             "server_ip": "0.0.0.0",
@@ -1654,19 +1654,19 @@ def dashboard_settings():
                     <form id="settingsForm">
                         <div class="form-group">
                             <label>VPS IP Address</label>
-                            <input type="text" name="vps_ip" value="{config.get('vps_ip', '')}" placeholder="your-domain.duckdns.org">
+                            <input type="text" name="vps_ip" value="{config.get('vps_ip', '147.189.173.121')}" placeholder="147.189.173.121">
                         </div>
 
                         <!-- API Key removed - no authentication -->
 
                         <div class="form-group">
                             <label>CSDL Folder Path</label>
-                            <input type="text" name="csdl_folder" value="{config['csdl_folder']}" placeholder="{config.get('csdl_folder', '')}">
+                            <input type="text" name="csdl_folder" value="{config['csdl_folder']}" placeholder="E:/PRO_ONER/MQL4/Files/DataAutoOner3/">
                         </div>
 
                         <div class="form-group">
                             <label>History Folder Path</label>
-                            <input type="text" name="history_folder" value="{config['history_folder']}" placeholder="{config.get('history_folder', '')}">
+                            <input type="text" name="history_folder" value="{config['history_folder']}" placeholder="E:/PRO_ONER/MQL4/Files/DataAutoOner/HISTORY/">
                         </div>
 
                         <div class="form-group">
