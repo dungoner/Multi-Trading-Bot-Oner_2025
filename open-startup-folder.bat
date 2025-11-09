@@ -2,6 +2,7 @@
 REM ============================================================
 REM SCRIPT MO STARTUP FOLDER NHANH
 REM Quick Open Startup Folder
+REM KHONG DAU TIENG VIET DE TRANH LOI ENCODING!
 REM ============================================================
 
 echo ========================================
