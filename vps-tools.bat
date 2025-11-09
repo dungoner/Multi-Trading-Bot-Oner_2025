@@ -370,7 +370,6 @@ if not exist "%PY_PATH%" (
 set STARTUP_FOLDER=%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup
 set BAT_WRAPPER=%STARTUP_FOLDER%\run_python_bot.bat
 echo @echo off > "%BAT_WRAPPER%"
-echo cd /d "%%~dp0" >> "%BAT_WRAPPER%"
 echo python "%PY_PATH%" >> "%BAT_WRAPPER%"
 
 echo.
