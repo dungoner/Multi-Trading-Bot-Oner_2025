@@ -228,7 +228,7 @@ echo ========================================
 echo.
 echo CACH MO STARTUP FOLDER:
 echo - Nhan Windows+R
-echo - Gõ: shell:startup
+echo - Go: shell:startup
 echo - Enter
 echo.
 echo CACH XOA APP KHOI STARTUP:
