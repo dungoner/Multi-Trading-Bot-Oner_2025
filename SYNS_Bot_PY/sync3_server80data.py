@@ -2003,9 +2003,9 @@ if mode == 0:
             sender_config = config  # Use runtime config directly when in Mode 0
         else:
             sender_config = bot_config.get("sender", {
-                "vps_ip": "",
-                "csdl_folder": "",
-                "history_folder": "",
+                "vps_ip": "147.189.173.121",
+                "csdl_folder": "E:/PRO_ONER/MQL4/Files/DataAutoOner3/",
+                "history_folder": "E:/PRO_ONER/MQL4/Files/DataAutoOner/HISTORY/",
                 "polling_interval": 1,
                 "server_timezone_offset": 2,
                 "vietnam_timezone_offset": 7
@@ -2013,9 +2013,9 @@ if mode == 0:
 
         # Load receiver settings (Mode 1) - fallback to defaults
         receiver_config = bot_config.get("receiver", {
-            "bot1_url": "",
-            "output_folder": "",
-            "output_folder2": "",
+            "bot1_url": "http://147.189.173.121:80",
+            "output_folder": "C:/PRO_ONER/MQL4/Files/DataAutoOner3/",
+            "output_folder2": "C:/PRO_ONER/MQL4/Files/DataAutoOner2/",
             "polling_interval": 1,
             "http_timeout": 5
         })
@@ -3715,10 +3715,10 @@ elif mode == 1:
 
     # Extract receiver config with fallback defaults
     RECEIVER_CONFIG = bot_config.get('receiver', {
-        "bot1_url": "",
+        "bot1_url": "http://147.189.173.121:80",
         "polling_interval": 1,
-        "output_folder": "",
-        "output_folder2": "",
+        "output_folder": "C:/PRO_ONER/MQL4/Files/DataAutoOner3/",
+        "output_folder2": "C:/PRO_ONER/MQL4/Files/DataAutoOner2/",
         "dashboard_port": 9070,
         "http_timeout": 5,
     })
@@ -4236,9 +4236,9 @@ elif mode == 1:
 
         # Load sender settings (Mode 0) - fallback to defaults
         sender_config = bot_config.get("sender", {
-            "vps_ip": "",
-            "csdl_folder": "",
-            "history_folder": "",
+            "vps_ip": "147.189.173.121",
+            "csdl_folder": "E:/PRO_ONER/MQL4/Files/DataAutoOner3/",
+            "history_folder": "E:/PRO_ONER/MQL4/Files/DataAutoOner/HISTORY/",
             "polling_interval": 1,
             "server_timezone_offset": 2,
             "vietnam_timezone_offset": 7
@@ -4249,9 +4249,9 @@ elif mode == 1:
             receiver_config = RECEIVER_CONFIG  # Use runtime config directly when in Mode 1
         else:
             receiver_config = bot_config.get("receiver", {
-                "bot1_url": "",
-                "output_folder": "",
-                "output_folder2": "",
+                "bot1_url": "http://147.189.173.121:80",
+                "output_folder": "C:/PRO_ONER/MQL4/Files/DataAutoOner3/",
+                "output_folder2": "C:/PRO_ONER/MQL4/Files/DataAutoOner2/",
                 "polling_interval": 1,
                 "http_timeout": 5
             })
