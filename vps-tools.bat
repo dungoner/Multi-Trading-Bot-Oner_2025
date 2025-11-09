@@ -4,6 +4,7 @@ REM VPS TOOLS - TICH HOP 3 CHUC NANG
 REM 1. Quan ly Startup Folder
 REM 2. Them App vao Startup
 REM 3. Chinh Timezone
+REM MENU PHANG - TAT CA OPTIONS TRONG 1 MAN HINH
 REM ============================================================
 
 :main_menu
@@ -13,72 +14,101 @@ echo   VPS TOOLS - TICH HOP 3 CHUC NANG
 echo ========================================
 echo.
 echo 1. QUAN LY STARTUP FOLDER
-echo    - Mo folder, xem danh sach apps
+echo   11. Mo User Startup folder
+echo   12. Mo System Startup folder
+echo   13. Mo ca 2 folders
+echo   14. Hien thi danh sach apps trong Startup
 echo.
 echo 2. THEM APP VAO STARTUP
-echo    - Tu dong tao shortcut va them vao Startup
+echo   21. MetaTrader 4 (MT4)
+echo   22. MetaTrader 5 (MT5)
+echo   23. Python Script (.py)
+echo   24. Batch File (.bat)
+echo   25. Executable File (.exe) - Tu chon
 echo.
 echo 3. CHINH TIMEZONE
-echo    - Doi timezone VPS cho trading
+echo   31. UTC (Mac dinh)
+echo   32. London (GMT+0/+1)
+echo   33. New York (GMT-5/-4)
+echo   34. Vietnam (GMT+7)
+echo   35. ICMarket EU (GMT+2/+3)
 echo.
-echo 4. Thoat
+echo 0. Thoat
 echo.
 echo ========================================
-choice /c 1234 /m "Chon chuc nang (1-4)"
+set /p CHOICE="Nhap lua chon (11-35 hoac 0): "
 
-if errorlevel 4 goto :exit_program
-if errorlevel 3 goto :timezone_menu
-if errorlevel 2 goto :add_startup_menu
-if errorlevel 1 goto :open_startup_menu
+REM Startup Folder options
+if "%CHOICE%"=="11" goto :func_11
+if "%CHOICE%"=="12" goto :func_12
+if "%CHOICE%"=="13" goto :func_13
+if "%CHOICE%"=="14" goto :func_14
+
+REM Add to Startup options
+if "%CHOICE%"=="21" goto :func_21
+if "%CHOICE%"=="22" goto :func_22
+if "%CHOICE%"=="23" goto :func_23
+if "%CHOICE%"=="24" goto :func_24
+if "%CHOICE%"=="25" goto :func_25
+
+REM Timezone options
+if "%CHOICE%"=="31" goto :func_31
+if "%CHOICE%"=="32" goto :func_32
+if "%CHOICE%"=="33" goto :func_33
+if "%CHOICE%"=="34" goto :func_34
+if "%CHOICE%"=="35" goto :func_35
+
+REM Exit
+if "%CHOICE%"=="0" goto :exit_program
+
+REM Invalid choice
+echo.
+echo [LOI] Lua chon khong hop le! Hay nhap so tu 11-35 hoac 0.
+echo.
+pause
+goto :main_menu
 
 REM ============================================================
-REM MENU 1: QUAN LY STARTUP FOLDER
+REM CHUC NANG 1: QUAN LY STARTUP FOLDER
 REM ============================================================
-:open_startup_menu
+
+:func_11
 cls
 echo ========================================
-echo   1. QUAN LY STARTUP FOLDER
+echo   [11] MO USER STARTUP FOLDER
 echo ========================================
 echo.
-echo 11. Mo User Startup folder
-echo 12. Mo System Startup folder
-echo 13. Mo ca 2 folders
-echo 14. Hien thi danh sach apps trong Startup
-echo 15. Quay lai menu chinh
-echo.
-choice /c 12345 /m "Chon so (11-15)"
-
-if errorlevel 5 goto :main_menu
-if errorlevel 4 goto :open_startup_14
-if errorlevel 3 goto :open_startup_13
-if errorlevel 2 goto :open_startup_12
-if errorlevel 1 goto :open_startup_11
-
-:open_startup_11
-echo.
-echo [11] Mo User Startup folder...
+echo Mo User Startup folder...
 explorer shell:startup
 echo.
 echo [OK] Da mo User Startup folder!
 echo Duong dan: %APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup
 echo.
 pause
-goto :open_startup_menu
+goto :main_menu
 
-:open_startup_12
+:func_12
+cls
+echo ========================================
+echo   [12] MO SYSTEM STARTUP FOLDER
+echo ========================================
 echo.
-echo [12] Mo System Startup folder...
+echo Mo System Startup folder...
 explorer shell:common startup
 echo.
 echo [OK] Da mo System Startup folder!
 echo Duong dan: C:\ProgramData\Microsoft\Windows\Start Menu\Programs\Startup
 echo.
 pause
-goto :open_startup_menu
+goto :main_menu
 
-:open_startup_13
+:func_13
+cls
+echo ========================================
+echo   [13] MO CA 2 STARTUP FOLDERS
+echo ========================================
 echo.
-echo [13] Mo ca 2 Startup folders...
+echo Mo ca 2 Startup folders...
 start explorer shell:startup
 timeout /t 1 /nobreak >nul
 start explorer shell:common startup
@@ -86,10 +116,10 @@ echo.
 echo [OK] Da mo ca 2 Startup folders!
 echo.
 pause
-goto :open_startup_menu
+goto :main_menu
 
-:open_startup_14
-echo.
+:func_14
+cls
 echo ========================================
 echo   [14] DANH SACH APP TRONG STARTUP
 echo ========================================
@@ -115,36 +145,17 @@ echo.
 echo ========================================
 echo.
 pause
-goto :open_startup_menu
+goto :main_menu
 
 REM ============================================================
-REM MENU 2: THEM APP VAO STARTUP
+REM CHUC NANG 2: THEM APP VAO STARTUP
 REM ============================================================
-:add_startup_menu
+
+:func_21
 cls
 echo ========================================
-echo   2. THEM APP VAO STARTUP
+echo   [21] THEM METATRADER 4 VAO STARTUP
 echo ========================================
-echo.
-echo 21. MetaTrader 4 (MT4)
-echo 22. MetaTrader 5 (MT5)
-echo 23. Python Script (.py)
-echo 24. Batch File (.bat)
-echo 25. Executable File (.exe) - Tu chon
-echo 26. Quay lai menu chinh
-echo.
-choice /c 123456 /m "Chon so (21-26)"
-
-if errorlevel 6 goto :main_menu
-if errorlevel 5 goto :add_startup_25
-if errorlevel 4 goto :add_startup_24
-if errorlevel 3 goto :add_startup_23
-if errorlevel 2 goto :add_startup_22
-if errorlevel 1 goto :add_startup_21
-
-:add_startup_21
-echo.
-echo [21] Da chon: MetaTrader 4
 echo.
 echo Nhap duong dan day du den terminal.exe cua MT4:
 echo Vi du: C:\Program Files (x86)\MetaTrader 4\terminal.exe
@@ -156,16 +167,18 @@ if not exist "%MT4_PATH%" (
     echo [LOI] File khong ton tai: %MT4_PATH%
     echo.
     pause
-    goto :add_startup_menu
+    goto :main_menu
 )
 
 set APP_NAME=MetaTrader 4
 set APP_PATH=%MT4_PATH%
-goto :add_startup_create_shortcut
+goto :create_shortcut
 
-:add_startup_22
-echo.
-echo [22] Da chon: MetaTrader 5
+:func_22
+cls
+echo ========================================
+echo   [22] THEM METATRADER 5 VAO STARTUP
+echo ========================================
 echo.
 echo Nhap duong dan day du den terminal64.exe cua MT5:
 echo Vi du: C:\Program Files\MetaTrader 5\terminal64.exe
@@ -177,16 +190,18 @@ if not exist "%MT5_PATH%" (
     echo [LOI] File khong ton tai: %MT5_PATH%
     echo.
     pause
-    goto :add_startup_menu
+    goto :main_menu
 )
 
 set APP_NAME=MetaTrader 5
 set APP_PATH=%MT5_PATH%
-goto :add_startup_create_shortcut
+goto :create_shortcut
 
-:add_startup_23
-echo.
-echo [23] Da chon: Python Script
+:func_23
+cls
+echo ========================================
+echo   [23] THEM PYTHON SCRIPT VAO STARTUP
+echo ========================================
 echo.
 echo Nhap duong dan day du den file .py:
 echo Vi du: C:\Trading\bot.py
@@ -198,7 +213,7 @@ if not exist "%PY_PATH%" (
     echo [LOI] File khong ton tai: %PY_PATH%
     echo.
     pause
-    goto :add_startup_menu
+    goto :main_menu
 )
 
 set STARTUP_FOLDER=%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup
@@ -212,11 +227,13 @@ echo [OK] Da tao file wrapper: %BAT_WRAPPER%
 echo Python script se tu dong chay khi login!
 echo.
 pause
-goto :add_startup_menu
+goto :main_menu
 
-:add_startup_24
-echo.
-echo [24] Da chon: Batch File
+:func_24
+cls
+echo ========================================
+echo   [24] THEM BATCH FILE VAO STARTUP
+echo ========================================
 echo.
 echo Nhap duong dan day du den file .bat:
 echo Vi du: C:\Trading\start_bot.bat
@@ -228,7 +245,7 @@ if not exist "%BAT_PATH%" (
     echo [LOI] File khong ton tai: %BAT_PATH%
     echo.
     pause
-    goto :add_startup_menu
+    goto :main_menu
 )
 
 set STARTUP_FOLDER=%APPDATA%\Microsoft\Windows\Start Menu\Programs\Startup
@@ -239,11 +256,13 @@ echo [OK] Da copy file vao Startup folder!
 echo File .bat se tu dong chay khi login!
 echo.
 pause
-goto :add_startup_menu
+goto :main_menu
 
-:add_startup_25
-echo.
-echo [25] Da chon: Custom Executable
+:func_25
+cls
+echo ========================================
+echo   [25] THEM CUSTOM EXE VAO STARTUP
+echo ========================================
 echo.
 echo Nhap duong dan day du den file .exe:
 echo Vi du: C:\Program Files\MyApp\app.exe
@@ -255,7 +274,7 @@ if not exist "%EXE_PATH%" (
     echo [LOI] File khong ton tai: %EXE_PATH%
     echo.
     pause
-    goto :add_startup_menu
+    goto :main_menu
 )
 
 echo.
@@ -265,9 +284,9 @@ echo.
 set /p APP_NAME="Ten shortcut: "
 
 set APP_PATH=%EXE_PATH%
-goto :add_startup_create_shortcut
+goto :create_shortcut
 
-:add_startup_create_shortcut
+:create_shortcut
 echo.
 echo ========================================
 echo   TAO SHORTCUT
@@ -299,65 +318,21 @@ echo.
 echo App se TU DONG CHAY khi ban login vao Windows!
 echo.
 pause
-goto :add_startup_menu
+goto :main_menu
 
 REM ============================================================
-REM MENU 3: CHINH TIMEZONE
+REM CHUC NANG 3: CHINH TIMEZONE
 REM ============================================================
-:timezone_menu
+
+:func_31
 REM Kiem tra quyen Administrator
 net session >nul 2>&1
-if %errorLevel% neq 0 (
-    cls
-    echo ========================================
-    echo   CHINH TIMEZONE - CAN ADMIN
-    echo ========================================
-    echo.
-    echo [LOI] Chuc nang nay can quyen Administrator!
-    echo.
-    echo Cach chay voi Admin:
-    echo 1. Dong file nay
-    echo 2. Right-click vps-tools.bat
-    echo 3. Chon "Run as administrator"
-    echo 4. Chon lai chuc nang 3
-    echo.
-    pause
-    goto :main_menu
-)
+if %errorLevel% neq 0 goto :need_admin
 
 cls
 echo ========================================
-echo   3. CHINH TIMEZONE
+echo   [31] CHINH GIO MAC DINH - UTC
 echo ========================================
-echo.
-
-REM Hien thi timezone hien tai
-echo Timezone hien tai:
-for /f "tokens=*" %%i in ('tzutil /g 2^>nul') do set CURRENT_TZ=%%i
-echo - %CURRENT_TZ%
-echo.
-
-echo ========================================
-echo.
-echo 31. Chinh gio MAC DINH (UTC)
-echo 32. Chinh sang gio LONDON (GMT+0/+1)
-echo 33. Chinh sang gio NEW YORK (GMT-5/-4)
-echo 34. Chinh sang gio VIETNAM (GMT+7)
-echo 35. Chinh sang gio ICMARKET EU (GMT+2/+3)
-echo 36. Quay lai menu chinh
-echo.
-choice /c 123456 /m "Chon so (31-36)"
-
-if errorlevel 6 goto :main_menu
-if errorlevel 5 goto :timezone_35
-if errorlevel 4 goto :timezone_34
-if errorlevel 3 goto :timezone_33
-if errorlevel 2 goto :timezone_32
-if errorlevel 1 goto :timezone_31
-
-:timezone_31
-echo.
-echo [31] Chinh gio MAC DINH - UTC
 echo.
 tzutil /s "UTC" >nul 2>&1
 if %errorLevel% equ 0 (
@@ -366,11 +341,17 @@ if %errorLevel% equ 0 (
     echo [LOI] Khong the chuyen timezone!
 )
 echo.
-goto :timezone_show_result
+goto :show_timezone_result
 
-:timezone_32
-echo.
-echo [32] Chinh gio LONDON
+:func_32
+REM Kiem tra quyen Administrator
+net session >nul 2>&1
+if %errorLevel% neq 0 goto :need_admin
+
+cls
+echo ========================================
+echo   [32] CHINH GIO LONDON
+echo ========================================
 echo.
 tzutil /s "GMT Standard Time" >nul 2>&1
 if %errorLevel% equ 0 (
@@ -379,11 +360,17 @@ if %errorLevel% equ 0 (
     echo [LOI] Khong the chuyen timezone!
 )
 echo.
-goto :timezone_show_result
+goto :show_timezone_result
 
-:timezone_33
-echo.
-echo [33] Chinh gio NEW YORK
+:func_33
+REM Kiem tra quyen Administrator
+net session >nul 2>&1
+if %errorLevel% neq 0 goto :need_admin
+
+cls
+echo ========================================
+echo   [33] CHINH GIO NEW YORK
+echo ========================================
 echo.
 tzutil /s "Eastern Standard Time" >nul 2>&1
 if %errorLevel% equ 0 (
@@ -392,11 +379,17 @@ if %errorLevel% equ 0 (
     echo [LOI] Khong the chuyen timezone!
 )
 echo.
-goto :timezone_show_result
+goto :show_timezone_result
 
-:timezone_34
-echo.
-echo [34] Chinh gio VIETNAM
+:func_34
+REM Kiem tra quyen Administrator
+net session >nul 2>&1
+if %errorLevel% neq 0 goto :need_admin
+
+cls
+echo ========================================
+echo   [34] CHINH GIO VIETNAM
+echo ========================================
 echo.
 tzutil /s "SE Asia Standard Time" >nul 2>&1
 if %errorLevel% equ 0 (
@@ -405,11 +398,17 @@ if %errorLevel% equ 0 (
     echo [LOI] Khong the chuyen timezone!
 )
 echo.
-goto :timezone_show_result
+goto :show_timezone_result
 
-:timezone_35
-echo.
-echo [35] Chinh gio ICMARKET EU
+:func_35
+REM Kiem tra quyen Administrator
+net session >nul 2>&1
+if %errorLevel% neq 0 goto :need_admin
+
+cls
+echo ========================================
+echo   [35] CHINH GIO ICMARKET EU
+echo ========================================
 echo.
 tzutil /s "FLE Standard Time" >nul 2>&1
 if %errorLevel% equ 0 (
@@ -418,9 +417,26 @@ if %errorLevel% equ 0 (
     echo [LOI] Khong the chuyen timezone!
 )
 echo.
-goto :timezone_show_result
+goto :show_timezone_result
 
-:timezone_show_result
+:need_admin
+cls
+echo ========================================
+echo   CHINH TIMEZONE - CAN ADMIN
+echo ========================================
+echo.
+echo [LOI] Chuc nang nay can quyen Administrator!
+echo.
+echo Cach chay voi Admin:
+echo 1. Dong file nay
+echo 2. Right-click vps-tools.bat
+echo 3. Chon "Run as administrator"
+echo 4. Chon lai chuc nang 31-35
+echo.
+pause
+goto :main_menu
+
+:show_timezone_result
 echo ========================================
 echo   KET QUA
 echo ========================================
@@ -434,7 +450,7 @@ echo.
 echo LUU Y: MT4/MT5 can dong va mo lai de ap dung gio moi!
 echo.
 pause
-goto :timezone_menu
+goto :main_menu
 
 REM ============================================================
 REM EXIT
@@ -446,9 +462,9 @@ echo   CAM ON DA SU DUNG VPS TOOLS!
 echo ========================================
 echo.
 echo Cac chuc nang da su dung:
-echo 1. Quan ly Startup Folder
-echo 2. Them App vao Startup
-echo 3. Chinh Timezone
+echo 1. Quan ly Startup Folder (11-14)
+echo 2. Them App vao Startup (21-25)
+echo 3. Chinh Timezone (31-35)
 echo.
 echo Cac file goc van con nguyen:
 echo - open-startup-folder.bat
