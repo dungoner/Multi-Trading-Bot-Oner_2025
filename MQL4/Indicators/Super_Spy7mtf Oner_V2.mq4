@@ -2802,38 +2802,76 @@ void SmartTFReset() {
     int current_period = Period();
     long current_chart_id = ChartID();
 
-    // Step 1: Tim tat ca charts KHAC cua symbol nay (KHONG bao gom chart hien tai)
-    int total_charts = 0;
-    long chart_ids[];
-    ArrayResize(chart_ids, 10);
+    // Step 1: Tim tat ca charts cua symbol nay va luu voi period
+    struct ChartInfo {
+        long chart_id;
+        int period;
+    };
+    ChartInfo all_charts[];
+    ArrayResize(all_charts, 10);
+    int chart_count = 0;
 
     long temp_chart = ChartFirst();
     while(temp_chart >= 0) {
-        if(ChartSymbol(temp_chart) == current_symbol && temp_chart != current_chart_id) {
-            chart_ids[total_charts] = temp_chart;
-            total_charts++;
+        if(ChartSymbol(temp_chart) == current_symbol) {
+            all_charts[chart_count].chart_id = temp_chart;
+            all_charts[chart_count].period = ChartPeriod(temp_chart);
+            chart_count++;
         }
         temp_chart = ChartNext(temp_chart);
     }
 
-    // Step 2: Reset 6 TF con lai TRUOC (W1 -> original TF, delay 2s)
-    for(int i = 0; i < total_charts; i++) {
-        int other_period = ChartPeriod(chart_ids[i]);
-        ChartSetSymbolPeriod(chart_ids[i], current_symbol, PERIOD_W1);
-        Sleep(2000);  // Delay 2s (slower for MT4 stability)
-        ChartSetSymbolPeriod(chart_ids[i], current_symbol, other_period);
-        Sleep(2000);  // Delay 2s (slower for MT4 stability)
+    // Step 2: Sort charts theo period GIAM DAN (D1=1440 -> M5=5 -> M1=1)
+    // Bubble sort - simple va hieu qua cho so luong nho
+    for(int i = 0; i < chart_count - 1; i++) {
+        for(int j = 0; j < chart_count - i - 1; j++) {
+            if(all_charts[j].period < all_charts[j+1].period) {
+                // Swap
+                ChartInfo temp;
+                temp = all_charts[j];
+                all_charts[j] = all_charts[j+1];
+                all_charts[j+1] = temp;
+            }
+        }
     }
 
-    // Step 3: Reset chart HIEN TAI CUOI CUNG (de nhan dien lai 6 TF con lai)
+    // Step 3: Reset theo thu tu D1 -> H4 -> H1 -> M30 -> M15 -> M5
+    // SKIP M1 (current chart, reset sau cung)
+    Print("[SMART_TF_RESET] Starting reset from D1 to M5 (skip M1)...");
+    int reset_count = 0;
+    for(int i = 0; i < chart_count; i++) {
+        // Skip M1 chart (period = 1) - se reset sau cung
+        if(all_charts[i].period == PERIOD_M1) {
+            continue;
+        }
+
+        // Skip current chart neu khong phai M1 (ly thuyet khong xay ra vi SPY luon o M1)
+        if(all_charts[i].chart_id == current_chart_id && current_period != PERIOD_M1) {
+            continue;
+        }
+
+        int period = all_charts[i].period;
+        long chart_id = all_charts[i].chart_id;
+        string tf_name = PeriodToString(period);
+
+        Print("[SMART_TF_RESET] Resetting ", tf_name, "...");
+        ChartSetSymbolPeriod(chart_id, current_symbol, PERIOD_W1);
+        Sleep(2000);  // Delay 2s (slower for MT4 stability)
+        ChartSetSymbolPeriod(chart_id, current_symbol, period);
+        Sleep(2000);  // Delay 2s (slower for MT4 stability)
+        reset_count++;
+    }
+
+    // Step 4: Reset M1 (current chart) CUOI CUNG - QUAN TRONG NHAT
+    // M1 can nhan dien lai tat ca 6 TF con lai (da reset xong)
+    Print("[SMART_TF_RESET] Resetting M1 (current chart) - FINAL...");
     ChartSetSymbolPeriod(current_chart_id, current_symbol, PERIOD_W1);
     Sleep(2000);  // Delay 2s (slower for MT4 stability)
-    ChartSetSymbolPeriod(current_chart_id, current_symbol, current_period);
+    ChartSetSymbolPeriod(current_chart_id, current_symbol, PERIOD_M1);
     Sleep(2000);  // Delay 2s (slower for MT4 stability)
 
-    if(total_charts >= 0) {
-        Print("[SMART_TF_RESET] Completed: ", (total_charts + 1), " charts reset (", current_symbol, ")");
-    }
+    Print("[SMART_TF_RESET] Completed: ", (reset_count + 1), " charts reset (", current_symbol, ")");
+    Print("[SMART_TF_RESET] Reset order: D1->H4->H1->M30->M15->M5->M1 (M1 last) ✓");
 }
 
 // Health check for CSDL1 file activity (called at 8h and 16h) | Kiem tra hoat dong file CSDL1 (goi luc 8h va 16h)

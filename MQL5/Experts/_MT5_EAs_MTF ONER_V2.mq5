@@ -2116,15 +2116,18 @@ void SmartTFReset() {
     int current_period = _Period;
     long current_chart_id = ChartID();
 
-    // Step 1: Define FIXED reset order: M5→M15→M30→H1→H4→D1→M1 | Dinh nghia thu tu reset CO DINH: M5→M15→M30→H1→H4→D1→M1
-    // D1 is MOST IMPORTANT (has SPY Bot), must reset BEFORE M1 | D1 QUAN TRONG NHAT (co SPY Bot), phai reset TRUOC M1
-    int reset_order[7] = {PERIOD_M5, PERIOD_M15, PERIOD_M30, PERIOD_H1, PERIOD_H4, PERIOD_D1, PERIOD_M1};
+    // Step 1: Define FIXED reset order: D1→H4→H1→M30→M15→M1 (SKIP M5 - reset sau cung)
+    // EA attach vao M5 chart, M5 QUAN TRONG NHAT nen reset CUOI CUNG
+    // D1 reset TRUOC (lau nhat), M1 reset SAU (nhanh nhat), M5 reset CUOI CUNG (current chart)
+    int reset_order[6] = {PERIOD_D1, PERIOD_H4, PERIOD_H1, PERIOD_M30, PERIOD_M15, PERIOD_M1};
 
     int step_count = 0;
     int total_reset = 0;
 
+    Print("[SMART_TF_RESET] Starting reset from D1 to M1 (skip M5 - current chart)...");
+
     // Step 2: Reset each TF in order (find chart by TF, then reset) | Reset tung TF theo thu tu (tim chart theo TF, roi reset)
-    for(int tf_idx = 0; tf_idx < 7; tf_idx++) {
+    for(int tf_idx = 0; tf_idx < 6; tf_idx++) {
         int target_period = reset_order[tf_idx];
 
         // Find chart with this TF | Tim chart co TF nay
@@ -2133,6 +2136,18 @@ void SmartTFReset() {
             // Match: same symbol AND same period | Khop: cung symbol VA cung period
             if(ChartSymbol(temp_chart) == current_symbol && ChartPeriod(temp_chart) == target_period) {
                 step_count++;
+                string tf_name = "";
+                switch(target_period) {
+                    case PERIOD_M1:  tf_name = "M1";  break;
+                    case PERIOD_M5:  tf_name = "M5";  break;
+                    case PERIOD_M15: tf_name = "M15"; break;
+                    case PERIOD_M30: tf_name = "M30"; break;
+                    case PERIOD_H1:  tf_name = "H1";  break;
+                    case PERIOD_H4:  tf_name = "H4";  break;
+                    case PERIOD_D1:  tf_name = "D1";  break;
+                }
+
+                Print("[SMART_TF_RESET] Resetting ", tf_name, "...");
 
                 // Reset via W1 | Reset qua W1
                 ChartSetSymbolPeriod(temp_chart, current_symbol, PERIOD_W1);
@@ -2147,20 +2162,27 @@ void SmartTFReset() {
         }
     }
 
-    if(total_reset > 0) {
-        Print("[SMART_TF_RESET] Completed: ", total_reset, " charts reset (M5→M15→M30→H1→H4→D1→M1)");
-    }
+    // Step 3: Reset M5 (current chart) CUOI CUNG - QUAN TRONG NHAT
+    // M5 can nhan dien lai tat ca 6 TF con lai (da reset xong)
+    Print("[SMART_TF_RESET] Resetting M5 (current chart) - FINAL...");
+    ChartSetSymbolPeriod(current_chart_id, current_symbol, PERIOD_W1);
+    Sleep(1000);
+    ChartSetSymbolPeriod(current_chart_id, current_symbol, PERIOD_M5);
+    Sleep(1000);
+
+    Print("[SMART_TF_RESET] Completed: ", (total_reset + 1), " charts reset");
+    Print("[SMART_TF_RESET] Reset order: D1->H4->H1->M30->M15->M1->M5 (M5 last) ✓");
 }
 
 // Weekend reset (Saturday 00:03) - Trigger SmartTFReset | Reset cuoi tuan - Goi SmartTFReset
-// ONLY M1 chart has permission to reset (master chart) | CHI chart M1 co quyen reset (chart master)
+// ONLY M5 chart has permission to reset (master chart) | CHI chart M5 co quyen reset (chart master)
 // Time: 00:03 to AVOID conflict with SPY Bot reset at 00:00 | Gio: 00:03 de TRANH xung dot voi SPY Bot reset luc 00:00
 void CheckWeekendReset() {
     // Check if feature is enabled by user | Kiem tra tinh nang co duoc bat boi user
     if(!EnableWeekendReset) return;
 
-    // ONLY M1 chart can trigger reset (to avoid conflict) | CHI chart M1 moi duoc trigger reset (tranh xung dot)
-    if(_Period != PERIOD_M1) return;
+    // ONLY M5 chart can trigger reset (to avoid conflict) | CHI chart M5 moi duoc trigger reset (tranh xung dot)
+    if(_Period != PERIOD_M5) return;
 
     datetime current_time = TimeCurrent();
     int day_of_week = TimeDayOfWeek(current_time);
