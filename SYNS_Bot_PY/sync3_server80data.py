@@ -172,7 +172,7 @@ if mode == 0:
         return {
             "server": {
                 "api_key": "9016",
-                "vps_ip": "",
+                "vps_ip": "dungalading.duckdns.org",
                 "api_port": 80,
                 "dashboard_port": 9070,
                 "server_ip": "0.0.0.0",
