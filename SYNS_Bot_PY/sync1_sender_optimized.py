@@ -1661,12 +1661,12 @@ def dashboard_settings():
 
                         <div class="form-group">
                             <label>CSDL Folder Path</label>
-                            <input type="text" name="csdl_folder" value="{config['csdl_folder']}" placeholder="E:/PRO_ONER/MQL4/Files/DataAutoOner3/">
+                            <input type="text" name="csdl_folder" value="{config['csdl_folder']}" placeholder="{config.get('csdl_folder', '')}">
                         </div>
 
                         <div class="form-group">
                             <label>History Folder Path</label>
-                            <input type="text" name="history_folder" value="{config['history_folder']}" placeholder="E:/PRO_ONER/MQL4/Files/DataAutoOner/HISTORY/">
+                            <input type="text" name="history_folder" value="{config['history_folder']}" placeholder="{config.get('history_folder', '')}">
                         </div>
 
                         <div class="form-group">

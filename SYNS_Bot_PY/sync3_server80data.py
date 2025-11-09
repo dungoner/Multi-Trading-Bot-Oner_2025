@@ -2098,11 +2098,11 @@ if mode == 0:
                                 </div>
                                 <div class="form-group">
                                     <label>CSDL Folder Path (Source from SPY Bot)</label>
-                                    <input type="text" name="sender_csdl_folder" value="{sender_config.get('csdl_folder', 'E:/PRO_ONER/MQL4/Files/DataAutoOner3/')}" placeholder="E:/PRO_ONER/MQL4/Files/DataAutoOner3/">
+                                    <input type="text" name="sender_csdl_folder" value="{sender_config.get('csdl_folder', '')}" placeholder="{sender_config.get('csdl_folder', '')}">
                                 </div>
                                 <div class="form-group">
                                     <label>History Folder Path</label>
-                                    <input type="text" name="sender_history_folder" value="{sender_config.get('history_folder', 'E:/PRO_ONER/MQL4/Files/DataAutoOner/HISTORY/')}" placeholder="E:/PRO_ONER/MQL4/Files/DataAutoOner/HISTORY/">
+                                    <input type="text" name="sender_history_folder" value="{sender_config.get('history_folder', '')}" placeholder="{sender_config.get('history_folder', '')}">
                                 </div>
                                 <div class="form-group">
                                     <label>File Polling Interval (Check CSDL changes)</label>
@@ -2155,11 +2155,11 @@ if mode == 0:
                                 </div>
                                 <div class="form-group">
                                     <label>Output Folder 3 (Main - DataAutoOner3)</label>
-                                    <input type="text" name="receiver_output_folder" value="{receiver_config.get('output_folder', 'C:/PRO_ONER/MQL4/Files/DataAutoOner3/')}" placeholder="C:/PRO_ONER/MQL4/Files/DataAutoOner3/">
+                                    <input type="text" name="receiver_output_folder" value="{receiver_config.get('output_folder', '')}" placeholder="{receiver_config.get('output_folder', '')}">
                                 </div>
                                 <div class="form-group">
                                     <label>Output Folder 2 (Backup - DataAutoOner2)</label>
-                                    <input type="text" name="receiver_output_folder2" value="{receiver_config.get('output_folder2', 'C:/PRO_ONER/MQL4/Files/DataAutoOner2/')}" placeholder="C:/PRO_ONER/MQL4/Files/DataAutoOner2/">
+                                    <input type="text" name="receiver_output_folder2" value="{receiver_config.get('output_folder2', '')}" placeholder="{receiver_config.get('output_folder2', '')}">
                                 </div>
                                 <div class="form-group">
                                     <label>Polling Interval (Pull from Bot 1)</label>
@@ -3033,15 +3033,15 @@ if mode == 0:
                         </h3>
                         <div class="form-group">
                             <label>Files Source Folder</label>
-                            <input type="text" id="source_files" value="{symlink_cfg['source_folders']['files']}" placeholder="E:/PRO_ONER/MQL4/Files">
+                            <input type="text" id="source_files" value="{symlink_cfg['source_folders']['files']}" placeholder="{symlink_cfg['source_folders'].get('files', '')}">
                         </div>
                         <div class="form-group">
                             <label>Presets Source Folder</label>
-                            <input type="text" id="source_presets" value="{symlink_cfg['source_folders']['presets']}" placeholder="E:/PRO_ONER/MQL4/Presets">
+                            <input type="text" id="source_presets" value="{symlink_cfg['source_folders']['presets']}" placeholder="{symlink_cfg['source_folders'].get('presets', '')}">
                         </div>
                         <div class="form-group">
                             <label>Data Oner Source Folder</label>
-                            <input type="text" id="source_data_oner" value="{symlink_cfg['source_folders']['data_oner']}" placeholder="E:/PRO_ONER/MQL4/Data Oner">
+                            <input type="text" id="source_data_oner" value="{symlink_cfg['source_folders']['data_oner']}" placeholder="{symlink_cfg['source_folders'].get('data_oner', '')}">
                         </div>
                         <div style="text-align: center; margin: 20px 0;">
                             <button class="btn btn-primary" onclick="saveSourceConfig()">💾 SAVE SOURCE CONFIG</button>
@@ -4334,11 +4334,11 @@ elif mode == 1:
                                 </div>
                                 <div class="form-group">
                                     <label>CSDL Folder Path (Source from SPY Bot)</label>
-                                    <input type="text" name="sender_csdl_folder" value="{sender_config.get('csdl_folder', 'E:/PRO_ONER/MQL4/Files/DataAutoOner3/')}" placeholder="E:/PRO_ONER/MQL4/Files/DataAutoOner3/">
+                                    <input type="text" name="sender_csdl_folder" value="{sender_config.get('csdl_folder', '')}" placeholder="{sender_config.get('csdl_folder', '')}">
                                 </div>
                                 <div class="form-group">
                                     <label>History Folder Path</label>
-                                    <input type="text" name="sender_history_folder" value="{sender_config.get('history_folder', 'E:/PRO_ONER/MQL4/Files/DataAutoOner/HISTORY/')}" placeholder="E:/PRO_ONER/MQL4/Files/DataAutoOner/HISTORY/">
+                                    <input type="text" name="sender_history_folder" value="{sender_config.get('history_folder', '')}" placeholder="{sender_config.get('history_folder', '')}">
                                 </div>
                                 <div class="form-group">
                                     <label>File Polling Interval (Check CSDL changes)</label>
@@ -4391,11 +4391,11 @@ elif mode == 1:
                                 </div>
                                 <div class="form-group">
                                     <label>Output Folder 3 (Main - DataAutoOner3)</label>
-                                    <input type="text" name="receiver_output_folder" value="{receiver_config.get('output_folder', 'C:/PRO_ONER/MQL4/Files/DataAutoOner3/')}" placeholder="C:/PRO_ONER/MQL4/Files/DataAutoOner3/">
+                                    <input type="text" name="receiver_output_folder" value="{receiver_config.get('output_folder', '')}" placeholder="{receiver_config.get('output_folder', '')}">
                                 </div>
                                 <div class="form-group">
                                     <label>Output Folder 2 (Backup - DataAutoOner2)</label>
-                                    <input type="text" name="receiver_output_folder2" value="{receiver_config.get('output_folder2', 'C:/PRO_ONER/MQL4/Files/DataAutoOner2/')}" placeholder="C:/PRO_ONER/MQL4/Files/DataAutoOner2/">
+                                    <input type="text" name="receiver_output_folder2" value="{receiver_config.get('output_folder2', '')}" placeholder="{receiver_config.get('output_folder2', '')}">
                                 </div>
                                 <div class="form-group">
                                     <label>Polling Interval (Pull from Bot 1)</label>
