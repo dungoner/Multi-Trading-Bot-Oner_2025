@@ -172,7 +172,7 @@ if mode == 0:
         return {
             "server": {
                 "api_key": "9016",
-                "vps_ip": "147.189.173.121",
+                "vps_ip": "",
                 "api_port": 80,
                 "dashboard_port": 9070,
                 "server_ip": "0.0.0.0",
@@ -2003,7 +2003,7 @@ if mode == 0:
             sender_config = config  # Use runtime config directly when in Mode 0
         else:
             sender_config = bot_config.get("sender", {
-                "vps_ip": "147.189.173.121",
+                "vps_ip": "",
                 "csdl_folder": "E:/PRO_ONER/MQL4/Files/DataAutoOner3/",
                 "history_folder": "E:/PRO_ONER/MQL4/Files/DataAutoOner/HISTORY/",
                 "polling_interval": 1,
@@ -2013,7 +2013,7 @@ if mode == 0:
 
         # Load receiver settings (Mode 1) - fallback to defaults
         receiver_config = bot_config.get("receiver", {
-            "bot1_url": "http://147.189.173.121:80",
+            "bot1_url": "",
             "output_folder": "C:/PRO_ONER/MQL4/Files/DataAutoOner3/",
             "output_folder2": "C:/PRO_ONER/MQL4/Files/DataAutoOner2/",
             "polling_interval": 1,
@@ -2094,7 +2094,7 @@ if mode == 0:
                             <div class="panel-body">
                                 <div class="form-group">
                                     <label>VPS IP Address</label>
-                                    <input type="text" name="sender_vps_ip" value="{sender_config.get('vps_ip', '147.189.173.121')}" placeholder="{sender_config.get('vps_ip', '147.189.173.121')}">
+                                    <input type="text" name="sender_vps_ip" value="{sender_config.get('vps_ip', '')}" placeholder="your-domain.duckdns.org">
                                 </div>
                                 <div class="form-group">
                                     <label>CSDL Folder Path (Source from SPY Bot)</label>
@@ -2151,7 +2151,7 @@ if mode == 0:
                             <div class="panel-body">
                                 <div class="form-group">
                                     <label>Bot 1 URL (VPS Address with Port 80)</label>
-                                    <input type="text" name="receiver_bot1_url" value="{receiver_config.get('bot1_url', 'http://147.189.173.121:80')}" placeholder="{receiver_config.get('bot1_url', 'http://147.189.173.121:80')}">
+                                    <input type="text" name="receiver_bot1_url" value="{receiver_config.get('bot1_url', '')}" placeholder="http://your-domain.duckdns.org:80">
                                 </div>
                                 <div class="form-group">
                                     <label>Output Folder 3 (Main - DataAutoOner3)</label>
@@ -3715,7 +3715,7 @@ elif mode == 1:
 
     # Extract receiver config with fallback defaults
     RECEIVER_CONFIG = bot_config.get('receiver', {
-        "bot1_url": "http://147.189.173.121:80",
+        "bot1_url": "",
         "polling_interval": 1,
         "output_folder": "C:/PRO_ONER/MQL4/Files/DataAutoOner3/",
         "output_folder2": "C:/PRO_ONER/MQL4/Files/DataAutoOner2/",
@@ -4236,7 +4236,7 @@ elif mode == 1:
 
         # Load sender settings (Mode 0) - fallback to defaults
         sender_config = bot_config.get("sender", {
-            "vps_ip": "147.189.173.121",
+            "vps_ip": "",
             "csdl_folder": "E:/PRO_ONER/MQL4/Files/DataAutoOner3/",
             "history_folder": "E:/PRO_ONER/MQL4/Files/DataAutoOner/HISTORY/",
             "polling_interval": 1,
@@ -4249,7 +4249,7 @@ elif mode == 1:
             receiver_config = RECEIVER_CONFIG  # Use runtime config directly when in Mode 1
         else:
             receiver_config = bot_config.get("receiver", {
-                "bot1_url": "http://147.189.173.121:80",
+                "bot1_url": "",
                 "output_folder": "C:/PRO_ONER/MQL4/Files/DataAutoOner3/",
                 "output_folder2": "C:/PRO_ONER/MQL4/Files/DataAutoOner2/",
                 "polling_interval": 1,
@@ -4330,7 +4330,7 @@ elif mode == 1:
                             <div class="panel-body">
                                 <div class="form-group">
                                     <label>VPS IP Address</label>
-                                    <input type="text" name="sender_vps_ip" value="{sender_config.get('vps_ip', '147.189.173.121')}" placeholder="{sender_config.get('vps_ip', '147.189.173.121')}">
+                                    <input type="text" name="sender_vps_ip" value="{sender_config.get('vps_ip', '')}" placeholder="your-domain.duckdns.org">
                                 </div>
                                 <div class="form-group">
                                     <label>CSDL Folder Path (Source from SPY Bot)</label>
@@ -4387,7 +4387,7 @@ elif mode == 1:
                             <div class="panel-body">
                                 <div class="form-group">
                                     <label>Bot 1 URL (VPS Address with Port 80)</label>
-                                    <input type="text" name="receiver_bot1_url" value="{receiver_config.get('bot1_url', 'http://147.189.173.121:80')}" placeholder="{receiver_config.get('bot1_url', 'http://147.189.173.121:80')}">
+                                    <input type="text" name="receiver_bot1_url" value="{receiver_config.get('bot1_url', '')}" placeholder="http://your-domain.duckdns.org:80">
                                 </div>
                                 <div class="form-group">
                                     <label>Output Folder 3 (Main - DataAutoOner3)</label>

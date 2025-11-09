@@ -138,7 +138,7 @@ def create_default_bot_config():
         "quiet_mode": False,
         "sender": {
             "api_key": "9016",
-            "vps_ip": "147.189.173.121",
+            "vps_ip": "",
             "api_port": 80,
             "dashboard_port": 9070,
             "server_ip": "0.0.0.0",
@@ -2403,7 +2403,7 @@ def dashboard_settings():
                     <form id="settingsForm">
                         <div class="form-group">
                             <label>VPS IP Address</label>
-                            <input type="text" name="vps_ip" value="{config.get('vps_ip', '147.189.173.121')}" placeholder="{config.get('vps_ip', '147.189.173.121')}">
+                            <input type="text" name="vps_ip" value="{config.get('vps_ip', '')}" placeholder="your-domain.duckdns.org">
                         </div>
 
                         <!-- API Key removed - no authentication -->

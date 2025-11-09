@@ -60,7 +60,7 @@ bot_config = load_bot_config()
 
 # Extract receiver config with fallback defaults
 RECEIVER_CONFIG = bot_config.get('receiver', {
-    "bot1_url": "http://147.189.173.121:80",
+    "bot1_url": "",
     "polling_interval": 1,
     "output_folder": "C:/PRO_ONER/MQL4/Files/DataAutoOner3/",
     "output_folder2": "C:/PRO_ONER/MQL4/Files/DataAutoOner2/",
