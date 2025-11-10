@@ -171,7 +171,7 @@ if mode == 0:
         """Create default unified bot configuration"""
         return {
             "server": {
-                "api_key": "9016",
+                "api_key": "",
                 "vps_ip": "dungalading.duckdns.org",
                 "api_port": 80,
                 "dashboard_port": 9070,

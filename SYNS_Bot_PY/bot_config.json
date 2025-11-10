@@ -39,7 +39,7 @@
   },
   "autostart": {
     "bot_folder": "E:\\PRO_ONER\\SYNS_Bot_PY",
-    "start_script": "START_0123_BOT.bat",
+    "start_script": "START_BOT.bat",
     "task_name": "SYNS_Bot_AutoStart",
     "mt_platforms": []
   },
