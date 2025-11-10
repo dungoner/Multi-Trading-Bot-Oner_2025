@@ -170,6 +170,32 @@ if mode == 0:
     def create_default_bot_config():
         """Create default unified bot configuration"""
         return {
+            "mode": 0,
+            "quiet_mode": True,
+            "sender": {
+                "api_key": "",
+                "vps_ip": "dungalading.duckdns.org",
+                "api_port": 80,
+                "dashboard_port": 9070,
+                "server_ip": "0.0.0.0",
+                "csdl_folder": "E:/PRO_ONER/MQL4/Files/DataAutoOner3/",
+                "history_folder": "E:/PRO_ONER/MQL4/Files/DataAutoOner/HISTORY/",
+                "polling_interval": 1,
+                "log_history_limit": 50,
+                "stats_retention_days": 7,
+                "stats_save_interval": 3600,
+                "server_timezone_offset": 2,
+                "vietnam_timezone_offset": 7
+            },
+            "receiver": {
+                "bot1_url": "http://dungalading.duckdns.org:80",
+                "polling_interval": 1,
+                "output_folder": "C:/PRO_ONER/MQL4/Files/DataAutoOner3/",
+                "output_folder2": "C:/PRO_ONER/MQL4/Files/DataAutoOner2/",
+                "dashboard_port": 9070,
+                "server_ip": "0.0.0.0",
+                "http_timeout": 5
+            },
             "server": {
                 "api_key": "",
                 "vps_ip": "dungalading.duckdns.org",
@@ -298,6 +324,14 @@ if mode == 0:
                 bot_config = json.load(f)
                 # Validate structure - ensure all sections exist
                 default_config = create_default_bot_config()
+                if 'mode' not in bot_config:
+                    bot_config['mode'] = default_config['mode']
+                if 'quiet_mode' not in bot_config:
+                    bot_config['quiet_mode'] = default_config['quiet_mode']
+                if 'sender' not in bot_config:
+                    bot_config['sender'] = default_config['sender']
+                if 'receiver' not in bot_config:
+                    bot_config['receiver'] = default_config['receiver']
                 if 'server' not in bot_config:
                     bot_config['server'] = default_config['server']
                 if 'symlink' not in bot_config:
@@ -3720,6 +3754,7 @@ elif mode == 1:
         "output_folder": "C:/PRO_ONER/MQL4/Files/DataAutoOner3/",
         "output_folder2": "C:/PRO_ONER/MQL4/Files/DataAutoOner2/",
         "dashboard_port": 9070,
+        "server_ip": "0.0.0.0",
         "http_timeout": 5,
     })
 
@@ -4582,7 +4617,7 @@ elif mode == 1:
         """Run Dashboard server on Port 9070"""
         print(f"[DASHBOARD] Starting on port {RECEIVER_CONFIG['dashboard_port']}...")
         app_dashboard.run(
-            host='0.0.0.0',
+            host=RECEIVER_CONFIG.get('server_ip', '0.0.0.0'),
             port=RECEIVER_CONFIG['dashboard_port'],
             debug=False,
             threaded=True
