@@ -1292,7 +1292,7 @@ if mode == 0:
                             <button class="btn {{ 'active' if polling == 2 else '' }}" onclick="setPolling(2)">2s</button>
                         </span>
                     </span>
-                    <span>Port: 9070</span>
+                    <span>Port: {{ dashboard_port }}</span>
                 </div>
             </div>
 
@@ -1490,6 +1490,7 @@ if mode == 0:
             uptime=uptime,
             polling=config["polling_interval"],
             last_poll=f"{config['polling_interval']}s",
+            dashboard_port=config["dashboard_port"],
             symbols=symbols_data
         )
 
@@ -2170,8 +2171,8 @@ if mode == 0:
                                 </div>
                                 <div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid #e0e0e0;">
                                     <p style="font-size: 11px; color: #999;">
-                                        <strong>💡 Access Settings:</strong> <code>http://localhost:9070/settings</code><br>
-                                        <strong>Ports:</strong> API: 80 | Dashboard: 9070
+                                        <strong>💡 Access Settings:</strong> <code>http://localhost:{sender_config.get('dashboard_port', 9070)}/settings</code><br>
+                                        <strong>Ports:</strong> API: {sender_config.get('api_port', 80)} | Dashboard: {sender_config.get('dashboard_port', 9070)}
                                     </p>
                                 </div>
                             </div>
@@ -2211,8 +2212,8 @@ if mode == 0:
                                 </div>
                                 <div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid #e0e0e0;">
                                     <p style="font-size: 11px; color: #999;">
-                                        <strong>💡 Access Settings:</strong> <code>http://localhost:9070/settings</code><br>
-                                        <strong>Dashboard Port:</strong> 9070
+                                        <strong>💡 Access Settings:</strong> <code>http://localhost:{receiver_config.get('dashboard_port', 9070)}/settings</code><br>
+                                        <strong>Dashboard Port:</strong> {receiver_config.get('dashboard_port', 9070)}
                                     </p>
                                 </div>
                             </div>
@@ -4407,8 +4408,8 @@ elif mode == 1:
                                 </div>
                                 <div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid #e0e0e0;">
                                     <p style="font-size: 11px; color: #999;">
-                                        <strong>💡 Access Settings:</strong> <code>http://localhost:9070/settings</code><br>
-                                        <strong>Ports:</strong> API: 80 | Dashboard: 9070
+                                        <strong>💡 Access Settings:</strong> <code>http://localhost:{sender_config.get('dashboard_port', 9070)}/settings</code><br>
+                                        <strong>Ports:</strong> API: {sender_config.get('api_port', 80)} | Dashboard: {sender_config.get('dashboard_port', 9070)}
                                     </p>
                                 </div>
                             </div>
@@ -4448,8 +4449,8 @@ elif mode == 1:
                                 </div>
                                 <div style="margin-top: 20px; padding-top: 20px; border-top: 1px solid #e0e0e0;">
                                     <p style="font-size: 11px; color: #999;">
-                                        <strong>💡 Access Settings:</strong> <code>http://localhost:9070/settings</code><br>
-                                        <strong>Dashboard Port:</strong> 9070
+                                        <strong>💡 Access Settings:</strong> <code>http://localhost:{receiver_config.get('dashboard_port', 9070)}/settings</code><br>
+                                        <strong>Dashboard Port:</strong> {receiver_config.get('dashboard_port', 9070)}
                                     </p>
                                 </div>
                             </div>
