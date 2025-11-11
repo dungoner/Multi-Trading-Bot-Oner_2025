@@ -1496,6 +1496,106 @@ if mode == 0:
                 <a href="/auto-start" class="btn">🔄 Auto-Start Manager</a>
                 <a href="/settings" class="btn">⚙️ Settings</a>
             </div>
+
+            <!-- Navigation Links Panel -->
+            <div class="panel" style="margin-top: 30px;">
+                <div class="panel-header">🔗 NAVIGATION — Quick Access Links</div>
+                <div class="panel-body">
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 30px;">
+                        <!-- Port 80 (API) -->
+                        <div>
+                            <h3 style="font-size: 12px; color: #00A651; margin-bottom: 15px; text-transform: uppercase; letter-spacing: 1px; border-bottom: 2px solid #00A651; padding-bottom: 8px;">⚡ PORT 80 (API Endpoints)</h3>
+                            <ul style="list-style: none; padding: 0; font-size: 12px;">
+                                <li style="margin-bottom: 8px;">
+                                    <a href="http://localhost:80/" target="_blank" style="color: #2c2c2c; text-decoration: none; display: flex; align-items: center;">
+                                        <span style="color: #00A651; margin-right: 8px;">→</span> / <span style="color: #999; margin-left: 8px; font-size: 10px;">(API Root Info)</span>
+                                    </a>
+                                </li>
+                                <li style="margin-bottom: 8px;">
+                                    <a href="http://localhost:80/api/symbols" target="_blank" style="color: #2c2c2c; text-decoration: none; display: flex; align-items: center;">
+                                        <span style="color: #00A651; margin-right: 8px;">→</span> /api/symbols <span style="color: #999; margin-left: 8px; font-size: 10px;">(List all symbols)</span>
+                                    </a>
+                                </li>
+                                <li style="margin-bottom: 8px;">
+                                    <a href="http://localhost:80/api/health" target="_blank" style="color: #2c2c2c; text-decoration: none; display: flex; align-items: center;">
+                                        <span style="color: #00A651; margin-right: 8px;">→</span> /api/health <span style="color: #999; margin-left: 8px; font-size: 10px;">(Health check)</span>
+                                    </a>
+                                </li>
+                                <li style="margin-bottom: 8px; color: #999;">
+                                    <span style="color: #00A651; margin-right: 8px;">→</span> /api/csdl/&lt;symbol&gt; <span style="font-size: 10px;">(Get symbol data)</span>
+                                </li>
+                            </ul>
+                            <p style="margin-top: 15px; font-size: 10px; color: #666; padding: 10px; background: #f5f5f5; border-left: 3px solid #00A651;">
+                                💡 <strong>Note:</strong> API endpoints are public and accessible from any device. Bot 2 uses these to pull data from Bot 1.
+                            </p>
+                        </div>
+
+                        <!-- Port 9070 (Dashboard) -->
+                        <div>
+                            <h3 style="font-size: 12px; color: #FF6600; margin-bottom: 15px; text-transform: uppercase; letter-spacing: 1px; border-bottom: 2px solid #FF6600; padding-bottom: 8px;">📊 PORT 9070 (Dashboard Pages)</h3>
+                            <div style="margin-bottom: 20px;">
+                                <h4 style="font-size: 11px; color: #666; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 1px;">📈 Data Views</h4>
+                                <ul style="list-style: none; padding: 0; font-size: 12px;">
+                                    <li style="margin-bottom: 6px;">
+                                        <a href="/" style="color: #2c2c2c; text-decoration: none;">
+                                            <span style="color: #FF6600; margin-right: 8px;">→</span> / <span style="color: #999; font-size: 10px;">(Dashboard Home)</span>
+                                        </a>
+                                    </li>
+                                    <li style="margin-bottom: 6px;">
+                                        <a href="/mode0-view" style="color: #2c2c2c; text-decoration: none;">
+                                            <span style="color: #FF6600; margin-right: 8px;">→</span> /mode0-view <span style="color: #999; font-size: 10px;">(Mode 0 Data)</span>
+                                        </a>
+                                    </li>
+                                    <li style="margin-bottom: 6px;">
+                                        <a href="/mode1-view" style="color: #2c2c2c; text-decoration: none;">
+                                            <span style="color: #FF6600; margin-right: 8px;">→</span> /mode1-view <span style="color: #999; font-size: 10px;">(Mode 1 Data)</span>
+                                        </a>
+                                    </li>
+                                    <li style="margin-bottom: 6px;">
+                                        <a href="/csdl/user" style="color: #2c2c2c; text-decoration: none;">
+                                            <span style="color: #FF6600; margin-right: 8px;">→</span> /csdl/user <span style="color: #999; font-size: 10px;">(CSDL 1 User)</span>
+                                        </a>
+                                    </li>
+                                    <li style="margin-bottom: 6px;">
+                                        <a href="/csdl/ea-live" style="color: #2c2c2c; text-decoration: none;">
+                                            <span style="color: #FF6600; margin-right: 8px;">→</span> /csdl/ea-live <span style="color: #999; font-size: 10px;">(CSDL 2 EA Live)</span>
+                                        </a>
+                                    </li>
+                                    <li style="margin-bottom: 6px;">
+                                        <a href="/csdl/history" style="color: #2c2c2c; text-decoration: none;">
+                                            <span style="color: #FF6600; margin-right: 8px;">→</span> /csdl/history <span style="color: #999; font-size: 10px;">(Monthly History)</span>
+                                        </a>
+                                    </li>
+                                </ul>
+                            </div>
+                            <div>
+                                <h4 style="font-size: 11px; color: #666; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 1px;">⚙️ System Functions</h4>
+                                <ul style="list-style: none; padding: 0; font-size: 12px;">
+                                    <li style="margin-bottom: 6px;">
+                                        <a href="/settings" style="color: #2c2c2c; text-decoration: none;">
+                                            <span style="color: #FF6600; margin-right: 8px;">→</span> /settings <span style="color: #999; font-size: 10px;">(Configuration)</span>
+                                        </a>
+                                    </li>
+                                    <li style="margin-bottom: 6px;">
+                                        <a href="/symlink" style="color: #2c2c2c; text-decoration: none;">
+                                            <span style="color: #FF6600; margin-right: 8px;">→</span> /symlink <span style="color: #999; font-size: 10px;">(Symlink Manager)</span>
+                                        </a>
+                                    </li>
+                                    <li style="margin-bottom: 6px;">
+                                        <a href="/auto-start" style="color: #2c2c2c; text-decoration: none;">
+                                            <span style="color: #FF6600; margin-right: 8px;">→</span> /auto-start <span style="color: #999; font-size: 10px;">(Auto-Start Manager)</span>
+                                        </a>
+                                    </li>
+                                </ul>
+                            </div>
+                            <p style="margin-top: 15px; font-size: 10px; color: #666; padding: 10px; background: #fff3cd; border-left: 3px solid #FF6600;">
+                                ⚠️ <strong>Security:</strong> Dashboard access is typically localhost-only. System functions require local access.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
             <!-- Footer -->
             <div class="footer">
                 SYNS API Server v1.0 — Japanese Minimalist Design
@@ -4303,6 +4403,76 @@ elif mode == 1:
                         </table>
                     </div>
                 </div>
+
+                <!-- Navigation Links Panel -->
+                <div class="panel" style="margin-top: 30px;">
+                    <div class="panel-header">🔗 NAVIGATION — Quick Access Links</div>
+                    <div class="panel-body">
+                        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 30px;">
+                            <!-- Port 80 (API) -->
+                            <div>
+                                <h3 style="font-size: 12px; color: #00A651; margin-bottom: 15px; text-transform: uppercase; letter-spacing: 1px; border-bottom: 2px solid #00A651; padding-bottom: 8px;">⚡ PORT 80 (API Endpoints)</h3>
+                                <ul style="list-style: none; padding: 0; font-size: 12px;">
+                                    <li style="margin-bottom: 8px;">
+                                        <a href="{RECEIVER_CONFIG['bot1_url']}/" target="_blank" style="color: #2c2c2c; text-decoration: none; display: flex; align-items: center;">
+                                            <span style="color: #00A651; margin-right: 8px;">→</span> / <span style="color: #999; margin-left: 8px; font-size: 10px;">(API Root Info)</span>
+                                        </a>
+                                    </li>
+                                    <li style="margin-bottom: 8px;">
+                                        <a href="{RECEIVER_CONFIG['bot1_url']}/api/symbols" target="_blank" style="color: #2c2c2c; text-decoration: none; display: flex; align-items: center;">
+                                            <span style="color: #00A651; margin-right: 8px;">→</span> /api/symbols <span style="color: #999; margin-left: 8px; font-size: 10px;">(List all symbols)</span>
+                                        </a>
+                                    </li>
+                                    <li style="margin-bottom: 8px;">
+                                        <a href="{RECEIVER_CONFIG['bot1_url']}/api/health" target="_blank" style="color: #2c2c2c; text-decoration: none; display: flex; align-items: center;">
+                                            <span style="color: #00A651; margin-right: 8px;">→</span> /api/health <span style="color: #999; margin-left: 8px; font-size: 10px;">(Health check)</span>
+                                        </a>
+                                    </li>
+                                    <li style="margin-bottom: 8px; color: #999;">
+                                        <span style="color: #00A651; margin-right: 8px;">→</span> /api/csdl/&lt;symbol&gt; <span style="font-size: 10px;">(Get symbol data)</span>
+                                    </li>
+                                </ul>
+                                <p style="margin-top: 15px; font-size: 10px; color: #666; padding: 10px; background: #f5f5f5; border-left: 3px solid #00A651;">
+                                    💡 <strong>Note:</strong> API endpoints are public and accessible from any device. Bot 2 uses these to pull data from Bot 1.
+                                </p>
+                            </div>
+
+                            <!-- Port 9070 (Dashboard) -->
+                            <div>
+                                <h3 style="font-size: 12px; color: #FF6600; margin-bottom: 15px; text-transform: uppercase; letter-spacing: 1px; border-bottom: 2px solid #FF6600; padding-bottom: 8px;">📊 PORT {RECEIVER_CONFIG['dashboard_port']} (Dashboard Pages)</h3>
+                                <div style="margin-bottom: 20px;">
+                                    <h4 style="font-size: 11px; color: #666; margin-bottom: 8px; text-transform: uppercase; letter-spacing: 1px;">📈 Data Views</h4>
+                                    <ul style="list-style: none; padding: 0; font-size: 12px;">
+                                        <li style="margin-bottom: 6px;">
+                                            <a href="/" style="color: #2c2c2c; text-decoration: none;">
+                                                <span style="color: #FF6600; margin-right: 8px;">→</span> / <span style="color: #999; font-size: 10px;">(Dashboard Home - Mode 1)</span>
+                                            </a>
+                                        </li>
+                                        <li style="margin-bottom: 6px;">
+                                            <a href="/mode0-view" style="color: #2c2c2c; text-decoration: none;">
+                                                <span style="color: #FF6600; margin-right: 8px;">→</span> /mode0-view <span style="color: #999; font-size: 10px;">(Mode 0 Data)</span>
+                                            </a>
+                                        </li>
+                                        <li style="margin-bottom: 6px;">
+                                            <a href="/mode1-view" style="color: #2c2c2c; text-decoration: none;">
+                                                <span style="color: #FF6600; margin-right: 8px;">→</span> /mode1-view <span style="color: #999; font-size: 10px;">(Mode 1 Data)</span>
+                                            </a>
+                                        </li>
+                                        <li style="margin-bottom: 6px;">
+                                            <a href="/settings" style="color: #2c2c2c; text-decoration: none;">
+                                                <span style="color: #FF6600; margin-right: 8px;">→</span> /settings <span style="color: #999; font-size: 10px;">(Configuration)</span>
+                                            </a>
+                                        </li>
+                                    </ul>
+                                </div>
+                                <p style="margin-top: 15px; font-size: 10px; color: #666; padding: 10px; background: #e3f2fd; border-left: 3px solid #2196F3;">
+                                    ℹ️ <strong>Mode 1:</strong> This bot is running as RECEIVER (Bot 2), pulling data from Bot 1 at <strong>{RECEIVER_CONFIG['bot1_url']}</strong>
+                                </p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
                 <div style="text-align: center; margin-top: 20px; color: #999; font-size: 11px;">
                     Mode: PULL (Bot 2 chủ động lấy từ Bot 1) | Auto-refresh every 5 seconds | Dashboard Port: {RECEIVER_CONFIG['dashboard_port']}
                 </div>
