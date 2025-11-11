@@ -539,6 +539,57 @@ if mode == 0:
             except Exception as e:
                 print(f"[CLEANUP] Error in cleanup thread: {e}")
 
+    def auto_clear_console_midnight():
+        """Auto-clear console at midnight (0h0p0s) every day
+
+        Purpose: Keep console clean for 24/7 operation
+        Runs: Once per day at exactly 00:00:00
+        """
+        print(f"[AUTO-CLEAR] Started midnight console clear thread")
+
+        last_clear_date = None
+
+        while not shutdown_flag:
+            try:
+                # Check every 30 seconds
+                time.sleep(30)
+
+                if shutdown_flag:
+                    break
+
+                # Get current time
+                now = datetime.now()
+                current_date = now.date()
+
+                # Check if it's midnight (0h0p) and haven't cleared today yet
+                if now.hour == 0 and now.minute == 0 and last_clear_date != current_date:
+                    # Clear console
+                    os.system('cls' if os.name == 'nt' else 'clear')
+
+                    # Print banner
+                    print("=" * 60)
+                    print(f"🌙 MIDNIGHT CONSOLE REFRESH - {now.strftime('%Y-%m-%d %H:%M:%S')}")
+                    print("=" * 60)
+                    print(f"Mode:           {mode_name}")
+                    print(f"Server uptime:  {format_uptime(time.time() - server_start_time)}")
+                    print(f"API Port:       {config['api_port']}")
+                    print(f"Dashboard Port: {config['dashboard_port']}")
+                    print(f"Polling:        {config['polling_interval']}s")
+                    print(f"Quiet Mode:     {'ON' if QUIET_MODE else 'OFF'}")
+                    print("=" * 60)
+                    print("✅ Console cleared successfully! Server continues running...")
+                    print("=" * 60)
+
+                    # Mark as cleared for today
+                    last_clear_date = current_date
+
+                    # Sleep 90 seconds to avoid clearing multiple times
+                    time.sleep(90)
+
+            except Exception as e:
+                print(f"[AUTO-CLEAR] Error in midnight clear thread: {e}")
+                time.sleep(60)
+
     # ==============================================================================
     # FILE POLLING SYSTEM (Background Thread with Summary Logging)
     # ==============================================================================
@@ -3848,6 +3899,9 @@ if mode == 0:
         # Start periodic cleanup thread (prevent memory leak)
         cleanup_thread = Thread(target=periodic_cleanup, daemon=True)
         cleanup_thread.start()
+        # Start auto-clear console at midnight thread
+        midnight_clear_thread = Thread(target=auto_clear_console_midnight, daemon=True)
+        midnight_clear_thread.start()
         # Start API server thread
         api_thread = Thread(target=run_api_server, daemon=True)
         api_thread.start()
@@ -4133,6 +4187,56 @@ elif mode == 1:
             # INFO is silent in QUIET mode
         else:
             print(log_line)  # Normal mode: print all
+
+    def auto_clear_console_midnight():
+        """Auto-clear console at midnight (0h0p0s) every day
+
+        Purpose: Keep console clean for 24/7 operation
+        Runs: Once per day at exactly 00:00:00
+        """
+        print(f"[AUTO-CLEAR] Started midnight console clear thread")
+
+        last_clear_date = None
+
+        while True:
+            try:
+                # Check every 30 seconds
+                time.sleep(30)
+
+                # Get current time
+                now = datetime.now()
+                current_date = now.date()
+
+                # Check if it's midnight (0h0p) and haven't cleared today yet
+                if now.hour == 0 and now.minute == 0 and last_clear_date != current_date:
+                    # Clear console
+                    os.system('cls' if os.name == 'nt' else 'clear')
+
+                    # Print banner
+                    print("=" * 60)
+                    print(f"🌙 MIDNIGHT CONSOLE REFRESH - {now.strftime('%Y-%m-%d %H:%M:%S')}")
+                    print("=" * 60)
+                    print(f"Mode:           RECEIVER (Mode 1)")
+                    print(f"Bot 1 URL:      {RECEIVER_CONFIG['bot1_url']}")
+                    print(f"Dashboard Port: {RECEIVER_CONFIG['dashboard_port']}")
+                    print(f"Polling:        {RECEIVER_CONFIG['polling_interval']}s")
+                    print(f"Quiet Mode:     {'ON' if QUIET_MODE else 'OFF'}")
+                    print(f"Total Received: {receiver_state['total_data_received']}")
+                    print(f"Total Written:  {receiver_state['total_files_written']}")
+                    print("=" * 60)
+                    print("✅ Console cleared successfully! Server continues running...")
+                    print("=" * 60)
+
+                    # Mark as cleared for today
+                    last_clear_date = current_date
+
+                    # Sleep 90 seconds to avoid clearing multiple times
+                    time.sleep(90)
+
+            except Exception as e:
+                log_message("ERROR", f"[AUTO-CLEAR] Error in midnight clear thread: {e}")
+                time.sleep(60)
+
     # ============================================
     # SECTION 3: PULL MODE - POLLING BOT 1
     # ============================================
@@ -4917,6 +5021,9 @@ elif mode == 1:
         else:
             print(f"✅ Found {len(RECEIVER_CONFIG['symbols'])} symbols: {', '.join(RECEIVER_CONFIG['symbols'])}")
         print("=" * 60)
+        # Start auto-clear console at midnight thread
+        midnight_clear_thread = threading.Thread(target=auto_clear_console_midnight, daemon=True)
+        midnight_clear_thread.start()
         # Start polling thread
         polling_thread = threading.Thread(target=poll_bot1, daemon=True)
         polling_thread.start()
