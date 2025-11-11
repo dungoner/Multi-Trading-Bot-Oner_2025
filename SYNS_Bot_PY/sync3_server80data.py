@@ -591,6 +591,10 @@ if mode == 0:
                     # Wait until next even second (0, 2, 4, 6, 8...)
                     while int(time.time()) % 2 != 0:
                         time.sleep(0.05)  # Check every 50ms
+                    # RACE CONDITION FIX: Wait 150ms buffer to ensure Bot SPY finished writing files
+                    # Bot SPY writes files during ODD seconds (1,3,5,7...) and may complete at 2.000
+                    # This buffer ensures file handles are closed before Bot 3 reads them
+                    time.sleep(0.15)  # Buffer: 150ms safety margin
 
                 live_files, history_files = scan_csdl_files()
                 # Đọc LIVE files (cho Port 80 - EA)
