@@ -503,12 +503,14 @@ def poll_bot1():
                                 # Track for summary log
                                 symbols_updated_last_60s.append(symbol)
 
-                                # Log result
-                                if success3 and success2:
-                                    log_message("INFO", f"PULL: {symbol} updated → Folder2 + Folder3 (mtime={mtime})")
-                                elif success3:
+                                # ✅ SUPPRESSED: No need to log every update (spam reduction)
+                                # Summary log every 60s is enough (line 556)
+                                # log_message("INFO", f"PULL: {symbol} updated → Folder2 + Folder3 (mtime={mtime})")
+
+                                # Log only FAILURES (not success)
+                                if success3 and not success2:
                                     log_message("WARN", f"PULL: {symbol} updated → Folder3 only (Folder2 failed)")
-                                elif success2:
+                                elif success2 and not success3:
                                     log_message("WARN", f"PULL: {symbol} updated → Folder2 only (Folder3 failed)")
                             else:
                                 receiver_state["total_errors"] += 1
