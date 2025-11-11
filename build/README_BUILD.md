@@ -73,6 +73,31 @@ cd build
 build_all.bat
 ```
 
+### **Cách 3: GitHub Actions (Tự động trên cloud)**
+
+**Yêu cầu:** Code đã push lên GitHub
+
+**Build tự động mỗi khi push:**
+```bash
+git add .
+git commit -m "Update bots"
+git push origin main
+```
+
+**Tạo Release chính thức:**
+```bash
+git tag v2.0.0
+git push origin v2.0.0
+```
+
+**Download file .exe:**
+1. Vào GitHub repository → Tab **Actions**
+2. Click vào workflow run mới nhất
+3. Scroll xuống **Artifacts** → Download `SYNS-Bot-System-Windows.zip`
+4. Hoặc vào tab **Releases** nếu đã tạo tag
+
+**Chi tiết:** Xem `.github/workflows/README.md`
+
 ### **Kết quả:**
 
 Folder `dist/` sẽ chứa:
@@ -255,11 +280,16 @@ pip install pyinstaller
 
 ## 📊 SO SÁNH PHƯƠNG PHÁP ĐÓNG GÓI
 
-| Phương pháp | File size | Speed | Yêu cầu |
-|-------------|-----------|-------|---------|
-| **PyInstaller (1 file)** | ~50MB/bot | Fast | ✅ Recommended |
-| **PyInstaller + NSIS** | ~200MB | Medium | Installer chuyên nghiệp |
-| **Python Embedded** | ~30MB/bot | Slow | Phức tạp, không recommend |
+| Phương pháp | Build location | File size | Speed | Yêu cầu |
+|-------------|----------------|-----------|-------|---------|
+| **build_all.bat (Local)** | Local PC | ~50MB/bot | Fast (5-10 min) | Python, PyInstaller |
+| **GitHub Actions (Cloud)** | GitHub Server | ~50MB/bot | Medium (10-15 min) | GitHub repo only |
+| **PyInstaller + NSIS** | Local PC | ~200MB | Medium | Installer chuyên nghiệp |
+| **Python Embedded** | Local PC | ~30MB/bot | Slow | Phức tạp, không recommend |
+
+**Khuyến nghị:**
+- **Development/Testing:** Dùng `build_all.bat` (local build - nhanh)
+- **Production/Release:** Dùng GitHub Actions (tự động, chuyên nghiệp)
 
 ---
 

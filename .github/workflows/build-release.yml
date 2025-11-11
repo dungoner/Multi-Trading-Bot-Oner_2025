@@ -1,0 +1,109 @@
+name: Build and Release SYNS Bot System
+
+on:
+  push:
+    branches:
+      - main
+      - master
+    tags:
+      - 'v*.*.*'
+  workflow_dispatch:
+
+jobs:
+  build:
+    name: Build Windows Executables
+    runs-on: windows-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r build/requirements.txt
+
+    - name: Build Bot 0 (SENDER Full)
+      run: |
+        cd build
+        pyinstaller --clean --noconfirm build_bot0.spec
+
+    - name: Build Bot 1 (SENDER Optimized)
+      run: |
+        cd build
+        pyinstaller --clean --noconfirm build_bot1.spec
+
+    - name: Build Bot 2 (RECEIVER)
+      run: |
+        cd build
+        pyinstaller --clean --noconfirm build_bot2.spec
+
+    - name: Build Bot 3 (All-in-One)
+      run: |
+        cd build
+        pyinstaller --clean --noconfirm build_bot3.spec
+
+    - name: Copy config file
+      run: |
+        copy SYNS_Bot_PY\bot_config.json build\dist\bot_config.json
+
+    - name: Package builds
+      run: |
+        cd build\dist
+        Compress-Archive -Path * -DestinationPath ..\..\SYNS_Bot_System_Windows.zip
+      shell: powershell
+
+    - name: Upload build artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: SYNS-Bot-System-Windows
+        path: build/dist/
+        retention-days: 30
+
+    - name: Get version from tag
+      if: startsWith(github.ref, 'refs/tags/')
+      id: get_version
+      run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+      shell: bash
+
+    - name: Create Release
+      if: startsWith(github.ref, 'refs/tags/')
+      uses: softprops/action-gh-release@v1
+      with:
+        files: SYNS_Bot_System_Windows.zip
+        body: |
+          ## SYNS Bot System - Windows Release
+
+          ### 📦 Included Files
+          - `SYNS_Bot0_Sender_Full.exe` - Bot 0 (SENDER Full Features)
+          - `SYNS_Bot1_Sender_Optimized.exe` - Bot 1 (SENDER Optimized)
+          - `SYNS_Bot2_Receiver.exe` - Bot 2 (RECEIVER)
+          - `SYNS_Bot3_All_In_One.exe` - Bot 3 (All-in-One)
+          - `bot_config.json` - Configuration file
+
+          ### 🚀 Quick Start
+          1. Download `SYNS_Bot_System_Windows.zip`
+          2. Extract to your desired location
+          3. Edit `bot_config.json` with your settings
+          4. Run the .exe file you need
+          5. No Python installation required!
+
+          ### 📖 Documentation
+          See `build/README_BUILD.md` for detailed instructions.
+
+          ### 🔧 System Requirements
+          - Windows 10/11 (64-bit)
+          - 5GB free disk space
+          - Administrator privileges (for Port 80)
+
+          ---
+          **Built with PyInstaller | Made with ❤️ by ONER Trading System**
+        draft: false
+        prerelease: false
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
