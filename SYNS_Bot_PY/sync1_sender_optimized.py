@@ -587,10 +587,10 @@ def poll_files():
                                 try:
                                     parsed_data = json.loads(raw_content, object_pairs_hook=OrderedDict)
                                     if not isinstance(parsed_data, list) or len(parsed_data) < 7:
-                                        print(f"[POLLING] Invalid data structure in {symbol}: expected 7+ rows")
+                                        log_print(f"[POLLING] Invalid data structure in {symbol}: expected 7+ rows", "ERROR")
                                         continue
                                 except json.JSONDecodeError as e:
-                                    print(f"[POLLING] Invalid JSON in {symbol}: {e}")
+                                    log_print(f"[POLLING] Invalid JSON in {symbol}: {e}", "ERROR")
                                     continue
 
                                 # Update cache with OrderedDict (preserves column order 100%)
@@ -607,7 +607,7 @@ def poll_files():
                                 live_updates.append((symbol, mtime))
 
                             except Exception as e:
-                                print(f"[POLLING] Error reading LIVE {symbol}: {e}")
+                                log_print(f"[POLLING] Error reading LIVE {symbol}: {e}", "ERROR")
 
             # Scan for HISTORY files but DON'T auto-read them
             # Just track their existence for User viewing
@@ -639,7 +639,7 @@ def poll_files():
             time.sleep(config["polling_interval"])
 
         except Exception as e:
-            print(f"[POLLING] Error in polling thread: {e}")
+            log_print(f"[POLLING] Error in polling thread: {e}", "ERROR")
             time.sleep(config["polling_interval"])
 
 # ==============================================================================
@@ -861,7 +861,9 @@ def sync_csdl(symbol):
         "timestamp": int(time.time())
     }
 
-    log_print(f"[API] Sent {clean_symbol} to Bot 2 at {client_ip} (mtime: {mtime})", "INFO")
+    # ✅ SUPPRESSED: No need to log every Bot 2 request (spam reduction)
+    # Bot 2 polls every 1s → 10 symbols = 600 logs/min = SPAM!
+    # log_print(f"[API] Sent {clean_symbol} to Bot 2 at {client_ip} (mtime: {mtime})", "INFO")
 
     # Track EA/Bot2 activity for dashboard monitoring
     track_ea_activity(clean_symbol, client_ip)
