@@ -463,52 +463,47 @@ def auto_clear_console_midnight():
 
     Purpose: Keep console clean for 24/7 operation
     Runs: Once per day at exactly 00:00:00
+
+    EFFICIENT: Sleep until midnight, clear ONCE, repeat (no polling!)
     """
     global shutdown_flag
 
     print(f"[AUTO-CLEAR] Started midnight console clear thread")
 
-    last_clear_date = None
-
     while not shutdown_flag:
         try:
-            # Check every 30 seconds
-            time.sleep(30)
+            # Calculate time until next midnight (0h:0p:0s)
+            now = datetime.now()
+            tomorrow = now + timedelta(days=1)
+            next_midnight = datetime(tomorrow.year, tomorrow.month, tomorrow.day, 0, 0, 0)
+            seconds_until_midnight = (next_midnight - now).total_seconds()
+
+            # Sleep until midnight (ONE sleep only!)
+            time.sleep(seconds_until_midnight)
 
             if shutdown_flag:
                 break
 
-            # Get current time
+            # Clear console at midnight
+            os.system('cls' if os.name == 'nt' else 'clear')
+
+            # Print banner
             now = datetime.now()
-            current_date = now.date()
-
-            # Check if it's midnight (0h0p) and haven't cleared today yet
-            if now.hour == 0 and now.minute == 0 and last_clear_date != current_date:
-                # Clear console
-                os.system('cls' if os.name == 'nt' else 'clear')
-
-                # Print banner
-                print("=" * 60)
-                print(f"🌙 MIDNIGHT CONSOLE REFRESH - {now.strftime('%Y-%m-%d %H:%M:%S')}")
-                print("=" * 60)
-                print(f"Server uptime: {format_uptime(time.time() - server_start_time)}")
-                print(f"API Port:       {config['api_port']}")
-                print(f"Dashboard Port: {config['dashboard_port']}")
-                print(f"Polling:        {config['polling_interval']}s")
-                print(f"Quiet Mode:     {'ON' if QUIET_MODE else 'OFF'}")
-                print("=" * 60)
-                print("✅ Console cleared successfully! Server continues running...")
-                print("=" * 60)
-
-                # Mark as cleared for today
-                last_clear_date = current_date
-
-                # Sleep 90 seconds to avoid clearing multiple times
-                time.sleep(90)
+            print("=" * 60)
+            print(f"🌙 MIDNIGHT CONSOLE REFRESH - {now.strftime('%Y-%m-%d %H:%M:%S')}")
+            print("=" * 60)
+            print(f"Server uptime: {format_uptime(time.time() - server_start_time)}")
+            print(f"API Port:       {config['api_port']}")
+            print(f"Dashboard Port: {config['dashboard_port']}")
+            print(f"Polling:        {config['polling_interval']}s")
+            print(f"Quiet Mode:     {'ON' if QUIET_MODE else 'OFF'}")
+            print("=" * 60)
+            print("✅ Console cleared successfully! Server continues running...")
+            print("=" * 60)
 
         except Exception as e:
             print(f"[AUTO-CLEAR] Error in midnight clear thread: {e}")
-            time.sleep(60)
+            time.sleep(3600)  # Retry after 1h on error
 
 # ==============================================================================
 # SIGNAL HANDLERS (Ctrl+C Protection)
