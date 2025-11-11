@@ -379,6 +379,86 @@ ctrl_c_count = 0    # Count Ctrl+C presses
 last_ctrl_c_time = 0  # Last Ctrl+C timestamp
 
 # ==============================================================================
+# MEMORY LEAK PREVENTION (Cache Cleanup)
+# ==============================================================================
+MAX_HISTORY_CACHE_ENTRIES = 100   # Max symbols to track in history_cache
+MAX_HISTORY_DATA_LOADED = 50      # Max symbols with data loaded in memory
+HISTORY_DATA_TTL = 1800           # Clear data after 30 minutes (seconds)
+CLEANUP_INTERVAL = 3600           # Run cleanup every 1 hour (seconds)
+
+def cleanup_history_cache():
+    """Clean up history_cache to prevent memory leak
+
+    This function:
+    1. Removes old data (TTL expired) to free memory
+    2. Limits total entries to MAX_HISTORY_CACHE_ENTRIES
+    3. Limits loaded data to MAX_HISTORY_DATA_LOADED
+    """
+    with cache_lock:
+        now = time.time()
+
+        # Step 1: Clear expired data (TTL > 30 minutes)
+        cleared_count = 0
+        for symbol, cache in history_cache.items():
+            if cache.get("data") is not None:
+                last_access = cache.get("last_access", 0)
+                if now - last_access > HISTORY_DATA_TTL:
+                    cache["data"] = None  # Free memory
+                    cleared_count += 1
+
+        if cleared_count > 0:
+            log_print(f"[CLEANUP] Cleared {cleared_count} expired history data (TTL: {HISTORY_DATA_TTL}s)", "INFO")
+
+        # Step 2: Limit loaded data count
+        loaded_symbols = [(s, c.get("last_access", 0)) for s, c in history_cache.items() if c.get("data") is not None]
+        if len(loaded_symbols) > MAX_HISTORY_DATA_LOADED:
+            loaded_symbols.sort(key=lambda x: x[1])
+            to_clear = len(loaded_symbols) - MAX_HISTORY_DATA_LOADED
+            for symbol, _ in loaded_symbols[:to_clear]:
+                history_cache[symbol]["data"] = None
+            log_print(f"[CLEANUP] Cleared {to_clear} oldest history data (limit: {MAX_HISTORY_DATA_LOADED})", "INFO")
+
+        # Step 3: Limit total cache entries
+        if len(history_cache) > MAX_HISTORY_CACHE_ENTRIES:
+            all_entries = [(s, c.get("mtime", 0)) for s, c in history_cache.items()]
+            all_entries.sort(key=lambda x: x[1])
+            to_remove = len(history_cache) - MAX_HISTORY_CACHE_ENTRIES
+            for symbol, _ in all_entries[:to_remove]:
+                del history_cache[symbol]
+            log_print(f"[CLEANUP] Removed {to_remove} oldest cache entries (limit: {MAX_HISTORY_CACHE_ENTRIES})", "INFO")
+
+def cleanup_deleted_symbols():
+    """Remove symbols from file_cache if their files no longer exist"""
+    with cache_lock:
+        live_files, _ = scan_csdl_files()
+        current_symbols = set([extract_symbol_from_filename(f, is_live=True) for f in live_files])
+        cached_symbols = set(file_cache.keys())
+        deleted_symbols = cached_symbols - current_symbols
+
+        if deleted_symbols:
+            for symbol in deleted_symbols:
+                del file_cache[symbol]
+            log_print(f"[CLEANUP] Removed {len(deleted_symbols)} deleted symbols from cache", "INFO")
+
+def periodic_cleanup():
+    """Periodic cleanup thread - runs every hour"""
+    print(f"[CLEANUP] Started periodic cleanup thread (interval: {CLEANUP_INTERVAL}s / {CLEANUP_INTERVAL//3600}h)")
+
+    while not shutdown_flag:
+        try:
+            time.sleep(CLEANUP_INTERVAL)
+            if shutdown_flag:
+                break
+
+            log_print(f"[CLEANUP] Running periodic cleanup...", "INFO")
+            cleanup_history_cache()
+            cleanup_deleted_symbols()
+            log_print(f"[CLEANUP] Cleanup completed. Next cleanup in {CLEANUP_INTERVAL//3600}h", "INFO")
+
+        except Exception as e:
+            print(f"[CLEANUP] Error in cleanup thread: {e}")
+
+# ==============================================================================
 # SIGNAL HANDLERS (Ctrl+C Protection)
 # ==============================================================================
 
@@ -465,6 +545,16 @@ def poll_files():
 
     while not shutdown_flag:
         try:
+            # OPTIMIZATION: Sync to EVEN seconds when polling=2 (avoid conflict with Bot SPY odd-second writes)
+            if config["polling_interval"] == 2:
+                # Wait until next even second (0, 2, 4, 6, 8...)
+                while int(time.time()) % 2 != 0:
+                    time.sleep(0.05)  # Check every 50ms
+                # RACE CONDITION FIX: Wait 150ms buffer to ensure Bot SPY finished writing files
+                # Bot SPY writes files during ODD seconds (1,3,5,7...) and may complete at 2.000
+                # This buffer ensures file handles are closed before Bot 0 reads them
+                time.sleep(0.15)  # Buffer: 150ms safety margin
+
             live_files, history_files = scan_csdl_files()
 
             # Đọc LIVE files (cho Port 80 - EA)
@@ -537,7 +627,8 @@ def poll_files():
                         history_cache[symbol] = {
                             "data": None,
                             "mtime": 0,
-                            "filepath": filepath
+                            "filepath": filepath,
+                            "last_access": 0  # Track last access for TTL cleanup
                         }
 
             # Log summary every 60 seconds
@@ -2619,6 +2710,7 @@ def dashboard_view_user_data(symbol):
                     with open(filepath, 'r', encoding='utf-8') as f:
                         history_cache[symbol]["data"] = json.load(f)
                         history_cache[symbol]["mtime"] = os.path.getmtime(filepath)
+                        history_cache[symbol]["last_access"] = time.time()  # Track access time for TTL cleanup
                 except:
                     pass
 
@@ -3997,6 +4089,10 @@ def main():
     # Start weekly restart thread
     restart_thread = Thread(target=check_weekly_restart, daemon=True)
     restart_thread.start()
+
+    # Start periodic cleanup thread (prevent memory leak)
+    cleanup_thread = Thread(target=periodic_cleanup, daemon=True)
+    cleanup_thread.start()
 
     # Start API server thread
     api_thread = Thread(target=run_api_server, daemon=True)
