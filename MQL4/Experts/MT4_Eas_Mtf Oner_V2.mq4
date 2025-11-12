@@ -62,6 +62,11 @@ enum S2_TREND_MODE {
 };
 input S2_TREND_MODE S2_TrendMode = S2_FOLLOW_D1;  // S2: Trend (D1 auto/manual)
 
+//--- B.2B S2 NEWS Filter (3) | Loc tin tuc cho S2 (optional, default OFF)
+input bool S2_UseNewsFilter = false;        // S2: Use NEWS filter (FALSE=OFF, TRUE=ON)
+input int MinNewsLevelS2 = 2;                // S2: Min NEWS level (2-70, same as S1)
+input bool S2_RequireNewsDirection = false;  // S2: Match NEWS direction (signal==news!)
+
 //--- B.3 S3 NEWS Configuration (4) | Cau hinh tin tuc
 input int MinNewsLevelS3 = 2;         // S3: Min NEWS level (2-70)
 input bool EnableBonusNews = true;     // S3: Enable Bonus (extra on high NEWS)
@@ -1335,12 +1340,12 @@ void ProcessS1Strategy(int tf) {
 }
 
 // Process S2 (Trend Following) strategy for TF | Xu ly chien luoc S2 (Theo xu huong) >> OPTIMIZED: Uses single g_trend_d1 + pre-calculated lot + reads signal from CSDL | TOI UU: Dung g_trend_d1 don + lot da tinh + doc tin hieu tu CSDL
-// ENHANCED: Support 3 modes (auto D1 / force BUY / force SELL) | CAI TIEN: Ho tro 3 che do (tu dong D1 / chi BUY / chi SELL)
+// ENHANCED: Support 3 modes (auto D1 / force BUY / force SELL) + NEWS filter (optional) | CAI TIEN: Ho tro 3 che do + loc tin tuc (tuy chon)
 void ProcessS2Strategy(int tf) {
     int current_signal = g_ea.csdl_rows[tf].signal;
     datetime timestamp = (datetime)g_ea.csdl_rows[tf].timestamp;
 
-    // NEW: Determine trend based on mode | Xac dinh xu huong theo che do
+    // STEP 1: Determine trend based on mode | Xac dinh xu huong theo che do
     int trend_to_follow = 0;
 
     if(S2_TrendMode == S2_FOLLOW_D1) {
@@ -1353,11 +1358,33 @@ void ProcessS2Strategy(int tf) {
         trend_to_follow = -1;  // Force SELL only | Chi danh SELL
     }
 
-    // Check signal matches trend | Kiem tra tin hieu khop voi xu huong
+    // STEP 2: Check signal matches trend | Kiem tra tin hieu khop voi xu huong
     if(current_signal != trend_to_follow) {
         DebugPrint("S2_TREND: Signal=" + IntegerToString(current_signal) +
                    " != Trend=" + IntegerToString(trend_to_follow) + ", skip");
         return;
+    }
+
+    // STEP 3: NEWS filter check (optional, only if S2_UseNewsFilter = true) | Kiem tra loc tin tuc (tuy chon)
+    if(S2_UseNewsFilter) {
+        int news_level = g_ea.news_level[tf];           // |NEWS| absolute value
+        int news_direction = g_ea.news_direction[tf];   // NEWS sign (+1/-1/0)
+
+        // Check 1: NEWS level >= MinNewsLevelS2
+        if(news_level < MinNewsLevelS2) {
+            DebugPrint("S2_NEWS: " + G_TF_NAMES[tf] + " NEWS=" + IntegerToString(news_level) +
+                       " < Min=" + IntegerToString(MinNewsLevelS2) + ", SKIP");
+            return;
+        }
+
+        // Check 2: Signal = NEWS direction (if S2_RequireNewsDirection = true)
+        if(S2_RequireNewsDirection) {
+            if(current_signal != news_direction) {
+                DebugPrint("S2_NEWS: " + G_TF_NAMES[tf] + " Signal=" + IntegerToString(current_signal) +
+                           " != NewsDir=" + IntegerToString(news_direction) + ", SKIP");
+                return;
+            }
+        }
     }
 
     RefreshRates();
@@ -1370,16 +1397,21 @@ void ProcessS2Strategy(int tf) {
                                    "S2_" + G_TF_NAMES[tf], g_ea.magic_numbers[tf][1]);
         if(ticket > 0) {
             g_ea.position_flags[tf][1] = 1;
-            g_print_failed[tf][1] = false;  // Reset error flag on success | Dat lai co loi khi thanh cong
+            g_print_failed[tf][1] = false;
             string trend_str = trend_to_follow == 1 ? "UP" : "DOWN";
             string mode_str = (S2_TrendMode == 0) ? "AUTO" : (S2_TrendMode == 1) ? "FBUY" : "FSELL";
-            Print(">>> [OPEN] S2_TREND TF=", G_TF_NAMES[tf], " | #", ticket, " BUY ",
-                  DoubleToStr(g_ea.lot_sizes[tf][1], 2), " @", DoubleToStr(Ask, Digits),
-                  " | Sig=+1 Trend:", trend_str, " Mode:", mode_str, " | Timestamp:", IntegerToString(timestamp), " <<<");
+            string log_msg = ">>> [OPEN] S2_TREND TF=" + G_TF_NAMES[tf] + " | #" + IntegerToString(ticket) +
+                            " BUY " + DoubleToStr(g_ea.lot_sizes[tf][1], 2) + " @" + DoubleToStr(Ask, Digits) +
+                            " | Sig=+1 Trend:" + trend_str + " Mode:" + mode_str;
+            if(S2_UseNewsFilter) {
+                string arrow = (g_ea.news_direction[tf] > 0) ? "↑" : "↓";
+                log_msg += " News=" + (g_ea.news_direction[tf] > 0 ? "+" : "") +
+                          IntegerToString(g_ea.news_level[tf]) + arrow;
+            }
+            log_msg += " | Timestamp:" + IntegerToString(timestamp) + " <<<";
+            Print(log_msg);
         } else {
             g_ea.position_flags[tf][1] = 0;
-
-            // Print error ONLY ONCE until success | Chi in loi 1 LAN cho den khi thanh cong
             if(!g_print_failed[tf][1]) {
                 Print("[S2_", G_TF_NAMES[tf], "] Failed: ", GetLastError());
                 g_print_failed[tf][1] = true;
@@ -1392,16 +1424,21 @@ void ProcessS2Strategy(int tf) {
                                    "S2_" + G_TF_NAMES[tf], g_ea.magic_numbers[tf][1]);
         if(ticket > 0) {
             g_ea.position_flags[tf][1] = 1;
-            g_print_failed[tf][1] = false;  // Reset error flag on success | Dat lai co loi khi thanh cong
+            g_print_failed[tf][1] = false;
             string trend_str = trend_to_follow == -1 ? "DOWN" : "UP";
             string mode_str = (S2_TrendMode == 0) ? "AUTO" : (S2_TrendMode == 1) ? "FBUY" : "FSELL";
-            Print(">>> [OPEN] S2_TREND TF=", G_TF_NAMES[tf], " | #", ticket, " SELL ",
-                  DoubleToStr(g_ea.lot_sizes[tf][1], 2), " @", DoubleToStr(Bid, Digits),
-                  " | Sig=-1 Trend:", trend_str, " Mode:", mode_str, " | Timestamp:", IntegerToString(timestamp), " <<<");
+            string log_msg = ">>> [OPEN] S2_TREND TF=" + G_TF_NAMES[tf] + " | #" + IntegerToString(ticket) +
+                            " SELL " + DoubleToStr(g_ea.lot_sizes[tf][1], 2) + " @" + DoubleToStr(Bid, Digits) +
+                            " | Sig=-1 Trend:" + trend_str + " Mode:" + mode_str;
+            if(S2_UseNewsFilter) {
+                string arrow = (g_ea.news_direction[tf] > 0) ? "↑" : "↓";
+                log_msg += " News=" + (g_ea.news_direction[tf] > 0 ? "+" : "") +
+                          IntegerToString(g_ea.news_level[tf]) + arrow;
+            }
+            log_msg += " | Timestamp:" + IntegerToString(timestamp) + " <<<";
+            Print(log_msg);
         } else {
             g_ea.position_flags[tf][1] = 0;
-
-            // Print error ONLY ONCE until success | Chi in loi 1 LAN cho den khi thanh cong
             if(!g_print_failed[tf][1]) {
                 Print("[S2_", G_TF_NAMES[tf], "] Failed: ", GetLastError());
                 g_print_failed[tf][1] = true;
