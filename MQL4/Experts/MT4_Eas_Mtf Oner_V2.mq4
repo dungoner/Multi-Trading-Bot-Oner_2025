@@ -1,8 +1,8 @@
 //+------------------------------------------------------------------+
-//| MT4_EAs_M7TF ONER_v2: Multi Timeframe Expert Advisor for MT4 | EA nhieu khung thoi gian cho MT4
+//| MT4_Eas_Mtf NEWS_v3: Multi Timeframe Expert Advisor for MT4 | EA nhieu khung thoi gian cho MT4
 //| 7 TF × 3 Strategies = 21 orders | 7 khung x 3 chien luoc = 21 lenh | Version: API_V2 (MT4) - Added HTTP API support | Phien ban: API_V2 - Them ho tro HTTP API
 //+------------------------------------------------------------------+
-#property copyright "MT4_EAs_M7TF ONER_v2"
+#property copyright "MT4_Eas_Mtf NEWS_v3"
 #property strict
 
 //=============================================================================
@@ -12,25 +12,25 @@
 input string ___Menu_A___ = "___A. CORE SETTINGS __________";  //
 
 //--- A.1 Timeframe toggles (7) | Bat/tat khung thoi gian
-input bool TF_M1 = false;  // M1 Signal(1,-1) vs Timestamp(Mt4server)
+input bool TF_M1 = true;  // M1 Signal(1,-1) vs Timestamp(Mt4server)
 input bool TF_M5 = true;   // M5 (Buy/Sell Symbol_M5)
 input bool TF_M15 = true;  // M15 (Signal Symbol_M15)
 input bool TF_M30 = true;  // M30 (Buy/Sell Symbol_M30)
 input bool TF_H1 = true;   // H1 (Signal Symbol_H1)
 input bool TF_H4 = true;   // H4 (Buy/Sell Symbol_H4)
-input bool TF_D1 = false;  // D1 (Signal Symbol_D1)
+input bool TF_D1 = true;  // D1 (Signal Symbol_D1)
 
 //--- A.2 Strategy toggles (3) | Bat/tat chien luoc
 input bool S1_HOME = true;   // S1: Binary (Home_7TF > B1:S1_NewsFilter=false)
-input bool S2_TREND = true;  // S2: Trend (Follow D1)
+input bool S2_TREND = false;  // S2: Trend (Follow D1)
 input bool S3_NEWS = true;   // S3: News (High compact)
 //--- A.3 Close Mode Configuration (2) | Che do dong lenh
-input bool S1_CloseByM1 = true;   // S1: Close by M1 (TRUE=fast M1, FALSE=own TF)
+input bool S1_CloseByM1 = false;   // S1: Close by M1 (TRUE=fast M1, FALSE=own TF)
 input bool S2_CloseByM1 = false;   // S2: Close by M1 (TRUE=fast M1, FALSE=own TF)
 
 //--- A.4 Risk management (2) | Quan ly rui ro
 input double FixedLotSize = 0.1;          // Lot size (0.01-1.0 recommended)
-input double MaxLoss_Fallback = -1000.0;   // Maxloss fallback ($USD if CSDL fails)
+input double MaxLoss_Fallback = -1000.0;  // Maxloss fallback ($USD if CSDL fails)
 
 //--- A.5 Data source (1) | Nguon du lieu
 enum CSDL_SOURCE_ENUM {
@@ -43,9 +43,9 @@ input CSDL_SOURCE_ENUM CSDL_Source = FOLDER_2;  // CSDL folder (signal source)
 
 //--- A.6 HTTP API settings (only used if CSDL_Source = HTTP_API) | Cau hinh HTTP API >> IMPORTANT: MT4 must allow URL in Tools->Options->Expert Advisors | QUAN TRONG: MT4 phai cho phep URL
 // NOTE: MT4 WebRequest automatically uses port 80 for http:// | LUU Y: MT4 WebRequest tu dong dung port 80 >> DuckDNS domain for easy IP update IP at duckdns.org only
-input string HTTP_Server_IP = "dungalading.duckdns.org";  // HTTP Server domain/IP (Bot Python VPS)
+input string HTTP_Server_IP = "dungalading.duckdns.org";  // HTTP API (Bot Sync VPS)
 input string HTTP_API_Key = "";            // API Key (empty = no auth | de trong)
-input bool EnableSymbolNormal = false;     // symbol name (LTCUSDc.xyz -> FALSE = LTCUSD use_exact_name)
+input bool EnableSymbolNormal = false;     // Symbol_name (LTCUSDc.xyz ->FALSE =LTCUSD use_exact_name)
 
 input string ___Sep_B___ = "___B. STRATEGY CONFIG ________";  //
 
@@ -63,11 +63,11 @@ enum S2_TREND_MODE {
 input S2_TREND_MODE S2_TrendMode = S2_FOLLOW_D1;  // S2: Trend (D1 auto/manual)
 
 //--- B.3 S3 NEWS Configuration (4) | Cau hinh tin tuc
-input int MinNewsLevelS3 = 2;         // S3: Min NEWS level (2-70)
+input int MinNewsLevelS3 = 2;          // S3: Min NEWS level (2-70)
 input bool EnableBonusNews = true;     // S3: Enable Bonus (extra on high NEWS)
-input int BonusOrderCount = 1;         // S3: Bonus count (1-5 orders)
+input int BonusOrderCount = 2;         // S3: Bonus count (1-5 orders)
 input int MinNewsLevelBonus = 2;       // S3: Min NEWS for Bonus (threshold)
-input double BonusLotMultiplier = 1.2; // S3: Bonus lot multiplier (1.0-10.0)
+input double BonusLotMultiplier = 1.2; // S3: Bonus lot multiplier (= S3_lot×1.2)
 
 input string ___Sep_C___ = "___C. RISK PROTECTION _________";  //
 
@@ -78,10 +78,10 @@ enum STOPLOSS_MODE {
     LAYER2_MARGIN = 2    // Layer2: margin/divisor (emergency)
 };
 input STOPLOSS_MODE StoplossMode = LAYER1_MAXLOSS;  // Stoploss mode (0=OFF, 1=CSDL, 2=Margin)
-input double Layer2_Divisor = 5.0;  // Layer2 divisor (margin/-5 = threshold)
+input double Layer2_Divisor = 5.0;       // Layer2 divisor (margin/-5 = threshold)
 
 //--- C.2 Take profit (2) | Chot loi
-input bool   UseTakeProfit = false;  // Enable take profit (FALSE=OFF, TRUE=ON)
+input bool   UseTakeProfit = false;      // Enable take profit (FALSE=OFF, TRUE=ON)
 input double TakeProfit_Multiplier = 5;  // TP_Multi (Col_mloss x a_lot x b_Multi >> vd=1000 ×0.21 ×5 =1050 USD)
 
 input string ___Sep_D___ = "___D. AUXILIARY SETTINGS ______";  //
@@ -90,8 +90,8 @@ input string ___Sep_D___ = "___D. AUXILIARY SETTINGS ______";  //
 input bool UseEvenOddMode = true;  // Even/odd split mode (load balancing)
 
 //--- D.2 Health check & reset (2) | Kiem tra suc khoe
-input bool EnableWeekendReset = false;  // Weekend reset (auto close Friday 23:50)
-input bool EnableHealthCheck = true;    // Health check (8h/16h SPY bot status)
+input bool EnableWeekendReset = false;  // Auto close Saturday 00:03 (M5→M15→M30→H1→H4→D1→M1)
+input bool EnableHealthCheck = true;    // Health check (8h/16h SPY bot status reset auto)
 
 //--- D.3 Display (2) | Hien thi
 input bool ShowDashboard = true;  // Show dashboard (on-chart info)
