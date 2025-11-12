@@ -102,6 +102,11 @@ input bool EnableHealthCheck = true;    // Health check (8h/16h SPY bot status)
 input bool ShowDashboard = true;  // Show dashboard (on-chart info)
 input bool DebugMode = false;      // Debug mode (verbose logging)
 
+//--- D.4 NY Session Hours Filter (3) | Loc gio phien NY (chi S1/S2, khong S3/Bonus)
+input bool EnableNYHoursFilter = false;  // Enable NY hours filter (only S1/S2, not S3/Bonus)
+input int NYSessionStart = 14;           // NY session start hour (Server time, ICMarket EU: 14=8AM NY)
+input int NYSessionEnd = 21;             // NY session end hour (Server time, ICMarket EU: 21=3PM NY)
+
 //=============================================================================
 //  PART 2: DATA STRUCTURES (1 struct) | CAU TRUC DU LIEU
 //=============================================================================
@@ -1221,7 +1226,7 @@ void CloseS3OrdersForTF(int tf) {
 }
 
 //=============================================================================
-//  PART 13: BASE CONDITION CHECK (1 function) | KIEM TRA DIEU KIEN GOC
+//  PART 13: BASE CONDITION CHECK (2 functions) | KIEM TRA DIEU KIEN GOC
 //=============================================================================
 
 // Check if signal changed and new signal valid | Kiem tra tin hieu co thay doi va tin hieu moi hop le
@@ -1236,6 +1241,27 @@ bool HasValidS2BaseCondition(int tf) {
             signal_new != 0 &&
             timestamp_old < timestamp_new &&
             (timestamp_new - timestamp_old) > 15);
+}
+
+// Check if current time is within NY session hours | Kiem tra gio hien tai co trong phien NY
+// IMPORTANT: Only affects S1/S2 OPENING orders, NOT S3/Bonus (NEWS has own logic) | Chi anh huong MO lenh S1/S2
+// IMPORTANT: Does NOT affect CLOSING orders (close anytime by signal/SL/TP) | KHONG anh huong DONG lenh
+bool IsWithinNYHours() {
+    // If disabled, always return true (no filter) | Neu tat, luon tra ve true
+    if(!EnableNYHoursFilter) return true;
+
+    int current_hour = TimeHour(TimeCurrent());
+
+    // Simple case: Start < End (same day) | TH don gian: trong cung ngay
+    // Example: 14:00 - 21:00 (ICMarket EU default)
+    if(NYSessionStart < NYSessionEnd) {
+        return (current_hour >= NYSessionStart && current_hour < NYSessionEnd);
+    }
+    // Complex case: Start > End (cross midnight) | TH phuc tap: qua dem
+    // Example: 20:00 - 03:00 (next day)
+    else {
+        return (current_hour >= NYSessionStart || current_hour < NYSessionEnd);
+    }
 }
 
 //=============================================================================
@@ -1332,6 +1358,9 @@ void ProcessS1NewsFilterStrategy(int tf) {
 
 // S1 Strategy Router: Call appropriate function based on filter setting | Bo dinh tuyen S1: Goi ham tuong ung theo cai dat
 void ProcessS1Strategy(int tf) {
+    // CHECK NY HOURS: Only S1 needs this (S3/Bonus have own NEWS logic) | Chi S1 can kiem tra gio NY
+    if(!IsWithinNYHours()) return;
+
     if(S1_UseNewsFilter) {
         ProcessS1NewsFilterStrategy(tf);
     } else {
@@ -1342,6 +1371,9 @@ void ProcessS1Strategy(int tf) {
 // Process S2 (Trend Following) strategy for TF | Xu ly chien luoc S2 (Theo xu huong) >> OPTIMIZED: Uses single g_trend_d1 + pre-calculated lot + reads signal from CSDL | TOI UU: Dung g_trend_d1 don + lot da tinh + doc tin hieu tu CSDL
 // ENHANCED: Support 3 modes (auto D1 / force BUY / force SELL) + NEWS filter (optional) | CAI TIEN: Ho tro 3 che do + loc tin tuc (tuy chon)
 void ProcessS2Strategy(int tf) {
+    // CHECK NY HOURS: Only S2 needs this (S3/Bonus have own NEWS logic) | Chi S2 can kiem tra gio NY
+    if(!IsWithinNYHours()) return;
+
     int current_signal = g_ea.csdl_rows[tf].signal;
     datetime timestamp = (datetime)g_ea.csdl_rows[tf].timestamp;
 
