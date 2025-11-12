@@ -52,23 +52,23 @@ enum CSDL_SOURCE_ENUM {
     FOLDER_1 = 0,  // DataAutoOner (Botspy)
     FOLDER_2 = 1,  // DataAutoOner2 (_Default_Ea)
     FOLDER_3 = 2,  // DataAutoOner3 (_Sync/_Ea)
-    HTTP_API = 3   // HTTP API (Remote VPS via Bot Python)
+    HTTP_API = 3   // HTTP API (Bot Sync VPS)
 };
-input CSDL_SOURCE_ENUM CSDL_Source = HTTP_API;  // CSDL via HTTP (Bot Sync Py)
+input CSDL_SOURCE_ENUM CSDL_Source = HTTP_API;  // CSDL HTTP API (Remote VPS via Bot Python)
 
 //--- A.6 HTTP API settings (only used if CSDL_Source = HTTP_API) | Cau hinh HTTP API
 // IMPORTANT: MT5 must allow URL in Tools->Options->Expert Advisors | QUAN TRONG: MT5 phai cho phep URL
 // NOTE: MT5 WebRequest automatically uses port 80 for http:// | LUU Y: MT5 WebRequest tu dong dung port 80 (DuckDNS domain for easy IP update IP at duckdns.org only)
 input string HTTP_Server_IP = "dungalading.duckdns.org";  // HTTP Server domain/IP (Bot Python VPS)
 input string HTTP_API_Key = "";                    // API Key (empty = no auth | de trong = khong xac thuc)
-input bool EnableSymbolNormalization = false;      // symbol name (LTCUSDc.xyz -> FALSE = LTCUSD use_exact_name)
+input bool EnableSymbolNormalization = false;      // Symbol name (LTCUSDc.xyz ->FALSE =LTCUSD use_exact_name)
 
 input string ___Sep_B___ = "___B. STRATEGY CONFIG ________";  //
 
 //--- B.1 S1 NEWS Filter (3) | Loc tin tuc cho S1
 input bool S1_UseNewsFilter = true;         // S1: Use NEWS filter (TRUE=strict, FALSE=basic)
-input int MinNewsLevelS1 = 2;                // S1: Min NEWS level (2-70, higher=stricter)
-input bool S1_RequireNewsDirection = true;   // S1: Match NEWS direction (signal==news!)
+input int MinNewsLevelS1 = 2;               // S1: Min NEWS level (2-70, higher=stricter)
+input bool S1_RequireNewsDirection = true;  // S1: Match NEWS direction (signal==news!)
 
 //--- B.2 S2 TREND Mode (1) | Che do xu huong
 enum S2_TREND_MODE {
@@ -97,7 +97,7 @@ input STOPLOSS_MODE StoplossMode = LAYER1_MAXLOSS;  // Stoploss mode (0=OFF, 1=C
 input double Layer2_Divisor = 5.0;  // Layer2 divisor (margin/-5 = threshold)
 
 //--- C.2 Take profit (2) | Chot loi
-input bool   UseTakeProfit = false;  // Enable take profit (FALSE=OFF, TRUE=ON)
+input bool   UseTakeProfit = false;      // Enable take profit (FALSE=OFF, TRUE=ON)
 input double TakeProfit_Multiplier = 5;  // TP_multi (vd=1000 × 0.21 × 3 = 630 USD)
 
 input string ___Sep_D___ = "___D. AUXILIARY SETTINGS ______";  //
@@ -106,12 +106,12 @@ input string ___Sep_D___ = "___D. AUXILIARY SETTINGS ______";  //
 input bool UseEvenOddMode = true;  // Even/odd split mode (load balancing)
 
 //--- D.2 Health check & reset (2) | Kiem tra suc khoe
-input bool EnableWeekendReset = false;  // Weekend reset (auto close Friday 23:50)
+input bool EnableWeekendReset = false;  // Weekend reset close 00:03 (D1→H4→H1→M30→M15→M1|W1→M5)
 input bool EnableHealthCheck = true;    // Health check (8h/16h SPY bot status)
 
 //--- D.3 Display (2) | Hien thi
 input bool ShowDashboard = true;  // Show dashboard (on-chart info)
-input bool DebugMode = false;      // Debug mode (verbose logging)
+input bool DebugMode = false;     // Debug mode (verbose logging)
 
 //=============================================================================
 //  PART 1B: UNICODE SYMBOLS (for dashboard) | KY TU UNICODE
