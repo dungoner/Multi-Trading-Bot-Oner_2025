@@ -90,6 +90,17 @@ receiver_state = {
 # Giống EA: CheckSPYBotHealth (8h/16h), nhưng ở đây 1h/lần
 error_log_tracker = {}  # {symbol: {"last_log_time": timestamp, "error_count": count}}
 
+# ============================================
+# MEMORY LEAK PREVENTION (Bot 2 - RECEIVER)
+# ============================================
+# Bot 2 uses different structures than Bot 0/1 (RECEIVER vs SENDER)
+# But still needs cleanup for: receiver_state["symbols_received"] and error_log_tracker
+
+MAX_SYMBOLS_TRACKED = 100       # Max symbols in receiver_state
+MAX_ERROR_TRACKER_ENTRIES = 200 # Max error tracker entries
+ERROR_TRACKER_TTL = 86400       # 24h TTL for error trackers
+CLEANUP_INTERVAL = 3600         # 1h cleanup interval
+
 # Flask app (Dashboard only)
 app_dashboard = Flask(__name__)
 CORS(app_dashboard)
@@ -290,6 +301,145 @@ def log_message(level, message):
         print(log_line)  # Normal mode: print all
 
 # ============================================
+# MEMORY LEAK PREVENTION - CLEANUP FUNCTIONS
+# ============================================
+
+def cleanup_receiver_state():
+    """Remove deleted symbols from receiver_state to prevent memory leak
+
+    Bot 2 specific: Clean up symbols that are no longer in Bot 1's symbol list
+
+    ISSUE: If Bot 1 removes a symbol, it stays in receiver_state["symbols_received"] forever
+    FIX: Compare with current symbol list from Bot 1 and remove deleted symbols
+    """
+    try:
+        current_symbols = set(RECEIVER_CONFIG.get("symbols", []))
+        tracked_symbols = set(receiver_state["symbols_received"].keys())
+        deleted_symbols = tracked_symbols - current_symbols
+
+        if deleted_symbols:
+            for symbol in deleted_symbols:
+                del receiver_state["symbols_received"][symbol]
+            log_message("INFO", f"[CLEANUP] Removed {len(deleted_symbols)} deleted symbols from receiver_state")
+
+        # Limit max symbols tracked (safety measure)
+        if len(receiver_state["symbols_received"]) > MAX_SYMBOLS_TRACKED:
+            # Keep only most recently updated symbols
+            sorted_symbols = sorted(
+                receiver_state["symbols_received"].items(),
+                key=lambda x: x[1].get("last_update", 0),
+                reverse=True
+            )
+            keep_symbols = dict(sorted_symbols[:MAX_SYMBOLS_TRACKED])
+            removed_count = len(receiver_state["symbols_received"]) - len(keep_symbols)
+            receiver_state["symbols_received"] = keep_symbols
+            log_message("INFO", f"[CLEANUP] Limited receiver_state to {MAX_SYMBOLS_TRACKED} symbols (removed {removed_count} oldest)")
+
+    except Exception as e:
+        log_message("ERROR", f"cleanup_receiver_state failed: {e}")
+
+def cleanup_error_tracker():
+    """Remove old error trackers to prevent memory leak
+
+    Bot 2 specific: Clean up error trackers that haven't been updated in 24h
+
+    ISSUE: error_log_tracker grows indefinitely as symbol/error_type combinations are added
+    FIX: Remove trackers older than 24h TTL
+    """
+    try:
+        now = time.time()
+        old_trackers = []
+
+        for tracker_key, tracker_data in error_log_tracker.items():
+            last_log_time = tracker_data.get("last_log_time", 0)
+            age = now - last_log_time
+
+            # Remove if older than 24h
+            if age > ERROR_TRACKER_TTL:
+                old_trackers.append(tracker_key)
+
+        if old_trackers:
+            for tracker_key in old_trackers:
+                del error_log_tracker[tracker_key]
+            log_message("INFO", f"[CLEANUP] Removed {len(old_trackers)} old error trackers (TTL > 24h)")
+
+        # Limit max trackers (safety measure)
+        if len(error_log_tracker) > MAX_ERROR_TRACKER_ENTRIES:
+            # Keep only most recently logged trackers
+            sorted_trackers = sorted(
+                error_log_tracker.items(),
+                key=lambda x: x[1].get("last_log_time", 0),
+                reverse=True
+            )
+            keep_trackers = dict(sorted_trackers[:MAX_ERROR_TRACKER_ENTRIES])
+            removed_count = len(error_log_tracker) - len(keep_trackers)
+            error_log_tracker.clear()
+            error_log_tracker.update(keep_trackers)
+            log_message("INFO", f"[CLEANUP] Limited error_tracker to {MAX_ERROR_TRACKER_ENTRIES} entries (removed {removed_count} oldest)")
+
+    except Exception as e:
+        log_message("ERROR", f"cleanup_error_tracker failed: {e}")
+
+def periodic_cleanup():
+    """Periodic cleanup thread - runs every hour
+
+    Bot 2 specific: Clean up receiver_state and error_tracker
+    Unlike Bot 0/1 (SENDER), Bot 2 doesn't have file_cache or history_cache
+    """
+    log_message("INFO", "[CLEANUP] Periodic cleanup thread started (interval: 1h)")
+
+    while True:
+        try:
+            time.sleep(CLEANUP_INTERVAL)
+            cleanup_receiver_state()
+            cleanup_error_tracker()
+        except Exception as e:
+            log_message("ERROR", f"Periodic cleanup thread error: {e}")
+
+def auto_clear_console_midnight():
+    """Auto-clear console at midnight (0h0p0s) every day
+
+    Purpose: Keep console clean for 24/7 operation
+    Runs: Once per day at exactly 00:00:00
+
+    EFFICIENT: Sleep until midnight, clear ONCE, repeat (no polling!)
+    """
+    print(f"[AUTO-CLEAR] Started midnight console clear thread")
+
+    while True:
+        try:
+            # Calculate time until next midnight (0h:0p:0s)
+            now = datetime.now()
+            tomorrow = now + timedelta(days=1)
+            next_midnight = datetime(tomorrow.year, tomorrow.month, tomorrow.day, 0, 0, 0)
+            seconds_until_midnight = (next_midnight - now).total_seconds()
+
+            # Sleep until midnight (ONE sleep only!)
+            time.sleep(seconds_until_midnight)
+
+            # Clear console at midnight
+            os.system('cls' if os.name == 'nt' else 'clear')
+
+            # Print banner
+            now = datetime.now()
+            print("=" * 60)
+            print(f"🌙 MIDNIGHT CONSOLE REFRESH - {now.strftime('%Y-%m-%d %H:%M:%S')}")
+            print("=" * 60)
+            print(f"Bot 1 URL:      {RECEIVER_CONFIG['bot1_url']}")
+            print(f"Dashboard Port: {RECEIVER_CONFIG['dashboard_port']}")
+            print(f"Polling:        {RECEIVER_CONFIG['polling_interval']}s")
+            print(f"Quiet Mode:     {'ON' if QUIET_MODE else 'OFF'}")
+            print(f"Total Received: {receiver_state['total_data_received']}")
+            print(f"Total Written:  {receiver_state['total_files_written']}")
+            print("=" * 60)
+            print("✅ Console cleared successfully! Server continues running...")
+            print("=" * 60)
+
+        except Exception as e:
+            log_message("ERROR", f"[AUTO-CLEAR] Error in midnight clear thread: {e}")
+            time.sleep(3600)  # Retry after 1h on error
+
+# ============================================
 # SECTION 3: PULL MODE - POLLING BOT 1
 # ============================================
 
@@ -396,12 +546,14 @@ def poll_bot1():
                                 # Track for summary log
                                 symbols_updated_last_60s.append(symbol)
 
-                                # Log result
-                                if success3 and success2:
-                                    log_message("INFO", f"PULL: {symbol} updated → Folder2 + Folder3 (mtime={mtime})")
-                                elif success3:
+                                # ✅ SUPPRESSED: No need to log every update (spam reduction)
+                                # Summary log every 60s is enough (line 556)
+                                # log_message("INFO", f"PULL: {symbol} updated → Folder2 + Folder3 (mtime={mtime})")
+
+                                # Log only FAILURES (not success)
+                                if success3 and not success2:
                                     log_message("WARN", f"PULL: {symbol} updated → Folder3 only (Folder2 failed)")
-                                elif success2:
+                                elif success2 and not success3:
                                     log_message("WARN", f"PULL: {symbol} updated → Folder2 only (Folder3 failed)")
                             else:
                                 receiver_state["total_errors"] += 1
@@ -630,6 +782,14 @@ if __name__ == "__main__":
     else:
         print(f"✅ Found {len(RECEIVER_CONFIG['symbols'])} symbols: {', '.join(RECEIVER_CONFIG['symbols'])}")
     print("=" * 60)
+
+    # Start cleanup thread (memory leak prevention)
+    cleanup_thread = threading.Thread(target=periodic_cleanup, daemon=True)
+    cleanup_thread.start()
+
+    # Start auto-clear console at midnight thread
+    midnight_clear_thread = threading.Thread(target=auto_clear_console_midnight, daemon=True)
+    midnight_clear_thread.start()
 
     # Start polling thread
     polling_thread = threading.Thread(target=poll_bot1, daemon=True)

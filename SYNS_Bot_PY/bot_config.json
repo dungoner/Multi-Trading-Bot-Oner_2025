@@ -22,6 +22,7 @@
     "output_folder": "C:/PRO_ONER/MQL4/Files/DataAutoOner3/",
     "output_folder2": "C:/PRO_ONER/MQL4/Files/DataAutoOner2/",
     "dashboard_port": 9070,
+    "server_ip": "0.0.0.0",
     "http_timeout": 5
   },
   "symlink": {
@@ -39,7 +40,7 @@
   },
   "autostart": {
     "bot_folder": "E:\\PRO_ONER\\SYNS_Bot_PY",
-    "start_script": "START_0123_BOT.bat",
+    "start_script": "START_BOT.bat",
     "task_name": "SYNS_Bot_AutoStart",
     "mt_platforms": []
   },

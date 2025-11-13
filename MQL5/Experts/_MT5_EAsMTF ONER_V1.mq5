@@ -1,9 +1,25 @@
+﻿//+------------------------------------------------------------------+
+//| _MT5_EAsMTF ONER_V1 : Multi Timeframe Expert Advisor for MT5 | EA nhieu khung thoi gian cho MT5
+//| 7 TF × 3 Strategies = 21 orders | 7 khung x 3 chien luoc = 21 lenh | Version: API (MT5) - Added HTTP API | Phien ban: API - Them HTTP API
 //+------------------------------------------------------------------+
-//| MT4_EAs_M7TF ONER_v2: Multi Timeframe Expert Advisor for MT4 | EA nhieu khung thoi gian cho MT4
-//| 7 TF × 3 Strategies = 21 orders | 7 khung x 3 chien luoc = 21 lenh | Version: API_V2 (MT4) - Added HTTP API support | Phien ban: API_V2 - Them ho tro HTTP API
-//+------------------------------------------------------------------+
-#property copyright "MT4_EAs_M7TF ONER_v2"
-#property strict
+#property copyright "_MT5_EAsMTF ONER_V1"
+
+//=============================================================================
+//  MT5 REQUIRED INCLUDES - CRITICAL FOR FILL POLICY
+//=============================================================================
+#include <Trade\Trade.mqh>
+#include <Trade\PositionInfo.mqh>
+#include <Trade\SymbolInfo.mqh>
+#include <Trade\AccountInfo.mqh>
+
+//=============================================================================
+//  MT5 GLOBAL TRADING OBJECTS - MUST DECLARE BEFORE FUNCTIONS
+//=============================================================================
+
+CTrade         g_trade;           // Trade operations with Fill Policy setup
+CPositionInfo  g_position_info;   // Position information
+CSymbolInfo    g_symbol_info;     // Symbol information
+CAccountInfo   g_account_info;    // Account information
 
 //=============================================================================
 //  PART 1: USER INPUTS (30 inputs + 4 separators) | CAU HINH NGUOI DUNG
@@ -11,8 +27,23 @@
 
 input string ___Menu_A___ = "___A. CORE SETTINGS __________";  //
 
+//--- A. Data source (1) | Nguon du lieu
+enum CSDL_SOURCE_ENUM {
+    FOLDER_1 = 0,  // DataAutoOner (Botspy)
+    FOLDER_2 = 1,  // DataAutoOner2 (_Default_Ea)
+    FOLDER_3 = 2,  // DataAutoOner3 (_Sync/_Ea)
+    HTTP_API = 3   // HTTP API (Remote VPS via Bot Python)
+};
+input CSDL_SOURCE_ENUM CSDL_Source = HTTP_API;  // CSDL via HTTP (Bot Sync Py)
+
+//--- A. HTTP API settings (only used if CSDL_Source = HTTP_API) | Cau hinh HTTP API -> IMPORTANT: MT5 must allow URL in Tools->Options->Expert Advisors | QUAN TRONG: MT5 phai cho phep URL
+// NOTE: MT5 WebRequest automatically uses port 80 for http:// | LUU Y: MT5 WebRequest tu dong dung port 80 (DuckDNS domain for easy IP update IP at duckdns.org only)
+input string HTTP_Server_IP = "dungalading.duckdns.org";  // HTTP Server domain/IP (Bot Python VPS)
+input string HTTP_API_Key = "";                    // API Key (empty = no auth | de trong = khong xac thuc)
+input bool EnableSymbolNormalization = false;      // symbol name (LTCUSDc.xyz -> FALSE = LTCUSD use_exact_name)
+
 //--- A.1 Timeframe toggles (7) | Bat/tat khung thoi gian
-input bool TF_M1 = false;  // M1 Signal(1,-1) vs Timestamp(Mt4server)
+input bool TF_M1 = true;   // M1 Signal(1,-1) vs Timestamp(Mt4server)
 input bool TF_M5 = true;   // M5 (Buy/Sell Symbol_M5)
 input bool TF_M15 = true;  // M15 (Signal Symbol_M15)
 input bool TF_M30 = true;  // M30 (Buy/Sell Symbol_M30)
@@ -30,29 +61,14 @@ input bool S2_CloseByM1 = false;   // S2: Close by M1 (TRUE=fast M1, FALSE=own T
 
 //--- A.4 Risk management (2) | Quan ly rui ro
 input double FixedLotSize = 0.1;          // Lot size (0.01-1.0 recommended)
-input double MaxLoss_Fallback = -1000.0;   // Maxloss fallback ($USD if CSDL fails)
-
-//--- A.5 Data source (1) | Nguon du lieu
-enum CSDL_SOURCE_ENUM {
-    FOLDER_1 = 0,  // DataAutoOner (Botspy)
-    FOLDER_2 = 1,  // DataAutoOner2 (_Default_Ea)
-    FOLDER_3 = 2,  // DataAutoOner3 (_Sync/_Ea)
-    HTTP_API = 3   // HTTP API (Remote VPS via Bot Python)
-};
-input CSDL_SOURCE_ENUM CSDL_Source = FOLDER_2;  // CSDL folder (signal source)
-
-//--- A.6 HTTP API settings (only used if CSDL_Source = HTTP_API) | Cau hinh HTTP API >> IMPORTANT: MT4 must allow URL in Tools->Options->Expert Advisors | QUAN TRONG: MT4 phai cho phep URL
-// NOTE: MT4 WebRequest automatically uses port 80 for http:// | LUU Y: MT4 WebRequest tu dong dung port 80 >> DuckDNS domain for easy IP update IP at duckdns.org only
-input string HTTP_Server_IP = "dungalading.duckdns.org";  // HTTP Server domain/IP (Bot Python VPS)
-input string HTTP_API_Key = "";            // API Key (empty = no auth | de trong)
-input bool EnableSymbolNormal = false;     // symbol name (LTCUSDc.xyz -> FALSE = LTCUSD use_exact_name)
+input double MaxLoss_Fallback = -1000.0;  // Maxloss fallback ($USD if CSDL fails)
 
 input string ___Sep_B___ = "___B. STRATEGY CONFIG ________";  //
 
 //--- B.1 S1 NEWS Filter (3) | Loc tin tuc cho S1
 input bool S1_UseNewsFilter = true;         // S1: Use NEWS filter (TRUE=strict, FALSE=basic)
-input int MinNewsLevelS1 = 2;                // S1: Min NEWS level (2-70, higher=stricter)
-input bool S1_RequireNewsDirection = true;   // S1: Match NEWS direction (signal==news!)
+input int MinNewsLevelS1 = 2;               // S1: Min NEWS level (2-70, higher=stricter)
+input bool S1_RequireNewsDirection = true;  // S1: Match NEWS direction (signal==news!)
 
 //--- B.2 S2 TREND Mode (1) | Che do xu huong
 enum S2_TREND_MODE {
@@ -60,14 +76,24 @@ enum S2_TREND_MODE {
     S2_FORCE_BUY = 1,    // Force BUY (override=1)
     S2_FORCE_SELL = -1   // Force SELL (override=-1)
 };
-input S2_TREND_MODE S2_TrendMode = S2_FOLLOW_D1;  // S2: Trend (D1 auto/manual)
+input S2_TREND_MODE S2_TrendMode = S2_FOLLOW_D1;  // S2: Trend (D1 Auto/manual)
+
+//--- B.2B S2 NEWS Filter (3) | Loc tin tuc cho S2 (optional, default OFF)
+input bool S2_UseNewsFilter = true;        // S2: Use NEWS filter (FALSE=OFF, TRUE=ON)
+input int MinNewsLevelS2 = 2;              // S2: Min NEWS level (2-70, same as S1)
+input bool S2_RequireNewsDirection = true; // S2: Match NEWS direction (signal==news!)
 
 //--- B.3 S3 NEWS Configuration (4) | Cau hinh tin tuc
-input int MinNewsLevelS3 = 2;         // S3: Min NEWS level (2-70)
+input int MinNewsLevelS3 = 2;          // S3: Min NEWS level (2-70)
 input bool EnableBonusNews = true;     // S3: Enable Bonus (extra on high NEWS)
-input int BonusOrderCount = 1;         // S3: Bonus count (1-5 orders)
-input int MinNewsLevelBonus = 2;       // S3: Min NEWS for Bonus (threshold)
-input double BonusLotMultiplier = 1.2; // S3: Bonus lot multiplier (1.0-10.0)
+input int BonusOrderCount = 2;         // S3: Bonus count (1-5 orders)
+input int MinNewsLevelBonus = 2;       // S3: Min NEWS for Bonus (2-70)
+input double BonusLotMultiplier = 1.2; // S3: Bonus lot multiplier (1.0-10)
+
+//--- B.4 NY Session Hours Filter (3) | Loc gio phien NY (chi S1/S2, khong S3/Bonus)
+input bool EnableNYHoursFilter = false;  // GMT+2:St=14/8AM &E=21/3PM; +0:St=13&E=20; +3:St=15&E=22; -5NY:St=8&E=15
+input int NYSessionStart = 14;           // NY session start hour (Server time, ICMarket EU: 14=8AM NY)
+input int NYSessionEnd = 21;             // NY session end hour (Server time, ICMarket EU: 21=3PM NY)
 
 input string ___Sep_C___ = "___C. RISK PROTECTION _________";  //
 
@@ -78,33 +104,42 @@ enum STOPLOSS_MODE {
     LAYER2_MARGIN = 2    // Layer2: margin/divisor (emergency)
 };
 input STOPLOSS_MODE StoplossMode = LAYER1_MAXLOSS;  // Stoploss mode (0=OFF, 1=CSDL, 2=Margin)
-input double Layer2_Divisor = 5.0;  // Layer2 divisor (margin/-5 = threshold)
+input double Layer2_Divisor = 3.0;  // Layer2 divisor (margin/-5 = threshold)
 
 //--- C.2 Take profit (2) | Chot loi
 input bool   UseTakeProfit = false;  // Enable take profit (FALSE=OFF, TRUE=ON)
-<<<<<<< Updated upstream
-input double TakeProfit_Multiplier = 5;  // TP_Multi (Col_mloss x a_lot x b_Multi >> vd=1000 ×0.21 ×5 =1050 USD)
-=======
-input double TakeProfit_Multiplier = 3;  // TP_Multi (Col_mloss x a_lot x b_Muti)
->>>>>>> Stashed changes
+input double TakeProfit_Multiplier = 8;  // TP_multi (vd=1000 × 0.21 × 3 = 630 USD)
 
 input string ___Sep_D___ = "___D. AUXILIARY SETTINGS ______";  //
 
 //--- D.1 Performance (1) | Hieu suat
-input bool UseEvenOddMode = true;  // Even/odd split mode (load balancing)
+input bool UseEvenOddMode = false;  // Even/odd split mode (load balancing)
 
 //--- D.2 Health check & reset (2) | Kiem tra suc khoe
-input bool EnableWeekendReset = false;  // Weekend reset (auto close Friday 23:50)
-input bool EnableHealthCheck = true;    // Health check (8h/16h SPY bot status)
+input bool EnableWeekendReset = true;  // Reset Auto close Saturday 00:03 (M5→M15→M30→H1→H4→D1→M1)
+input bool EnableHealthCheck = true;   // Health check (8h/16h SPY bot status)
 
 //--- D.3 Display (2) | Hien thi
 input bool ShowDashboard = true;  // Show dashboard (on-chart info)
-input bool DebugMode = false;      // Debug mode (verbose logging)
+input bool DebugMode = false;     // Debug mode (verbose logging)
+
+//=============================================================================
+//  PART 1B: UNICODE SYMBOLS (for dashboard) | KY TU UNICODE -> CRITICAL: MQL5 does NOT support \u escape sequences (causes compilation warnings)
+// Must use direct Unicode characters - file MUST be saved as UTF-8 encoding | These will display as Unicode symbols in MT5 dashboard using Segoe UI font
+
+#define ARROW_UP     "↗"   // U+25B2 - Up triangle
+#define ARROW_DOWN   "ↆ"   // U+25BC - Down triangle
+#define BULLET       "ᴥ"   // U+2022 - Bullet point (neutral)
+#define CIRCLE_FULL  "●"   // U+25CF - Filled circle (position active)
+#define CIRCLE_EMPTY "◌"   // U+25CB - Empty circle (no position)
+#define LINE_H       "─"   // U+2500 - Horizontal line (separator)
+#define MULTIPLY     "×"   // U+00D7 - Multiplication sign
+#define MIDDOT       "·"   // U+00B7 - Middle dot (separator)
+#define EM_DASH      "…"   // U+2014 - Em dash (for empty values)
 
 //=============================================================================
 //  PART 2: DATA STRUCTURES (1 struct) | CAU TRUC DU LIEU
 //=============================================================================
-
 struct CSDLLoveRow {
     double max_loss;   // Col 1: Max loss per 1 LOT | Lo toi da tren 1 lot
     long timestamp;    // Col 2: Timestamp | Thoi gian
@@ -115,17 +150,19 @@ struct CSDLLoveRow {
 };
 
 //=============================================================================
-//  PART 3: EA DATA STRUCTURE (116 vars in struct) | CAU TRUC DU LIEU EA
-//=============================================================================
-// Contains ALL EA data for current symbol (learned from SPY Bot) | Chua tat ca du lieu EA cho symbol hien tai (hoc tu SPY Bot)
-// Each EA instance on different chart has its OWN struct | Moi EA instance tren chart khac co struct RIENG >> This prevents conflicts when running multiple symbols simultaneously | Tranh xung dot khi chay nhieu symbol dong thoi
+//  PART 3: EA DATA STRUCTURE (116 vars in struct) | CAU TRUC DU LIEU EA -> Contains ALL EA data for current symbol (learned from SPY Bot) | Chua tat ca du lieu EA cho symbol hien tai (hoc tu SPY Bot)
+// Each EA instance on different chart has its OWN struct | Moi EA instance tren chart khac co struct RIENG -> This prevents conflicts when running multiple symbols simultaneously | Tranh xung dot khi chay nhieu symbol dong thoi
 //=============================================================================
 
 struct EASymbolData {
-    // Symbol & File info (5 vars) | Thong tin symbol va file
+    // Symbol & File info (9 vars) | Thong tin symbol va file
     string symbol_name;          // Symbol name from broker (may have suffix: LTCUSDC, XAUUSD.xyz) | Ten symbol tu broker
     string normalized_symbol_name; // Normalized symbol name (LTCUSD, XAUUSD) for API calls | Ten symbol chuan hoa cho goi API
     string symbol_prefix;        // Symbol prefix with underscore | Tien to symbol co gach duoi
+    string symbol_type;          // Symbol type (FX/CRYPTO/METAL/INDEX/STOCK) | Loai symbol
+    string all_leverages;        // All leverage types (FX:500 CR:100 MT:500 IX:250) | Tat ca cac loai don bay
+    string broker_name;          // Broker company name (Exness, IC Markets, etc.) | Ten cong ty san
+    string account_type;         // Account type (Demo/Real/Contest) | Loai tai khoan
     string csdl_folder;          // CSDL folder path | Duong dan thu muc CSDL
     string csdl_filename;        // Full CSDL filename | Ten file CSDL day du
 
@@ -155,7 +192,8 @@ struct EASymbolData {
     // Position flags (21 vars) | Co trang thai lenh
     int position_flags[7][3];    // [TF][Strategy]: [0]=S1, [1]=S2, [2]=S3
 
-    // Global state vars (5 vars) - Prevent multi-symbol conflicts | Bien trang thai - Tranh xung dot da symbol
+    // Global state vars (6 vars) - Prevent multi-symbol conflicts | Bien trang thai - Tranh xung dot da symbol
+    bool print_failed[7][3];        // Replaced static g_print_failed | Thay the g_print_failed tinh
     bool first_run_completed;      // Replaced g_first_run_completed | Thay the g_first_run_completed
     int weekend_last_day;           // Replaced static last_day | Thay the last_day tinh
     int health_last_check_hour;     // Replaced static last_check_hour | Thay the last_check_hour tinh
@@ -167,26 +205,52 @@ struct EASymbolData {
 EASymbolData g_ea;
 
 //=============================================================================
-//  PART 4: GLOBAL STATE (0 var) | TRANG THAI TOAN CUC
+//  PART 4: GLOBAL STATE (0 var) | TRANG THAI TOAN CUC -> All global state vars moved to g_ea struct (lines 118-122) | Tat ca bien toan cuc da chuyen vao struct g_ea
 //=============================================================================
-// All global state vars moved to g_ea struct (lines 118-122) | Tat ca bien toan cuc da chuyen vao struct g_ea
-
-//=============================================================================
-//  PART 4A: GLOBAL CONSTANTS (2 arrays) | HANG SO TOAN CUC
-//=============================================================================
-// Shared by all functions to avoid duplication | Dung chung cho tat ca ham tranh trung lap
-// NOTE: These are CONST - safe for multi-symbol usage | CHU THICH: Day la CONST - an toan cho da symbol
-// 7 TF and 3 Strategies are FIXED by CSDL design | 7 TF va 3 Chien luoc CO DINH theo thiet ke CSDL
+//  PART 4A: GLOBAL CONSTANTS (2 arrays) | HANG SO TOAN CUC -> Shared by all functions to avoid duplication | Dung chung cho tat ca ham tranh trung lap
+// NOTE: These are CONST - safe for multi-symbol usage | CHU THICH: Day la CONST - an toan cho da symbol -> 7 TF and 3 Strategies are FIXED by CSDL design | 7 TF va 3 Chien luoc CO DINH theo thiet ke CSDL
 //=============================================================================
 
 const string G_TF_NAMES[7] = {"M1", "M5", "M15", "M30", "H1", "H4", "D1"};
 const string G_STRATEGY_NAMES[3] = {"S1", "S2", "S3"};
 
 //=============================================================================
-//  PART 5: UTILITY FUNCTIONS (11 functions) | HAM TRO GIUP
+//  PART 4B: MT5 INITIALIZATION - CRITICAL FILL POLICY SETUP
 //=============================================================================
+// This function MUST be called in OnInit() to setup Fill Policy | Without this, OrderSend() will fail with Error 10030 (Invalid Fill)
+// Đây là hàm QUAN TRỌNG - phải gọi trong OnInit() để setup Fill Policy | Nếu thiếu, OrderSend() sẽ lỗi 10030 (Invalid Fill)
 
+void InitMT5Trading() {
+    // Setup symbol info | Thiết lập thông tin symbol
+    g_symbol_info.Name(_Symbol);
+    g_symbol_info.RefreshRates();
+
+    // Detect broker's supported Fill Mode | Phát hiện Fill Mode mà broker hỗ trợ -> CRITICAL: Each broker supports different fill modes | QUAN TRỌNG: Mỗi broker hỗ trợ fill mode khác nhau
+    // Bit 1 (value 1): FOK (Fill or Kill) - All or nothing; Bit 2 (value 2): IOC (Immediate or Cancel) - Partial fill allowed; Bit 3 (value 4): RETURN - Market execution
+    long filling = SymbolInfoInteger(_Symbol, SYMBOL_FILLING_MODE);
+
+    // Set Fill Policy based on broker support | Đặt Fill Policy dựa trên broker
+    if((filling & 2) == 2) {
+        // Broker supports IOC - prefer this (most flexible)
+        g_trade.SetTypeFilling(ORDER_FILLING_IOC);
+    }
+    else if((filling & 1) == 1) {
+        // Broker only supports FOK
+        g_trade.SetTypeFilling(ORDER_FILLING_FOK);
+    }
+    else {
+        // Fallback to RETURN mode
+        g_trade.SetTypeFilling(ORDER_FILLING_RETURN);
+    }
+
+    // Set slippage tolerance | Đặt độ trượt giá chấp nhận
+    g_trade.SetDeviationInPoints(30);
+}
+
+//=============================================================================
+//  PART 5: UTILITY FUNCTIONS (11 functions) | HAM TRO GIUP
 // Check if TF is enabled by user | Kiem tra TF co duoc bat boi user
+
 bool IsTFEnabled(int tf_index) {
     if(tf_index == 0) return TF_M1;
     if(tf_index == 1) return TF_M5;
@@ -216,11 +280,370 @@ string SignalToString(int signal) {
     return "NONE";
 }
 
+// Check if current time is within NY session hours | Kiem tra gio hien tai trong phien NY
+// Returns: true if within hours OR filter disabled, false otherwise
+// USAGE: Only applies to S1/S2 strategies, not S3/Bonus (they have own NEWS logic)
+bool IsWithinNYHours() {
+    if(!EnableNYHoursFilter) return true;  // Filter disabled, allow all hours
+
+    int current_hour = TimeHour(TimeCurrent());
+
+    // Simple case: Start < End (same day, e.g., 14:00-21:00)
+    if(NYSessionStart < NYSessionEnd) {
+        return (current_hour >= NYSessionStart && current_hour < NYSessionEnd);
+    }
+    // Complex case: Start > End (cross midnight, e.g., 22:00-06:00)
+    else {
+        return (current_hour >= NYSessionStart || current_hour < NYSessionEnd);
+    }
+}
+
+//=============================================================================
+//  MT4-COMPATIBLE WRAPPER FUNCTIONS FOR MT5 | HAM BAO TƯƠNG THÍCH MT4 CHO MT5
+//=============================================================================
+// These wrappers allow using MT4 syntax in MT5 code | Cac ham nay cho phep dung cu phap MT4 trong code MT5
+// Global variables for OrderSelect compatibility
+static int g_selected_ticket = -1;
+
+// NOTE: MT5 separates orders and positions (different from MT4):
+// - OrdersTotal() returns PENDING orders only (buy limit, sell stop, etc.); - PositionsTotal() returns OPEN positions (active buy/sell trades)
+// MT4's OrdersTotal() returned ALL orders, so we use PositionsTotal() in MT5 -> Define MT4 constants for MT5 (needed before OrderSend wrapper)
+#define SELECT_BY_POS 0
+#define SELECT_BY_TICKET 1
+#define MODE_TRADES 0
+#define MODE_MARGINREQUIRED 16
+#define OP_BUY 0
+#define OP_SELL 1
+
+// OrderSelect() wrapper - MT4 compatible for MT5
+bool OrderSelect(int index, int select, int pool=0) {
+    // SELECT_BY_POS = 0, SELECT_BY_TICKET = 1
+    if(select == 0) {  // SELECT_BY_POS
+        if(index < 0 || index >= PositionsTotal()) {
+            g_selected_ticket = -1;
+            return false;
+        }
+        ulong ticket = PositionGetTicket(index);
+        if(ticket > 0 && PositionSelectByTicket(ticket)) {
+            g_selected_ticket = (int)ticket;
+            return true;
+        }
+        g_selected_ticket = -1;
+        return false;
+    } else {  // SELECT_BY_TICKET
+        if(PositionSelectByTicket(index)) {
+            g_selected_ticket = index;
+            return true;
+        }
+        g_selected_ticket = -1;
+        return false;
+    }
+}
+
+// OrderSymbol() wrapper
+string OrderSymbol() {
+    return PositionGetString(POSITION_SYMBOL);
+}
+
+// OrderMagicNumber() wrapper
+int OrderMagicNumber() {
+    return (int)PositionGetInteger(POSITION_MAGIC);
+}
+
+// OrderTicket() wrapper
+int OrderTicket() {
+    return (int)PositionGetInteger(POSITION_TICKET);
+}
+
+// OrderType() wrapper
+int OrderType() {
+    ENUM_POSITION_TYPE type = (ENUM_POSITION_TYPE)PositionGetInteger(POSITION_TYPE);
+    return (type == POSITION_TYPE_BUY) ? 0 : 1;  // 0=OP_BUY, 1=OP_SELL
+}
+
+// OrderLots() wrapper
+double OrderLots() {
+    return PositionGetDouble(POSITION_VOLUME);
+}
+
+// OrderProfit() wrapper
+double OrderProfit() {
+    return PositionGetDouble(POSITION_PROFIT);
+}
+
+// OrderOpenPrice() wrapper
+double OrderOpenPrice() {
+    return PositionGetDouble(POSITION_PRICE_OPEN);
+}
+
+// OrderStopLoss() wrapper
+double OrderStopLoss() {
+    return PositionGetDouble(POSITION_SL);
+}
+
+// OrderTakeProfit() wrapper
+double OrderTakeProfit() {
+    return PositionGetDouble(POSITION_TP);
+}
+
+// OrderComment() wrapper
+string OrderComment() {
+    return PositionGetString(POSITION_COMMENT);
+}
+
+// TimeSeconds() wrapper - MT5 doesn't have this
+int TimeSeconds(datetime time) {
+    MqlDateTime dt;
+    TimeToStruct(time, dt);
+    return dt.sec;
+}
+
+// TimeHour() wrapper - MT5 doesn't have this MT4 function
+int TimeHour(datetime time) {
+    MqlDateTime dt;
+    TimeToStruct(time, dt);
+    return dt.hour;
+}
+
+// TimeMinute() wrapper - MT5 doesn't have this MT4 function
+int TimeMinute(datetime time) {
+    MqlDateTime dt;
+    TimeToStruct(time, dt);
+    return dt.min;
+}
+
+// TimeDay() wrapper - MT5 doesn't have this MT4 function
+int TimeDay(datetime time) {
+    MqlDateTime dt;
+    TimeToStruct(time, dt);
+    return dt.day;
+}
+
+// TimeDayOfWeek() wrapper - MT5 doesn't have this MT4 function
+int TimeDayOfWeek(datetime time) {
+    MqlDateTime dt;
+    TimeToStruct(time, dt);
+    return dt.day_of_week;
+}
+
+// TimeToStr() wrapper - MT5 uses TimeToString
+string TimeToStr(datetime time, int mode=TIME_DATE|TIME_MINUTES) {
+    return TimeToString(time, mode);
+}
+
+// Account functions wrappers - MT5 uses AccountInfo*
+double AccountBalance() {
+    return AccountInfoDouble(ACCOUNT_BALANCE);
+}
+
+double AccountEquity() {
+    return AccountInfoDouble(ACCOUNT_EQUITY);
+}
+
+double AccountProfit() {
+    return AccountInfoDouble(ACCOUNT_PROFIT);
+}
+
+double AccountFreeMargin() {
+    return AccountInfoDouble(ACCOUNT_MARGIN_FREE);
+}
+
+string AccountCompany() {
+    return AccountInfoString(ACCOUNT_COMPANY);
+}
+
+string AccountName() {
+    return AccountInfoString(ACCOUNT_NAME);
+}
+
+string AccountServer() {
+    return AccountInfoString(ACCOUNT_SERVER);
+}
+
+int AccountLeverage() {
+    return (int)AccountInfoInteger(ACCOUNT_LEVERAGE);
+}
+
+// OrderSwap() wrapper
+double OrderSwap() {
+    return PositionGetDouble(POSITION_SWAP);
+}
+
+// OrderCommission() wrapper
+double OrderCommission() {
+    // MT5 doesn't have commission in position, only in deal history
+    // For simplicity, return 0 (commission is typically small and included in spread)
+    return 0.0;
+}
+
+// OrderCloseTime() wrapper - MT5 doesn't have this for positions -> Returns 0 for open positions (positions don't have close time)
+datetime OrderCloseTime() {
+    // In MT5, positions are always open. To check if closed, position won't exist.
+    // This function is used to check if order is already closed -> If we can't select the position, it means it's closed
+    return 0;  // Always return 0 for open positions
+}
+
+// OrderClose() wrapper - MT5 uses CTrade object with Fill Policy | CRITICAL FIX: Now uses g_trade which has Fill Policy setup in InitMT5Trading()
+// This prevents Error 10030 when closing positions | Ngăn lỗi 10030 khi đóng lệnh | NOTE: price parameter removed - MT5 auto-detects Bid/Ask based on position type
+bool OrderClose(int ticket, double lots, int slippage) {
+
+    // Check if position exists | Kiểm tra lệnh có tồn tại không
+    if(!PositionSelectByTicket(ticket)) {
+        return false;  // Position doesn't exist | Lệnh không tồn tại
+    }
+
+    // Close position using CTrade (automatically uses Fill Policy from InitMT5Trading) -> MT5 tự động lấy giá: BUY position → close at Bid, SELL position → close at Ask | Đóng lệnh bằng CTrade (tự động dùng Fill Policy và giá phù hợp)
+    bool result = g_trade.PositionClose(ticket, slippage);
+
+    if(!result) {
+        // Failed - log error | Thất bại - ghi lỗi
+        int error = GetLastError();
+        Print("[OrderClose ERROR] Ticket:", ticket, " Lots:", lots,
+              " Error:", error, " RetCode:", g_trade.ResultRetcode(),
+              " Comment:", g_trade.ResultRetcodeDescription());
+    }
+
+    return result;
+}
+
+// OrderModify() wrapper - MT5 uses MqlTradeRequest -> NOTE: price and expiration parameters removed - only SL/TP modification is used
+bool OrderModify(int ticket, double sl, double tp) {
+    MqlTradeRequest request;
+    MqlTradeResult result;
+
+    if(!PositionSelectByTicket(ticket)) {
+        return false;
+    }
+
+    ZeroMemory(request);
+    ZeroMemory(result);
+
+    request.action = TRADE_ACTION_SLTP;
+    request.position = ticket;
+    request.symbol = PositionGetString(POSITION_SYMBOL);
+    request.sl = sl;
+    request.tp = tp;
+
+    return ::OrderSend(request, result);
+}
+
+// OrderSend() wrapper - MT5 uses CTrade object with Fill Policy -> CRITICAL FIX: Now uses g_trade which has Fill Policy setup in InitMT5Trading()
+// This prevents Error 10030 (Invalid Fill) | Ngăn lỗi 10030 (Invalid Fill) -> NOTE: expiration parameter removed - EA only uses market orders (OP_BUY/OP_SELL)
+int OrderSend(string symbol, int cmd, double volume, double price, int slippage,
+              double stoploss, double takeprofit, string comment, int magic) {
+
+    // Set magic number for this trade | Đặt magic number cho giao dịch này
+    g_trade.SetExpertMagicNumber(magic);
+
+    // Execute trade using CTrade (automatically uses Fill Policy from InitMT5Trading) | Thực hiện giao dịch bằng CTrade (tự động dùng Fill Policy từ InitMT5Trading)
+    bool result = false;
+
+    if(cmd == OP_BUY) {
+        // CTrade.Buy(volume, symbol, price=0 (market), sl, tp, comment)
+        result = g_trade.Buy(volume, symbol, 0, stoploss, takeprofit, comment);
+    }
+    else if(cmd == OP_SELL) {
+        // CTrade.Sell(volume, symbol, price=0 (market), sl, tp, comment)
+        result = g_trade.Sell(volume, symbol, 0, stoploss, takeprofit, comment);
+    }
+    else {
+        return -1;  // Invalid command | Lệnh không hợp lệ
+    }
+
+    if(result) {
+        // Success - return deal ticket | Thành công - trả về ticket
+        return (int)g_trade.ResultDeal();
+    }
+
+    // Failed - log error | Thất bại - ghi lỗi
+    int error = GetLastError();
+    Print("[OrderSend ERROR] Symbol:", symbol, " Cmd:", cmd, " Vol:", volume,
+          " Error:", error, " RetCode:", g_trade.ResultRetcode(),
+          " Comment:", g_trade.ResultRetcodeDescription());
+
+    return -1;
+}
+
+// RefreshRates() wrapper - Not needed in MT5, but keep for compatibility
+void RefreshRates() {
+    // MT5 automatically updates rates, no action needed
+    return;
+}
+
+// MarketInfo() wrapper - MT5 uses SymbolInfoDouble/SymbolInfoInteger
+double MarketInfo(string symbol, int type) {
+    switch(type) {
+        case 16: {  // MODE_MARGINREQUIRED
+            // In MT5, we need to calculate margin requirement: For simplicity, use contract size * current price / leverage
+            double contract_size = SymbolInfoDouble(symbol, SYMBOL_TRADE_CONTRACT_SIZE);
+            double tick_value = SymbolInfoDouble(symbol, SYMBOL_TRADE_TICK_VALUE);
+            double tick_size = SymbolInfoDouble(symbol, SYMBOL_TRADE_TICK_SIZE);
+            double bid = SymbolInfoDouble(symbol, SYMBOL_BID);
+
+            // Simplified margin calculation: This is an approximation - actual margin depends on account leverage and broker settings
+            long leverage = AccountInfoInteger(ACCOUNT_LEVERAGE);
+            if(leverage == 0) leverage = 100;  // Default leverage
+
+            return (contract_size * bid) / leverage;
+        }
+        default:
+            return 0.0;
+    }
+}
+
+// ObjectCreate() wrapper - MT5 requires chart_id
+bool ObjectCreate(string name, int object_type, int sub_window, datetime time1, double price1,
+                  datetime time2=0, double price2=0, datetime time3=0, double price3=0) {
+    return ::ObjectCreate(0, name, (ENUM_OBJECT)object_type, sub_window, time1, price1, time2, price2, time3, price3);
+}
+
+// ObjectSet() wrapper - MT5 uses ObjectSetInteger/ObjectSetDouble
+bool ObjectSet(string name, int prop_id, double value) {
+    // Most common properties are integer-based
+    return ::ObjectSetInteger(0, name, (ENUM_OBJECT_PROPERTY_INTEGER)prop_id, (long)value);
+}
+
+// ObjectSetText() wrapper - MT5 uses ObjectSetString and ObjectSetInteger
+bool ObjectSetText(string name, string text, int font_size, string font_name="", color text_color=clrNONE) {
+    bool result = true;
+    result = result && ::ObjectSetString(0, name, OBJPROP_TEXT, text);
+    if(font_size > 0) {
+        result = result && ::ObjectSetInteger(0, name, OBJPROP_FONTSIZE, font_size);
+    }
+    if(font_name != "") {
+        result = result && ::ObjectSetString(0, name, OBJPROP_FONT, font_name);
+    }
+    if(text_color != clrNONE) {
+        result = result && ::ObjectSetInteger(0, name, OBJPROP_COLOR, text_color);
+    }
+    return result;
+}
+
+// ObjectFind() wrapper - MT5 requires chart_id
+int ObjectFind(string name) {
+    return (int)::ObjectFind(0, name);
+}
+
+// ObjectDelete() wrapper - MT5 requires chart_id
+bool ObjectDelete(string name) {
+    return ::ObjectDelete(0, name);
+}
+
+// Bid and Ask predefined variables - MT5 uses SymbolInfoDouble
+#define Bid SymbolInfoDouble(_Symbol, SYMBOL_BID)
+#define Ask SymbolInfoDouble(_Symbol, SYMBOL_ASK)
+
+// Digits predefined variable - MT5 uses _Digits
+#define Digits _Digits
+
+//=============================================================================
+//  END OF MT4 COMPATIBILITY LAYER | KẾT THÚC LỚP TƯƠNG THÍCH MT4
+//=============================================================================
 // Normalize lot size to broker requirements | Chuan hoa khoi luong theo yeu cau san
 double NormalizeLotSize(double lot_size) {
-    double min_lot = MarketInfo(Symbol(), MODE_MINLOT);
-    double max_lot = MarketInfo(Symbol(), MODE_MAXLOT);
-    double lot_step = MarketInfo(Symbol(), MODE_LOTSTEP);
+    double min_lot = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MIN);
+    double max_lot = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_MAX);
+    double lot_step = SymbolInfoDouble(_Symbol, SYMBOL_VOLUME_STEP);
 
     if(lot_size < min_lot) lot_size = min_lot;
     if(lot_size > max_lot) lot_size = max_lot;
@@ -238,8 +661,7 @@ bool CloseOrderSafely(int ticket, string reason) {
     if(!OrderSelect(ticket, SELECT_BY_TICKET)) {
         int error = GetLastError();
 
-        // Error 4108: Invalid ticket ? Order already closed or doesn't exist
-        // Loi 4108: Ticket sai ? Lenh da dong hoac khong ton tai
+        // Error 4108: Invalid ticket ? Order already closed or doesn't exist | Loi 4108: Ticket sai ? Lenh da dong hoac khong ton tai
         if(error == 4108) {
             Print("[CLOSE_FAIL] ", reason, " #", ticket, " Err:4108 (Invalid ticket) - Skip, EA continues");
             return false; // Caller must reset flag | Nguoi goi phai reset co
@@ -254,13 +676,8 @@ bool CloseOrderSafely(int ticket, string reason) {
 
     RefreshRates();
 
-    // Try 1: Close order | Lan 1: Dong lenh
-    bool result = false;
-    if(OrderType() == OP_BUY) {
-        result = OrderClose(ticket, OrderLots(), Bid, 3);
-    } else if(OrderType() == OP_SELL) {
-        result = OrderClose(ticket, OrderLots(), Ask, 3);
-    }
+    // Try 1: Close order | Lan 1: Dong lenh | MT5 tự động lấy giá Bid/Ask phù hợp với loại lệnh
+    bool result = OrderClose(ticket, OrderLots(), 3);
 
     if(result) {
         // Success - detailed log printed by caller | Thanh cong - log chi tiet se in boi ham goi
@@ -270,8 +687,7 @@ bool CloseOrderSafely(int ticket, string reason) {
     // FAILED - Check error | That bai - Kiem tra loi
     int error = GetLastError();
 
-    // Case 1: Context busy OR Requote ? Retry 1 time
-    // TH 1: MT4 ban HOAC Gia thay doi ? Thu lai 1 lan
+    // Case 1: Context busy OR Requote ? Retry 1 time | TH 1: MT4 ban HOAC Gia thay doi ? Thu lai 1 lan
     if(error == 146 || error == 138) {
         Print("[CLOSE_FAIL] ", reason, " #", ticket, " Err:", error, " (Retry 1x)");
         Sleep(100);
@@ -282,11 +698,8 @@ bool CloseOrderSafely(int ticket, string reason) {
             return false;
         }
 
-        if(OrderType() == OP_BUY) {
-            result = OrderClose(ticket, OrderLots(), Bid, 3);
-        } else if(OrderType() == OP_SELL) {
-            result = OrderClose(ticket, OrderLots(), Ask, 3);
-        }
+        // Retry close - MT5 tự động lấy giá phù hợp
+        result = OrderClose(ticket, OrderLots(), 3);
 
         if(result) {
             // Retry success - detailed log printed by caller | Thanh cong sau retry - log chi tiet se in boi ham goi
@@ -304,8 +717,6 @@ bool CloseOrderSafely(int ticket, string reason) {
     return false;
 }
 
-// Draw arrow on chart - simple version | Ve mui ten tren do thi - phien ban don gian
-
 // Open order with smart error handling (max 1 retry) | Mo lenh voi xu ly loi thong minh (toi da 1 retry)
 // IMPORTANT: EA never stops on errors, only logs | QUAN TRONG: EA khong bao gio dung vi loi, chi ghi nhan
 // Returns: ticket (>0) or -1, caller must check and handle flag | Tra ve ticket hoac -1, nguoi goi phai kiem tra va xu ly co
@@ -320,7 +731,7 @@ int OrderSendSafe(int tf, string symbol, int cmd, double lot_smart,
     else if(cmd == OP_SELL) price = Bid;
 
     // Try 1: Smart lot | Lan 1: Lot thong minh
-    int ticket = OrderSend(symbol, cmd, lot_smart, price, slippage, 0, 0, comment, magic, 0);
+    int ticket = OrderSend(symbol, cmd, lot_smart, price, slippage, 0, 0, comment, magic);
 
     if(ticket > 0) {
         // Success - detailed log printed by strategy caller | Thanh cong - log chi tiet se in boi ham chien luoc
@@ -335,7 +746,7 @@ int OrderSendSafe(int tf, string symbol, int cmd, double lot_smart,
     if(error == 134 || error == 131) {
         Print("[ORDER_FAIL] ", comment, " Err:", error, " (Retry 0.01 lot)");
 
-        ticket = OrderSend(symbol, cmd, 0.01, price, slippage, 0, 0, comment + "_Min", magic, 0);
+        ticket = OrderSend(symbol, cmd, 0.01, price, slippage, 0, 0, comment + "_Min", magic);
 
         if(ticket > 0) {
             // Fallback success - detailed log printed by strategy caller | Thanh cong du phong - log chi tiet se in boi ham chien luoc
@@ -357,7 +768,7 @@ int OrderSendSafe(int tf, string symbol, int cmd, double lot_smart,
         if(cmd == OP_BUY) price = Ask;
         else if(cmd == OP_SELL) price = Bid;
 
-        ticket = OrderSend(symbol, cmd, lot_smart, price, slippage, 0, 0, comment, magic, 0);
+        ticket = OrderSend(symbol, cmd, lot_smart, price, slippage, 0, 0, comment, magic);
 
         if(ticket > 0) {
             // Retry success - detailed log printed by strategy caller | Thanh cong sau retry - log chi tiet se in boi ham chien luoc
@@ -369,8 +780,7 @@ int OrderSendSafe(int tf, string symbol, int cmd, double lot_smart,
         return -1;
     }
 
-    // Case 3: Other errors ? Log and continue
-    // TH 3: Loi khac ? Ghi nhan va tiep tuc
+    // Case 3: Other errors ? Log and continue | TH 3: Loi khac ? Ghi nhan va tiep tuc
     Print("[ORDER_FAIL] ", comment, " Err:", error, " - Skip, EA continues");
     return -1;
 }
@@ -378,7 +788,6 @@ int OrderSendSafe(int tf, string symbol, int cmd, double lot_smart,
 //=============================================================================
 //  PART 6: SYMBOL & FILE MANAGEMENT (6 functions) | QUAN LY KY HIEU VA FILE
 //=============================================================================
-
 // Trim whitespace from string | Loai bo khoang trang tu chuoi
 string StringTrim(string input_string) {
     int start = 0;
@@ -398,7 +807,7 @@ string StringTrim(string input_string) {
 
 // Discover symbol name from chart | Nhan dien ten ky hieu tu do thi
 string DiscoverSymbolFromChart() {
-    string chart_symbol = Symbol();
+    string chart_symbol = _Symbol;
 
     string normalized = chart_symbol;
     StringReplace(normalized, ".raw", "");
@@ -426,12 +835,11 @@ bool InitializeSymbolRecognition() {
 // Initialize symbol prefix with underscore | Khoi tao tien to ky hieu voi gach duoi
 void InitializeSymbolPrefix() {
     // Set normalized symbol name for API calls (optional, can be disabled)
-    if(EnableSymbolNormal) {
+    if(EnableSymbolNormalization) {
         g_ea.normalized_symbol_name = NormalizeSymbolName(g_ea.symbol_name);
     } else {
         // Use exact symbol name from broker (no normalization)
         g_ea.normalized_symbol_name = g_ea.symbol_name;
-        Print("[NORMALIZE] Normalization DISABLED - Using exact symbol: " + g_ea.symbol_name);
     }
 
     // Symbol prefix uses ORIGINAL name (not normalized) for local consistency
@@ -447,11 +855,8 @@ void BuildCSDLFilename() {
 //=============================================================================
 //  PART 7: CSDL PARSING (3 functions) | PHAN TICH DU LIEU CSDL
 //=============================================================================
-// ParseLoveRow() - Parse single row | Phan tich 1 dong
-// ParseCSDLLoveJSON() - Parse entire JSON | Phan tich toan bo JSON
-// TryReadFile() - Try read local file | Thu doc file local
-// ReadCSDLFile() - Local file reading only | Chi doc file local
-
+// ParseLoveRow() - Parse single row | Phan tich 1 dong; ParseCSDLLoveJSON() - Parse entire JSON | Phan tich toan bo JSON
+// TryReadFile() - Try read local file | Thu doc file local; ReadCSDLFile() - Local file reading only | Chi doc file local
 // Parse one row of CSDL data (6 columns) | Phan tich 1 hang du lieu CSDL (6 cot)
 bool ParseLoveRow(string row_data, int row_index) {
     // Column 1: max_loss
@@ -509,8 +914,7 @@ bool ParseLoveRow(string row_data, int row_index) {
     if(news_pos >= 0) {
         string temp = StringSubstr(row_data, news_pos + 7);
 
-        // Find end position: comma or bracket (whichever comes first, or use string length)
-        // Tim vi tri ket thuc: dau phay hoac ngoac (cai nao den truoc, hoac dung do dai chuoi)
+        // Find end position: comma or bracket (whichever comes first, or use string length) | Tim vi tri ket thuc: dau phay hoac ngoac (cai nao den truoc, hoac dung do dai chuoi)
         int comma = StringFind(temp, ",");
         int bracket = StringFind(temp, "}");
 
@@ -613,12 +1017,8 @@ bool TryReadFile(string filename, bool use_share_flags = true) {
     return true;  // SUCCESS | Thanh cong
 }
 
-// Read CSDL from HTTP API (Remote VPS) | Doc CSDL tu HTTP API (VPS tu xa)
-// Inherited from V1 | Ke thua tu V1
-// Normalize symbol name for API calls | Chuan hoa ten symbol cho goi API
-// SMART ALGORITHM: Keep max 6 chars for Forex/Crypto, or original length for stocks (<=6)
-// Broker suffixes are ALWAYS after 6th character (LTCUSDC→LTCUSD, XAUUSDpro→XAUUSD)
-// Stocks (4-5 chars) stay unchanged (AAPL, TSLA, GOOGL)
+// Read CSDL from HTTP API (Remote VPS) | Doc CSDL tu HTTP API (VPS tu xa) -> Normalize symbol name for API calls | Chuan hoa ten symbol cho goi API
+// SMART ALGORITHM: Keep max 6 chars for Forex/Crypto, or original length for stocks (<=6) -> Broker suffixes are ALWAYS after 6th character (LTCUSDC→LTCUSD, XAUUSDpro→XAUUSD); Stocks (4-5 chars) stay unchanged (AAPL, TSLA, GOOGL)
 string NormalizeSymbolName(string symbol) {
     string normalized = symbol;
 
@@ -630,12 +1030,7 @@ string NormalizeSymbolName(string symbol) {
     }
 
     // STEP 2: Keep MAXIMUM 6 characters (all Forex/Crypto pairs are 6 chars)
-    // Examples:
-    //   - LTCUSDC (7 chars) → LTCUSD (6 chars)
-    //   - XAUUSDpro (10 chars) → XAUUSD (6 chars)
-    //   - EURUSD (6 chars) → EURUSD (unchanged)
-    //   - AAPL (4 chars) → AAPL (unchanged - stock symbol)
-    //   - Any char after 6th is ALWAYS broker suffix
+    // Examples: - LTCUSDC (7 chars) → LTCUSD (6 chars); - XAUUSDpro (10 chars) → XAUUSD (6 chars); - EURUSD (6 chars) → EURUSD (unchanged); - AAPL (4 chars) → AAPL (unchanged - stock symbol); - Any char after 6th is ALWAYS broker suffix
     int max_length = 6;
     if(StringLen(normalized) > max_length) {
         string truncated = StringSubstr(normalized, 0, max_length);
@@ -654,18 +1049,13 @@ string NormalizeSymbolName(string symbol) {
 }
 
 bool ReadCSDLFromHTTP() {
-    // Use normalized symbol name for API call (already computed in InitializeSymbolPrefix)
-    // This handles broker-specific suffixes: LTCUSDC→LTCUSD, XAUUSD.xyz→XAUUSD
+    // Use normalized symbol name for API call (already computed in InitializeSymbolPrefix) -> This handles broker-specific suffixes: LTCUSDC→LTCUSD, XAUUSD.xyz→XAUUSD
     string url = "http://" + HTTP_Server_IP + "/api/csdl/" + g_ea.normalized_symbol_name + "_LIVE.json";
 
     // Build headers with API key (if provided)
-    // CRITICAL FOR MT4: Must include User-Agent and Host headers when using domain names
-    // MT4 WebRequest requires explicit headers for proper DNS resolution and server acceptance
-    string headers = "User-Agent: Mozilla/5.0 (compatible; MT4EA/1.0)\r\n";
-    headers += "Host: " + HTTP_Server_IP + "\r\n";
-
+    string headers = "";
     if(StringLen(HTTP_API_Key) > 0) {
-        headers += "X-API-Key: " + HTTP_API_Key + "\r\n";
+        headers = "X-API-Key: " + HTTP_API_Key + "\r\n";
     }
 
     // Prepare WebRequest
@@ -673,9 +1063,8 @@ bool ReadCSDLFromHTTP() {
     char result[];
     string result_headers;
 
-    // Send HTTP GET request (timeout 500ms = 0.5s)
-    // Timeout 500ms is suitable for LAN/VPS (typically <100ms)
-    // MT4 Version 2 (7 params): WebRequest(method, url, headers, timeout, data[], result[], result_headers)
+    // Send HTTP GET request (timeout 500ms = 0.5s): Timeout 500ms is suitable for LAN/VPS (typically <100ms)
+    // MT5 syntax: WebRequest(method, url, headers, timeout, data[], result[], result_headers)
     int res = WebRequest("GET", url, headers, 500, post_data, result, result_headers);
 
     // Check for errors
@@ -683,11 +1072,9 @@ bool ReadCSDLFromHTTP() {
         int error = GetLastError();
         DebugPrint("[HTTP_ERROR] Cannot connect to API: " + url + " Error:" + IntegerToString(error));
 
-        // Common errors:
-        // 4060 = URL not allowed (need to add URL in MT4 settings)
-        // 4014 = WebRequest not allowed
+        // Common errors: 4060 = URL not allowed (need to add URL in MT5 settings); 4014 = WebRequest not allowed
         if(error == 4060) {
-            DebugPrint("[HTTP_ERROR] URL not allowed! Add URL in MT4: Tools > Options > Expert Advisors > Allow WebRequest");
+            DebugPrint("[HTTP_ERROR] URL not allowed! Add URL in MT5: Tools > Options > Expert Advisors > Allow WebRequest");
         }
 
         return false;
@@ -729,14 +1116,12 @@ void ReadCSDLFile() {
         success = ReadCSDLFromHTTP();
 
         if(!success) {
-            // TRY 2: Retry HTTP after 100ms | Lan 2: Thu lai HTTP sau 100ms
+            // TRY 2: Wait 100ms and retry HTTP | Lan 2: Cho 100ms va thu lai HTTP
             Sleep(100);
             success = ReadCSDLFromHTTP();
         }
 
-        // NO FALLBACK to local file - If HTTP fails, something is seriously wrong
-        // KHONG fallback sang file local - Neu HTTP loi, co van de nghiem trong
-        // User should check: 1) Python Bot running? 2) Network OK? 3) API Key correct?
+        // NO FALLBACK to local file - If HTTP fails, something is seriously wrong | Khong fallback sang file local - Neu HTTP loi thi co van de nghiem trong
     }
     // ========== MODE 2: LOCAL FILE (FOLDER_1 / FOLDER_2 / FOLDER_3) ==========
     else {
@@ -768,8 +1153,7 @@ void ReadCSDLFile() {
 
     // ========== FINAL CHECK ==========
     if(!success) {
-        // ALL FAILED: Keep old data, continue (no spam warning - only debug)
-        // Tat ca that bai: Giu du lieu cu, tiep tuc (khong spam warning - chi debug)
+        // ALL FAILED: Keep old data, continue (no spam warning - only debug) | Tat ca that bai: Giu du lieu cu, tiep tuc (khong spam warning - chi debug)
         DebugPrint("[WARNING] All read attempts failed. Using old data.");
     }
 }
@@ -827,26 +1211,17 @@ bool GenerateMagicNumbers() {
 //=============================================================================
 //  PART 9: LOT SIZE CALCULATION (2 functions) | TINH TOAN KHOI LUONG
 //=============================================================================
-
 // Calculate lot with progressive formula | Tinh lot theo cong thuc luy tien
 // Formula: (base × strategy_multiplier) + tf_increment | Cong thuc: (goc × he so chien luoc) + tang TF
 // Result format: X.YZ where Y=strategy(1-3), Z=TF(1-7) | Dinh dang: X.YZ voi Y=chien luoc, Z=khung
 double CalculateSmartLotSize(double base_lot, int tf_index, int strategy_index) {
     // NEW FORMULA: (base × strategy_multiplier) + tf_increment
     // LOT FORMAT: X.YZ where X=strategy base, Y=same as X, Z=TF identifier (1-7)
-    //
-    // Strategy multipliers: S2=×1 (standard), S1=×2 (strong), S3=×3 (strongest)
-    // TF increments: M1=+0.01, M5=+0.02, M15=+0.03, M30=+0.04, H1=+0.05, H4=+0.06, D1=+0.07
-    //
-    // EXAMPLES (base_lot = 0.10):
-    //   M1_S2 = (0.10×1) + 0.01 = 0.11
-    //   M1_S1 = (0.10×2) + 0.01 = 0.21
-    //   M1_S3 = (0.10×3) + 0.01 = 0.31
-    //   M5_S2 = (0.10×1) + 0.02 = 0.12
-    //   D1_S3 = (0.10×3) + 0.07 = 0.37
+    // Strategy multipliers: S2=×1 (standard), S1=×2 (strong), S3=×3 (strongest); TF increments: M1=+0.01, M5=+0.02, M15=+0.03, M30=+0.04, H1=+0.05, H4=+0.06, D1=+0.07
+    // EXAMPLES (base_lot = 0.10): M1_S2 = (0.10×1) + 0.01 = 0.11; M1_S1 = (0.10×2) + 0.01 = 0.21; M1_S3 = (0.10×3) + 0.01 = 0.31; M5_S2 = (0.10×1) + 0.02 = 0.12; D1_S3 = (0.10×3) + 0.07 = 0.37
 
-    // Strategy multipliers: index 0=S1(×2), 1=S2(×1), 2=S3(×3)
-    double strategy_multipliers[3] = {2.0, 1.0, 3.0};
+    // Strategy multipliers: index 0=S1(×1), 1=S2(×2), 2=S3(×3)
+    double strategy_multipliers[3] = {1.0, 2.0, 3.0};
 
     // TF increments: index 0=M1(+0.01), 1=M5(+0.02), ..., 6=D1(+0.07)
     double tf_increments[7] = {0.01, 0.02, 0.03, 0.04, 0.05, 0.06, 0.07};
@@ -857,8 +1232,7 @@ double CalculateSmartLotSize(double base_lot, int tf_index, int strategy_index) 
     return NormalizeLotSize(lot);
 }
 
-// Pre-calculate all 21 lot sizes once | Tinh truoc tat ca 21 khoi luong mot lan
-// Called once in OnInit for performance | Goi 1 lan trong OnInit de tang hieu suat
+// Pre-calculate all 21 lot sizes once | Tinh truoc tat ca 21 khoi luong mot lan -> Called once in OnInit for performance | Goi 1 lan trong OnInit de tang hieu suat
 void InitializeLotSizes() {
     for(int tf = 0; tf < 7; tf++) {
         for(int s = 0; s < 3; s++) {
@@ -867,17 +1241,15 @@ void InitializeLotSizes() {
     }
 
     // Silent - only debug log | Im lang - chi log debug
-    DebugPrint("Lot M1: S1=" + DoubleToStr(g_ea.lot_sizes[0][0], 2) +
-               " S2=" + DoubleToStr(g_ea.lot_sizes[0][1], 2) +
-               " S3=" + DoubleToStr(g_ea.lot_sizes[0][2], 2));
+    DebugPrint("Lot M1: S1=" + DoubleToString(g_ea.lot_sizes[0][0], 2) +
+               " S2=" + DoubleToString(g_ea.lot_sizes[0][1], 2) +
+               " S3=" + DoubleToString(g_ea.lot_sizes[0][2], 2));
 }
 
 //=============================================================================
 //  PART 10: LAYER1 STOPLOSS INIT (1 function) | KHOI TAO CAT LO TANG 1
 //=============================================================================
-
-// Initialize all 21 Layer1 thresholds (7 TF × 3 S) | Khoi tao 21 nguong cat lo tang 1
-// OPTIMIZED: Uses pre-calculated lot sizes | TOI UU: Dung khoi luong da tinh truoc
+// Initialize all 21 Layer1 thresholds (7 TF × 3 S) | Khoi tao 21 nguong cat lo tang 1 -> OPTIMIZED: Uses pre-calculated lot sizes | TOI UU: Dung khoi luong da tinh truoc
 void InitializeLayer1Thresholds() {
     for(int tf = 0; tf < 7; tf++) {
         double max_loss_per_lot = g_ea.csdl_rows[tf].max_loss;
@@ -893,26 +1265,22 @@ void InitializeLayer1Thresholds() {
     }
 
     // Silent - only debug log | Im lang - chi log debug
-    DebugPrint("Layer1 M1: S1=$" + DoubleToStr(g_ea.layer1_thresholds[0][0], 2) +
-               " S2=$" + DoubleToStr(g_ea.layer1_thresholds[0][1], 2) +
-               " S3=$" + DoubleToStr(g_ea.layer1_thresholds[0][2], 2));
+    DebugPrint("Layer1 M1: S1=$" + DoubleToString(g_ea.layer1_thresholds[0][0], 2) +
+               " S2=$" + DoubleToString(g_ea.layer1_thresholds[0][1], 2) +
+               " S3=$" + DoubleToString(g_ea.layer1_thresholds[0][2], 2));
 }
 
 //=============================================================================
 //  PART 11: MAP CSDL TO EA (1 function) | ANH XA CSDL SANG EA
 //=============================================================================
-
-// Map CSDL data to EA variables for all 7 TF | Anh xa du lieu CSDL sang bien EA cho 7 khung
-// OPTIMIZED: Single TREND variable + Smart NEWS mode selection | TOI UU: Bien TREND don + Che do NEWS thong minh
+// Map CSDL data to EA variables for all 7 TF | Anh xa du lieu CSDL sang bien EA cho 7 khung -> OPTIMIZED: Single TREND variable + Smart NEWS mode selection | TOI UU: Bien TREND don + Che do NEWS thong minh
 // NOTE: signal_new/timestamp_new removed - use csdl_rows[tf] directly | Loai bo signal_new/timestamp_new - dung truc tiep csdl_rows[tf]
 void MapCSDLToEAVariables() {
     // S2: TREND - Always use D1 (row 6) for all TF | Luon dung D1 cho tat ca TF
     g_ea.trend_d1 = g_ea.csdl_rows[6].signal;
 
-    // S3: NEWS - Map 7 NEWS values to 14 variables (7 level + 7 direction)
-    // Tach 7 gia tri NEWS thanh 14 bien (7 muc do + 7 huong)
-    // IMPORTANT: Each TF has its own NEWS level and direction for adaptive trading
-    // QUAN TRONG: Moi TF co muc do va huong NEWS rieng de giao dich thich ung
+    // S3: NEWS - Map 7 NEWS values to 14 variables (7 level + 7 direction) | Tach 7 gia tri NEWS thanh 14 bien (7 muc do + 7 huong)
+    // IMPORTANT: Each TF has its own NEWS level and direction for adaptive trading | QUAN TRONG: Moi TF co muc do va huong NEWS rieng de giao dich thich ung
     MapNewsTo14Variables();
 
     DebugPrint("Mapped 7 TF | signal[0]=" + IntegerToString(g_ea.csdl_rows[0].signal) +
@@ -921,18 +1289,14 @@ void MapCSDLToEAVariables() {
                " (split to 14 vars: 7 level + 7 dir)");
 }
 
-// Map 7 NEWS values (with ± sign) to 14 variables (7 level + 7 direction)
-// Tach 7 gia tri NEWS (co dau ±) thanh 14 bien (7 muc do + 7 huong)
-// CRITICAL: NEWS has 2 components: LEVEL (abs) and DIRECTION (sign)
-// QUAN TRONG: NEWS co 2 thanh phan: MUC DO (gia tri tuyet doi) va HUONG (dau)
-// Example: news = +30 → level[tf] = 30, direction[tf] = +1 (BUY)
-//          news = -20 → level[tf] = 20, direction[tf] = -1 (SELL)
+// Map 7 NEWS values (with ± sign) to 14 variables (7 level + 7 direction) | Tach 7 gia tri NEWS (co dau ±) thanh 14 bien (7 muc do + 7 huong)
+// CRITICAL: NEWS has 2 components: LEVEL (abs) and DIRECTION (sign) | QUAN TRONG: NEWS co 2 thanh phan: MUC DO (gia tri tuyet doi) va HUONG (dau)
+// Example: news = +30 → level[tf] = 30, direction[tf] = +1 (BUY) ; news = -20 → level[tf] = 20, direction[tf] = -1 (SELL)
 void MapNewsTo14Variables() {
     for(int tf = 0; tf < 7; tf++) {
         int tf_news = g_ea.csdl_rows[tf].news;
 
-        // Split into LEVEL (absolute value) and DIRECTION (sign)
-        // Tach thanh MUC DO (gia tri tuyet doi) va HUONG (dau)
+        // Split into LEVEL (absolute value) and DIRECTION (sign) | Tach thanh MUC DO (gia tri tuyet doi) va HUONG (dau)
         g_ea.news_level[tf] = MathAbs(tf_news);
 
         if(tf_news > 0) {
@@ -973,7 +1337,7 @@ bool RestoreOrCleanupPositions() {
     int closed_count = 0;
 
     // Step 2: Scan all open orders | Buoc 2: Quet tat ca lenh mo
-    for(int i = OrdersTotal() - 1; i >= 0; i--) {
+    for(int i = PositionsTotal() - 1; i >= 0; i--) {
         if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) continue;
 
         // Get order info | Lay thong tin lenh
@@ -983,7 +1347,7 @@ bool RestoreOrCleanupPositions() {
         string order_symbol = OrderSymbol();
 
         // Filter: Only this symbol | Loc: Chi lenh cua symbol nay
-        if(order_symbol != Symbol()) continue;
+        if(order_symbol != _Symbol) continue;
 
         // Get order signal from MT4 | Lay tin hieu tu lenh MT4
         int order_signal = 0;
@@ -1005,8 +1369,7 @@ bool RestoreOrCleanupPositions() {
                 bool cond1_magic = (magic == g_ea.magic_numbers[tf][s]);
 
                 // CONDITION 2: Signal pair match (4 variables) | Dieu kien 2: Cap tin hieu khop (4 bien)
-                // Order signal == OLD == CSDL (triple match) AND timestamp OLD == CSDL (locked)
-                // Tin hieu lenh == CU == CSDL (khop 3) VA timestamp CU == CSDL (khoa)
+                // Order signal == OLD == CSDL (triple match) AND timestamp OLD == CSDL (locked) | Tin hieu lenh == CU == CSDL (khop 3) VA timestamp CU == CSDL (khoa)
                 bool cond2_signal_pair = (order_signal == g_ea.signal_old[tf] &&
                                           order_signal == g_ea.csdl_rows[tf].signal &&
                                           g_ea.timestamp_old[tf] == (datetime)g_ea.csdl_rows[tf].timestamp);
@@ -1093,9 +1456,9 @@ void CloseAllStrategiesByMagicForTF(int tf) {
     int signal_new = g_ea.csdl_rows[tf].signal;
     datetime timestamp_new = (datetime)g_ea.csdl_rows[tf].timestamp;
 
-    for(int i = OrdersTotal() - 1; i >= 0; i--) {
+    for(int i = PositionsTotal() - 1; i >= 0; i--) {
         if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) continue;
-        if(OrderSymbol() != Symbol()) continue;
+        if(OrderSymbol() != _Symbol) continue;
 
         int magic = OrderMagicNumber();
         int ticket = OrderTicket();
@@ -1115,8 +1478,8 @@ void CloseAllStrategiesByMagicForTF(int tf) {
         if(strategy_index >= 0) {
             string order_type_str = (order_type == OP_BUY) ? "BUY" : "SELL";
             Print(">> [CLOSE] SIGNAL_CHG TF=", G_TF_NAMES[tf], " S=", (strategy_index+1),
-                  " | #", ticket, " ", order_type_str, " ", DoubleToStr(order_lot, 2),
-                  " | Profit=$", DoubleToStr(order_profit, 2),
+                  " | #", ticket, " ", order_type_str, " ", DoubleToString(order_lot, 2),
+                  " | Profit=$", DoubleToString(order_profit, 2),
                   " | Old:", signal_old, " New:", signal_new,
                   " | Timestamp:", IntegerToString(timestamp_new), " <<");
 
@@ -1131,7 +1494,7 @@ void CloseAllStrategiesByMagicForTF(int tf) {
 }
 
 // Close ALL BONUS orders across ALL 7 TF when M1 signal changes | Dong TAT CA lenh BONUS qua 7 khung khi tin hieu M1 thay doi
-// TRIGGER: M1 signal change (HasValidS2BaseCondition(0)) | KICH HOAT: Tin hieu M1 thay doi >> ACTION: Close magic[tf][2] for ALL 7 TF | HANH DONG: Dong magic[tf][2] cho TAT CA 7 khung
+// TRIGGER: M1 signal change (HasValidS2BaseCondition(0)) | KICH HOAT: Tin hieu M1 thay doi | ACTION: Close magic[tf][2] for ALL 7 TF | HANH DONG: Dong magic[tf][2] cho TAT CA 7 khung
 void CloseAllBonusOrders() {
     // Scan all 7 TF magic numbers | Quet 7 khung magic
     for(int tf = 0; tf < 7; tf++) {
@@ -1144,9 +1507,9 @@ void CloseAllBonusOrders() {
         double total_lot = 0;
 
         // Scan all orders on MT4 | Quet tat ca lenh tren MT4
-        for(int i = OrdersTotal() - 1; i >= 0; i--) {
+        for(int i = PositionsTotal() - 1; i >= 0; i--) {
             if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) continue;
-            if(OrderSymbol() != Symbol()) continue;
+            if(OrderSymbol() != _Symbol) continue;
 
             // If magic matches, close it | Neu magic trung, dong no
             if(OrderMagicNumber() == target_magic) {
@@ -1165,8 +1528,8 @@ void CloseAllBonusOrders() {
         // Consolidated log | Log tong hop
         if(total_count > 0) {
             Print(">> [CLOSE] BONUS_M1 TF=", G_TF_NAMES[tf],
-                  " | ", total_count, " orders Total:", DoubleToStr(total_lot, 2),
-                  " | Profit=$", DoubleToStr(total_profit, 2),
+                  " | ", total_count, " orders Total:", DoubleToString(total_lot, 2),
+                  " | Profit=$", DoubleToString(total_profit, 2),
                   " | Closed:", closed_count, "/", total_count, " <<");
         }
 
@@ -1179,9 +1542,9 @@ void CloseS1OrdersByM1() {
     for(int tf = 0; tf < 7; tf++) {
         if(!IsTFEnabled(tf)) continue;
         int target_magic = g_ea.magic_numbers[tf][0];
-        for(int i = OrdersTotal() - 1; i >= 0; i--) {
+        for(int i = PositionsTotal() - 1; i >= 0; i--) {
             if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) continue;
-            if(OrderSymbol() != Symbol()) continue;
+            if(OrderSymbol() != _Symbol) continue;
             if(OrderMagicNumber() == target_magic) {
                 CloseOrderSafely(OrderTicket(), "S1_M1_CLOSE");
             }
@@ -1195,9 +1558,9 @@ void CloseS2OrdersByM1() {
     for(int tf = 0; tf < 7; tf++) {
         if(!IsTFEnabled(tf)) continue;
         int target_magic = g_ea.magic_numbers[tf][1];
-        for(int i = OrdersTotal() - 1; i >= 0; i--) {
+        for(int i = PositionsTotal() - 1; i >= 0; i--) {
             if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) continue;
-            if(OrderSymbol() != Symbol()) continue;
+            if(OrderSymbol() != _Symbol) continue;
             if(OrderMagicNumber() == target_magic) {
                 CloseOrderSafely(OrderTicket(), "S2_M1_CLOSE");
             }
@@ -1209,9 +1572,9 @@ void CloseS2OrdersByM1() {
 // Close only S3 for specific TF | Dong chi S3 cho TF cu the
 void CloseS3OrdersForTF(int tf) {
     int target_magic = g_ea.magic_numbers[tf][2];
-    for(int i = OrdersTotal() - 1; i >= 0; i--) {
+    for(int i = PositionsTotal() - 1; i >= 0; i--) {
         if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) continue;
-        if(OrderSymbol() != Symbol()) continue;
+        if(OrderSymbol() != _Symbol) continue;
         if(OrderMagicNumber() == target_magic) {
             CloseOrderSafely(OrderTicket(), "S3_SIGNAL_CHG");
         }
@@ -1241,9 +1604,6 @@ bool HasValidS2BaseCondition(int tf) {
 //  PART 14: STRATEGY PROCESSING (4 functions) | XU LY CHIEN LUOC
 //=============================================================================
 
-// Static flag to prevent spam print when order fails | Co tinh de tranh spam print khi lenh that bai
-static bool g_print_failed[7][3] = {{false}};  // [TF][Strategy]: Track if already printed error
-
 // S1 Core: Open order (DRY - shared logic for BASIC and NEWS strategies)
 void OpenS1Order(int tf, int signal, string mode) {
     datetime timestamp = (datetime)g_ea.csdl_rows[tf].timestamp;
@@ -1258,17 +1618,17 @@ void OpenS1Order(int tf, int signal, string mode) {
     double price = (signal == 1) ? Ask : Bid;
     string type_str = (signal == 1) ? "BUY" : "SELL";
 
-    int ticket = OrderSendSafe(tf, Symbol(), cmd, g_ea.lot_sizes[tf][0],
+    int ticket = OrderSendSafe(tf, _Symbol, cmd, g_ea.lot_sizes[tf][0],
                                price, 3,
                                "S1_" + G_TF_NAMES[tf], g_ea.magic_numbers[tf][0]);
 
     if(ticket > 0) {
         g_ea.position_flags[tf][0] = 1;
-        g_print_failed[tf][0] = false;  // Reset error flag on success | Dat lai co loi khi thanh cong
+        g_ea.print_failed[tf][0] = false;  // Reset error flag on success | Dat lai co loi khi thanh cong
 
         string log_msg = ">>> [OPEN] S1_" + mode + " TF=" + G_TF_NAMES[tf] +
                          " | #" + IntegerToString(ticket) + " " + type_str + " " +
-                         DoubleToStr(g_ea.lot_sizes[tf][0], 2) + " @" + DoubleToStr(price, Digits) +
+                         DoubleToString(g_ea.lot_sizes[tf][0], 2) + " @" + DoubleToString(price, Digits) +
                          " | Sig=" + IntegerToString(signal);
 
         if(mode == "NEWS") {
@@ -1284,9 +1644,9 @@ void OpenS1Order(int tf, int signal, string mode) {
         g_ea.position_flags[tf][0] = 0;
 
         // Print error ONLY ONCE until success | Chi in loi 1 LAN cho den khi thanh cong
-        if(!g_print_failed[tf][0]) {
+        if(!g_ea.print_failed[tf][0]) {
             Print("[S1_", mode, "_", G_TF_NAMES[tf], "] Failed: ", GetLastError());
-            g_print_failed[tf][0] = true;
+            g_ea.print_failed[tf][0] = true;
         }
     }
 }
@@ -1303,7 +1663,8 @@ void ProcessS1BasicStrategy(int tf) {
 void ProcessS1NewsFilterStrategy(int tf) {
     int current_signal = g_ea.csdl_rows[tf].signal;
 
-    // Use NEWS from 14 variables (7 level + 7 direction) per TF >> Dung NEWS tu 14 bien (7 muc do + 7 huong) theo tung TF
+    // Use NEWS from 14 variables (7 level + 7 direction) per TF
+    // Dung NEWS tu 14 bien (7 muc do + 7 huong) theo tung TF
     int news_level = g_ea.news_level[tf];           // Level for this TF
     int news_direction = g_ea.news_direction[tf];   // Direction for this TF
 
@@ -1331,6 +1692,9 @@ void ProcessS1NewsFilterStrategy(int tf) {
 
 // S1 Strategy Router: Call appropriate function based on filter setting | Bo dinh tuyen S1: Goi ham tuong ung theo cai dat
 void ProcessS1Strategy(int tf) {
+    // CHECK NY HOURS: Only S1 needs this (S3/Bonus have own NEWS logic)
+    if(!IsWithinNYHours()) return;
+
     if(S1_UseNewsFilter) {
         ProcessS1NewsFilterStrategy(tf);
     } else {
@@ -1338,9 +1702,13 @@ void ProcessS1Strategy(int tf) {
     }
 }
 
-// Process S2 (Trend Following) strategy for TF | Xu ly chien luoc S2 (Theo xu huong) >> OPTIMIZED: Uses single g_trend_d1 + pre-calculated lot + reads signal from CSDL | TOI UU: Dung g_trend_d1 don + lot da tinh + doc tin hieu tu CSDL
+// Process S2 (Trend Following) strategy for TF | Xu ly chien luoc S2 (Theo xu huong)
+// OPTIMIZED: Uses single g_trend_d1 + pre-calculated lot + reads signal from CSDL | TOI UU: Dung g_trend_d1 don + lot da tinh + doc tin hieu tu CSDL
 // ENHANCED: Support 3 modes (auto D1 / force BUY / force SELL) | CAI TIEN: Ho tro 3 che do (tu dong D1 / chi BUY / chi SELL)
 void ProcessS2Strategy(int tf) {
+    // CHECK NY HOURS: Only S2 needs this (S3/Bonus have own NEWS logic)
+    if(!IsWithinNYHours()) return;
+
     int current_signal = g_ea.csdl_rows[tf].signal;
     datetime timestamp = (datetime)g_ea.csdl_rows[tf].timestamp;
 
@@ -1364,51 +1732,73 @@ void ProcessS2Strategy(int tf) {
         return;
     }
 
+    // STEP 3: NEWS filter check (optional, only if S2_UseNewsFilter = true)
+    if(S2_UseNewsFilter) {
+        int news_level = g_ea.news_level[tf];
+        int news_direction = g_ea.news_direction[tf];
+
+        // Check 1: NEWS level >= MinNewsLevelS2
+        if(news_level < MinNewsLevelS2) {
+            DebugPrint("S2_NEWS: " + G_TF_NAMES[tf] + " NEWS=" + IntegerToString(news_level) +
+                       " < Min=" + IntegerToString(MinNewsLevelS2) + ", SKIP");
+            return;
+        }
+
+        // Check 2: Signal = NEWS direction (if S2_RequireNewsDirection = true)
+        if(S2_RequireNewsDirection) {
+            if(current_signal != news_direction) {
+                DebugPrint("S2_NEWS: " + G_TF_NAMES[tf] + " Signal=" + IntegerToString(current_signal) +
+                           " != NewsDir=" + IntegerToString(news_direction) + ", SKIP");
+                return;
+            }
+        }
+    }
+
     RefreshRates();
 
     
 
     if(current_signal == 1) {
-        int ticket = OrderSendSafe(tf, Symbol(), OP_BUY, g_ea.lot_sizes[tf][1],
+        int ticket = OrderSendSafe(tf, _Symbol, OP_BUY, g_ea.lot_sizes[tf][1],
                                    Ask, 3,
                                    "S2_" + G_TF_NAMES[tf], g_ea.magic_numbers[tf][1]);
         if(ticket > 0) {
             g_ea.position_flags[tf][1] = 1;
-            g_print_failed[tf][1] = false;  // Reset error flag on success | Dat lai co loi khi thanh cong
+            g_ea.print_failed[tf][1] = false;  // Reset error flag on success | Dat lai co loi khi thanh cong
             string trend_str = trend_to_follow == 1 ? "UP" : "DOWN";
             string mode_str = (S2_TrendMode == 0) ? "AUTO" : (S2_TrendMode == 1) ? "FBUY" : "FSELL";
             Print(">>> [OPEN] S2_TREND TF=", G_TF_NAMES[tf], " | #", ticket, " BUY ",
-                  DoubleToStr(g_ea.lot_sizes[tf][1], 2), " @", DoubleToStr(Ask, Digits),
+                  DoubleToString(g_ea.lot_sizes[tf][1], 2), " @", DoubleToString(Ask, Digits),
                   " | Sig=+1 Trend:", trend_str, " Mode:", mode_str, " | Timestamp:", IntegerToString(timestamp), " <<<");
         } else {
             g_ea.position_flags[tf][1] = 0;
 
             // Print error ONLY ONCE until success | Chi in loi 1 LAN cho den khi thanh cong
-            if(!g_print_failed[tf][1]) {
+            if(!g_ea.print_failed[tf][1]) {
                 Print("[S2_", G_TF_NAMES[tf], "] Failed: ", GetLastError());
-                g_print_failed[tf][1] = true;
+                g_ea.print_failed[tf][1] = true;
             }
         }
     }
     else if(current_signal == -1) {
-        int ticket = OrderSendSafe(tf, Symbol(), OP_SELL, g_ea.lot_sizes[tf][1],
+        int ticket = OrderSendSafe(tf, _Symbol, OP_SELL, g_ea.lot_sizes[tf][1],
                                    Bid, 3,
                                    "S2_" + G_TF_NAMES[tf], g_ea.magic_numbers[tf][1]);
         if(ticket > 0) {
             g_ea.position_flags[tf][1] = 1;
-            g_print_failed[tf][1] = false;  // Reset error flag on success | Dat lai co loi khi thanh cong
+            g_ea.print_failed[tf][1] = false;  // Reset error flag on success | Dat lai co loi khi thanh cong
             string trend_str = trend_to_follow == -1 ? "DOWN" : "UP";
             string mode_str = (S2_TrendMode == 0) ? "AUTO" : (S2_TrendMode == 1) ? "FBUY" : "FSELL";
             Print(">>> [OPEN] S2_TREND TF=", G_TF_NAMES[tf], " | #", ticket, " SELL ",
-                  DoubleToStr(g_ea.lot_sizes[tf][1], 2), " @", DoubleToStr(Bid, Digits),
+                  DoubleToString(g_ea.lot_sizes[tf][1], 2), " @", DoubleToString(Bid, Digits),
                   " | Sig=-1 Trend:", trend_str, " Mode:", mode_str, " | Timestamp:", IntegerToString(timestamp), " <<<");
         } else {
             g_ea.position_flags[tf][1] = 0;
 
             // Print error ONLY ONCE until success | Chi in loi 1 LAN cho den khi thanh cong
-            if(!g_print_failed[tf][1]) {
+            if(!g_ea.print_failed[tf][1]) {
                 Print("[S2_", G_TF_NAMES[tf], "] Failed: ", GetLastError());
-                g_print_failed[tf][1] = true;
+                g_ea.print_failed[tf][1] = true;
             }
         }
     }
@@ -1437,67 +1827,66 @@ void ProcessS3Strategy(int tf) {
     }
 
     RefreshRates();
-
-    
+  
 
     if(current_signal == 1) {
-        int ticket = OrderSendSafe(tf, Symbol(), OP_BUY, g_ea.lot_sizes[tf][2],
+        int ticket = OrderSendSafe(tf, _Symbol, OP_BUY, g_ea.lot_sizes[tf][2],
                                    Ask, 3,
                                    "S3_" + G_TF_NAMES[tf], g_ea.magic_numbers[tf][2]);
         if(ticket > 0) {
             g_ea.position_flags[tf][2] = 1;
-            g_print_failed[tf][2] = false;  // Reset error flag on success | Dat lai co loi khi thanh cong
+            g_ea.print_failed[tf][2] = false;  // Reset error flag on success | Dat lai co loi khi thanh cong
             string arrow = (news_direction > 0) ? "↑" : "↓";
             Print(">>> [OPEN] S3_NEWS TF=", G_TF_NAMES[tf], " | #", ticket, " BUY ",
-                  DoubleToStr(g_ea.lot_sizes[tf][2], 2), " @", DoubleToStr(Ask, Digits),
+                  DoubleToString(g_ea.lot_sizes[tf][2], 2), " @", DoubleToString(Ask, Digits),
                   " | Sig=+1 News=", news_direction > 0 ? "+" : "", IntegerToString(news_level), arrow,
                   " | Timestamp:", IntegerToString(timestamp), " <<<");
         } else {
             g_ea.position_flags[tf][2] = 0;
 
             // Print error ONLY ONCE until success | Chi in loi 1 LAN cho den khi thanh cong
-            if(!g_print_failed[tf][2]) {
+            if(!g_ea.print_failed[tf][2]) {
                 Print("[S3_", G_TF_NAMES[tf], "] Failed: ", GetLastError());
-                g_print_failed[tf][2] = true;
+                g_ea.print_failed[tf][2] = true;
             }
         }
     }
     else if(current_signal == -1) {
-        int ticket = OrderSendSafe(tf, Symbol(), OP_SELL, g_ea.lot_sizes[tf][2],
+        int ticket = OrderSendSafe(tf, _Symbol, OP_SELL, g_ea.lot_sizes[tf][2],
                                    Bid, 3,
                                    "S3_" + G_TF_NAMES[tf], g_ea.magic_numbers[tf][2]);
         if(ticket > 0) {
             g_ea.position_flags[tf][2] = 1;
-            g_print_failed[tf][2] = false;  // Reset error flag on success | Dat lai co loi khi thanh cong
+            g_ea.print_failed[tf][2] = false;  // Reset error flag on success | Dat lai co loi khi thanh cong
             string arrow = (news_direction > 0) ? "↑" : "↓";
             Print(">>> [OPEN] S3_NEWS TF=", G_TF_NAMES[tf], " | #", ticket, " SELL ",
-                  DoubleToStr(g_ea.lot_sizes[tf][2], 2), " @", DoubleToStr(Bid, Digits),
+                  DoubleToString(g_ea.lot_sizes[tf][2], 2), " @", DoubleToString(Bid, Digits),
                   " | Sig=-1 News=", news_direction > 0 ? "+" : "", IntegerToString(news_level), arrow,
                   " | Timestamp:", IntegerToString(timestamp), " <<<");
         } else {
             g_ea.position_flags[tf][2] = 0;
 
             // Print error ONLY ONCE until success | Chi in loi 1 LAN cho den khi thanh cong
-            if(!g_print_failed[tf][2]) {
+            if(!g_ea.print_failed[tf][2]) {
                 Print("[S3_", G_TF_NAMES[tf], "] Failed: ", GetLastError());
-                g_print_failed[tf][2] = true;
+                g_ea.print_failed[tf][2] = true;
             }
         }
     }
 }
 
-// Process Bonus NEWS - Scan all 7 TF and open multiple orders if NEWS detected | 
-// Xu ly tin tuc Bonus - Quet 7 TF va mo nhieu lenh neu phat hien tin tuc
+// Process Bonus NEWS - Scan all 7 TF and open multiple orders if NEWS detected | Xu ly tin tuc Bonus - Quet 7 TF va mo nhieu lenh neu phat hien tin tuc
 void ProcessBonusNews() {
     if(!EnableBonusNews) return;
+
+    
 
     // Scan all 7 TF | Quet tat ca 7 TF
     for(int tf = 0; tf < 7; tf++) {
         // BUGFIX: Skip if TF disabled | Bo qua neu TF bi tat
         if(!IsTFEnabled(tf)) continue;
 
-        // Use NEWS from 14 variables (7 level + 7 direction) per TF
-        // Dung NEWS tu 14 bien (7 muc do + 7 huong) theo tung TF
+        // Use NEWS from 14 variables (7 level + 7 direction) per TF | Dung NEWS tu 14 bien (7 muc do + 7 huong) theo tung TF
         int news_level = g_ea.news_level[tf];           // Level for this TF
         int news_direction = g_ea.news_direction[tf];   // Direction for this TF
 
@@ -1511,8 +1900,7 @@ void ProcessBonusNews() {
 
         // Calculate BONUS lot (S3 lot × multiplier) | Tinh lot BONUS (lot S3 × he so nhan)
         double bonus_lot = g_ea.lot_sizes[tf][2] * BonusLotMultiplier;
-        // CRITICAL: Normalize to 2 decimals (0.01 step) to prevent "invalid volume" error
-        // MT4 requires lot to be multiple of 0.01 (e.g., 0.38 OK, 0.384 INVALID)
+        // CRITICAL: Normalize to 2 decimals (0.01 step) to prevent "invalid volume" error -> MT5 requires lot to be multiple of 0.01 (e.g., 0.38 OK, 0.384 INVALID)
         bonus_lot = NormalizeDouble(bonus_lot, 2);
 
         RefreshRates();
@@ -1524,7 +1912,7 @@ void ProcessBonusNews() {
 
         for(int count = 0; count < BonusOrderCount; count++) {
             if(news_direction == 1) {
-                int ticket = OrderSendSafe(tf, Symbol(), OP_BUY, bonus_lot,
+                int ticket = OrderSendSafe(tf, _Symbol, OP_BUY, bonus_lot,
                                            Ask, 3,
                                            "BONUS_" + G_TF_NAMES[tf], g_ea.magic_numbers[tf][2]);
                 if(ticket > 0) {
@@ -1534,7 +1922,7 @@ void ProcessBonusNews() {
                     if(entry_price == 0) entry_price = Ask;
                 }
             } else {
-                int ticket = OrderSendSafe(tf, Symbol(), OP_SELL, bonus_lot,
+                int ticket = OrderSendSafe(tf, _Symbol, OP_SELL, bonus_lot,
                                            Bid, 3,
                                            "BONUS_" + G_TF_NAMES[tf], g_ea.magic_numbers[tf][2]);
                 if(ticket > 0) {
@@ -1551,10 +1939,10 @@ void ProcessBonusNews() {
             string arrow = (news_direction > 0) ? "↑" : "↓";
             double total_lot = opened_count * bonus_lot;
             Print(">>> [OPEN] BONUS TF=", G_TF_NAMES[tf], " | ", opened_count, "×",
-                  news_direction == 1 ? "BUY" : "SELL", " @", DoubleToStr(bonus_lot, 2),
-                  " Total:", DoubleToStr(total_lot, 2), " @", DoubleToStr(entry_price, Digits),
+                  news_direction == 1 ? "BUY" : "SELL", " @", DoubleToString(bonus_lot, 2),
+                  " Total:", DoubleToString(total_lot, 2), " @", DoubleToString(entry_price, Digits),
                   " | News=", news_direction > 0 ? "+" : "", IntegerToString(news_level), arrow,
-                  " | Multiplier:", DoubleToStr(BonusLotMultiplier, 1), "x",
+                  " | Multiplier:", DoubleToString(BonusLotMultiplier, 1), "x",
                   " Tickets:", ticket_list, " <<<");
         }
     }
@@ -1563,17 +1951,16 @@ void ProcessBonusNews() {
 //=============================================================================
 //  PART 15: STOPLOSS CHECKS (2 functions) | KIEM TRA CAT LO
 //=============================================================================
-
 // Check stoploss & take profit for all 21 orders | Kiem tra cat lo & chot loi cho 21 lenh
 // Stoploss: 2 layers (LAYER1, LAYER2) | Cat lo: 2 tang
 // Take profit: 1 layer (based on max_loss × multiplier) | Chot loi: 1 tang (dua tren max_loss × he so)
 void CheckStoplossAndTakeProfit() {
-    if(OrdersTotal() == 0) return;
+    if(PositionsTotal() == 0) return;
 
     // Scan all orders once | Quet tat ca lenh 1 lan duy nhat
-    for(int i = OrdersTotal() - 1; i >= 0; i--) {
+    for(int i = PositionsTotal() - 1; i >= 0; i--) {
         if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) continue;
-        if(OrderSymbol() != Symbol()) continue;
+        if(OrderSymbol() != _Symbol) continue;
 
         int magic = OrderMagicNumber();
         int ticket = OrderTicket();
@@ -1585,7 +1972,7 @@ void CheckStoplossAndTakeProfit() {
             for(int s = 0; s < 3; s++) {
                 if(magic == g_ea.magic_numbers[tf][s] &&
                    g_ea.position_flags[tf][s] == 1) {
-                    
+
                     bool order_closed = false;
 
                     // ===== SECTION 1: STOPLOSS (2 layers) =====
@@ -1600,7 +1987,7 @@ void CheckStoplossAndTakeProfit() {
                         }
                         else if(StoplossMode == LAYER2_MARGIN) {
                             // Layer2: Calculate from margin (emergency) | Tinh tu margin (khan cap)
-                            double margin_usd = OrderLots() * MarketInfo(Symbol(), MODE_MARGINREQUIRED);
+                            double margin_usd = OrderLots() * MarketInfo(_Symbol, MODE_MARGINREQUIRED);
                             sl_threshold = -(margin_usd / Layer2_Divisor);
                             mode_name = "LAYER2_SL";
                         }
@@ -1611,13 +1998,13 @@ void CheckStoplossAndTakeProfit() {
                             string order_type_str = (OrderType() == OP_BUY) ? "BUY" : "SELL";
                             string margin_info = "";
                             if(mode_name == "LAYER2_SL") {
-                                double margin_usd = OrderLots() * MarketInfo(Symbol(), MODE_MARGINREQUIRED);
-                                margin_info = " Margin=$" + DoubleToStr(margin_usd, 2);
+                                double margin_usd = OrderLots() * MarketInfo(_Symbol, MODE_MARGINREQUIRED);
+                                margin_info = " Margin=$" + DoubleToString(margin_usd, 2);
                             }
                             Print(">> [CLOSE] ", short_mode, " TF=", G_TF_NAMES[tf], " S=", (s+1),
-                                  " | #", ticket, " ", order_type_str, " ", DoubleToStr(OrderLots(), 2),
-                                  " | Loss=$", DoubleToStr(profit, 2),
-                                  " | Threshold=$", DoubleToStr(sl_threshold, 2), margin_info, " <<");
+                                  " | #", ticket, " ", order_type_str, " ", DoubleToString(OrderLots(), 2),
+                                  " | Loss=$", DoubleToString(profit, 2),
+                                  " | Threshold=$", DoubleToString(sl_threshold, 2), margin_info, " <<");
 
                             if(CloseOrderSafely(ticket, mode_name)) {
                                 g_ea.position_flags[tf][s] = 0;
@@ -1641,10 +2028,10 @@ void CheckStoplossAndTakeProfit() {
                         if(profit >= tp_threshold) {
                             string order_type_str = (OrderType() == OP_BUY) ? "BUY" : "SELL";
                             Print(">> [CLOSE] TP TF=", G_TF_NAMES[tf], " S=", (s+1),
-                                  " | #", ticket, " ", order_type_str, " ", DoubleToStr(OrderLots(), 2),
-                                  " | Profit=$", DoubleToStr(profit, 2),
-                                  " | Threshold=$", DoubleToStr(tp_threshold, 2),
-                                  " Mult=", DoubleToStr(TakeProfit_Multiplier, 2), " <<");
+                                  " | #", ticket, " ", order_type_str, " ", DoubleToString(OrderLots(), 2),
+                                  " | Profit=$", DoubleToString(profit, 2),
+                                  " | Threshold=$", DoubleToString(tp_threshold, 2),
+                                  " Mult=", DoubleToString(TakeProfit_Multiplier, 2), " <<");
 
                             if(CloseOrderSafely(ticket, "TAKE_PROFIT")) {
                                 g_ea.position_flags[tf][s] = 0;
@@ -1664,7 +2051,6 @@ void CheckStoplossAndTakeProfit() {
 //=============================================================================
 //  PART 16: EMERGENCY (1 function) | KIEM TRA KHAN CAP
 //=============================================================================
-
 // Check emergency conditions (drawdown) - log only | Kiem tra dieu kien khan cap - chi ghi nhan
 void CheckAllEmergencyConditions() {
     double equity = AccountEquity();
@@ -1674,7 +2060,7 @@ void CheckAllEmergencyConditions() {
         double drawdown_percent = ((balance - equity) / balance) * 100;
 
         if(drawdown_percent > 25.0) {
-            Print("[WARNING] Drawdown: ", DoubleToStr(drawdown_percent, 2), "%");
+            Print("[WARNING] Drawdown: ", DoubleToString(drawdown_percent, 2), "%");
         }
     }
 }
@@ -1682,17 +2068,16 @@ void CheckAllEmergencyConditions() {
 //=============================================================================
 //  PART 17: HEALTH CHECK & RESET (4 functions) | KIEM TRA SUC KHOE VA RESET
 //=============================================================================
-
 // Smart TF reset for all charts of current symbol (learned from SPY Bot) | Reset thong minh cho tat ca chart cung symbol (hoc tu SPY Bot)
-// Reset theo THU TU CO DINH: M5→M15→M30→H1→H4→D1→M1 (D1 QUAN TRONG NHAT, M1 CUOI CUNG) >> IMPORTANT: D1 must reset BEFORE M1 (D1 has SPY Bot), M1 is LAST (EA runs on M1) | QUAN TRONG: D1 phai reset TRUOC M1 (D1 co SPY Bot), M1 la CUOI CUNG (EA chay tren M1)
+// Resets in FIXED ORDER: M5→M15→M30→H1→H4→D1→M1 (D1 is MOST IMPORTANT, M1 LAST) | Reset theo THU TU CO DINH: M5→M15→M30→H1→H4→D1→M1 (D1 QUAN TRONG NHAT, M1 CUOI CUNG)
+// IMPORTANT: D1 must reset BEFORE M1 (D1 has SPY Bot), M1 is LAST (EA runs on M1) | QUAN TRONG: D1 phai reset TRUOC M1 (D1 co SPY Bot), M1 la CUOI CUNG (EA chay tren M1)
 void SmartTFReset() {
-    string current_symbol = Symbol();
-    int current_period = Period();
+    string current_symbol = _Symbol;
+    int current_period = _Period;
     long current_chart_id = ChartID();
 
     // Step 1: Define FIXED reset order: D1→H4→H1→M30→M15→M1 (SKIP M5 - reset sau cung)
-    // EA attach vao M5 chart, M5 QUAN TRONG NHAT nen reset CUOI CUNG
-    // D1 reset TRUOC (lau nhat), M1 reset SAU (nhanh nhat), M5 reset CUOI CUNG (current chart)
+    // EA attach vao M5 chart, M5 QUAN TRONG NHAT nen reset CUOI CUNG -> D1 reset TRUOC (lau nhat), M1 reset SAU (nhanh nhat), M5 reset CUOI CUNG (current chart)
     int reset_order[6] = {PERIOD_D1, PERIOD_H4, PERIOD_H1, PERIOD_M30, PERIOD_M15, PERIOD_M1};
 
     int step_count = 0;
@@ -1726,7 +2111,7 @@ void SmartTFReset() {
                 // Reset via W1 | Reset qua W1
                 ChartSetSymbolPeriod(temp_chart, current_symbol, PERIOD_W1);
                 Sleep(1000);
-                ChartSetSymbolPeriod(temp_chart, current_symbol, target_period);
+                ChartSetSymbolPeriod(temp_chart, current_symbol, (ENUM_TIMEFRAMES)target_period);
                 Sleep(1000);
 
                 total_reset++;
@@ -1736,8 +2121,7 @@ void SmartTFReset() {
         }
     }
 
-    // Step 3: Reset M5 (current chart) CUOI CUNG - QUAN TRONG NHAT
-    // M5 can nhan dien lai tat ca 6 TF con lai (da reset xong)
+    // Step 3: Reset M5 (current chart) CUOI CUNG - QUAN TRONG NHAT | M5 can nhan dien lai tat ca 6 TF con lai (da reset xong)
     Print("[SMART_TF_RESET] Resetting M5 (current chart) - FINAL...");
     ChartSetSymbolPeriod(current_chart_id, current_symbol, PERIOD_W1);
     Sleep(1000);
@@ -1748,20 +2132,23 @@ void SmartTFReset() {
     Print("[SMART_TF_RESET] Reset order: D1->H4->H1->M30->M15->M1->M5 (M5 last) ✓");
 }
 
-// Weekend reset (Saturday 00:03) - Trigger SmartTFReset | Reset cuoi tuan - Goi SmartTFReset >> ONLY M5 chart has permission to reset (master chart) | CHI chart M5 co quyen reset (chart master) >> Time: 00:03 to AVOID conflict with SPY Bot reset at 00:00 | Gio: 00:03 de TRANH xung dot voi SPY Bot reset luc 00:00
+// Weekend reset (Saturday 00:03) - Trigger SmartTFReset | Reset cuoi tuan - Goi SmartTFReset
+// ONLY M5 chart has permission to reset (master chart) | CHI chart M5 co quyen reset (chart master)
+// Time: 00:03 to AVOID conflict with SPY Bot reset at 00:00 | Gio: 00:03 de TRANH xung dot voi SPY Bot reset luc 00:00
 void CheckWeekendReset() {
     // Check if feature is enabled by user | Kiem tra tinh nang co duoc bat boi user
     if(!EnableWeekendReset) return;
 
     // ONLY M5 chart can trigger reset (to avoid conflict) | CHI chart M5 moi duoc trigger reset (tranh xung dot)
-    if(Period() != PERIOD_M5) return;
+    if(_Period != PERIOD_M5) return;
 
     datetime current_time = TimeCurrent();
     int day_of_week = TimeDayOfWeek(current_time);
     int hour = TimeHour(current_time);
     int minute = TimeMinute(current_time);
 
-    // Only on Saturday (6) at 0h:01 (minute 01 exactly) | Chi vao Thu 7 luc 0h:01 (phut 01 chinh xac) >> IMPORTANT: NOT 0h:00 to avoid conflict with SPY Bot! | QUAN TRONG: KHONG 0h:00 de tranh xung dot voi SPY Bot!
+    // Only on Saturday (6) at 0h:01 (minute 01 exactly) | Chi vao Thu 7 luc 0h:01 (phut 01 chinh xac)
+    // IMPORTANT: NOT 0h:00 to avoid conflict with SPY Bot! | QUAN TRONG: KHONG 0h:00 de tranh xung dot voi SPY Bot!
     if(day_of_week != 6 || hour != 0 || minute != 3) return;
 
     // Prevent duplicate reset (once per day) | Tranh reset trung lap (1 lan moi ngay)
@@ -1775,13 +2162,14 @@ void CheckWeekendReset() {
     g_ea.weekend_last_day = current_day;
 }
 
-// Health check SPY Bot (8h/16h only, NOT 24h) | Kiem tra suc khoe SPY Bot (chi 8h va 16h, KHONG 24h): ONLY M1 chart has permission to check and reset (master chart) | CHI chart M1 co quyen kiem tra va reset (chart master)
+// Health check SPY Bot (8h/16h only, NOT 24h) | Kiem tra suc khoe SPY Bot (chi 8h va 16h, KHONG 24h)
+// ONLY M1 chart has permission to check and reset (master chart) | CHI chart M1 co quyen kiem tra va reset (chart master)
 void CheckSPYBotHealth() {
     // Check if feature is enabled by user | Kiem tra tinh nang co duoc bat boi user
     if(!EnableHealthCheck) return;
 
     // ONLY M1 chart can check health (to avoid conflict) | CHI chart M1 moi duoc kiem tra (tranh xung dot)
-    if(Period() != PERIOD_M1) return;
+    if(_Period != PERIOD_M1) return;
 
     datetime current_time = TimeCurrent();
     int hour = TimeHour(current_time);
@@ -1812,12 +2200,44 @@ void CheckSPYBotHealth() {
 //=============================================================================
 //  PART 18: MAIN EA FUNCTIONS (3 functions) | HAM CHINH CUA EA
 //=============================================================================
-
-// EA initialization - setup all components | Khoi tao EA - cai dat tat ca thanh phan >> OPTIMIZED V3.4: Struct-based data isolation for multi-symbol support | TOI UU: Cach ly du lieu theo struct cho da ky hieu
+// EA initialization - setup all components | Khoi tao EA - cai dat tat ca thanh phan
+// OPTIMIZED V3.4: Struct-based data isolation for multi-symbol support | TOI UU: Cach ly du lieu theo struct cho da ky hieu
 int OnInit() {
+    // PART 0: MT5 CRITICAL INITIALIZATION - MUST BE FIRST!
+    // Setup Fill Policy BEFORE any trading operations | Thiết lập Fill Policy TRƯỚC KHI giao dịch
+    // Without this, OrderSend() will fail with Error 10030 | Nếu thiếu, OrderSend() sẽ lỗi 10030
+    InitMT5Trading();
+
     // PART 1: Symbol recognition | Nhan dien ky hieu
     if(!InitializeSymbolRecognition()) return(INIT_FAILED);
     InitializeSymbolPrefix();
+
+    // PART 1B: Detect symbol type ONCE (FOREX/CRYPTO/METAL/INDEX) | Phat hien loai symbol MOT LAN
+    g_ea.symbol_type = DetectSymbolType(_Symbol);
+
+    // PART 1C: Get all leverages ONCE (FX:500 CR:100 MT:500 IX:250) | Lay tat ca don bay MOT LAN
+    g_ea.all_leverages = GetAllLeverages();
+
+    // PART 1D: Get broker & account info ONCE | Lay thong tin san va tai khoan MOT LAN
+    g_ea.broker_name = AccountCompany();
+    long acc_type = AccountInfoInteger(ACCOUNT_TRADE_MODE);
+    g_ea.account_type = (acc_type == ACCOUNT_TRADE_MODE_DEMO) ? "Demo" :
+                        (acc_type == ACCOUNT_TRADE_MODE_REAL) ? "Real" : "Contest";
+
+    // Compact init summary (Option 2: Readable Style) | Tom tat khoi dong gon nhe
+    // Detect fill policy same way as InitMT5Trading() | Phat hien fill policy giong InitMT5Trading()
+    long filling = SymbolInfoInteger(_Symbol, SYMBOL_FILLING_MODE);
+    string fill_policy = "IOC";
+    if((filling & 2) == 2) fill_policy = "IOC";
+    else if((filling & 1) == 1) fill_policy = "FOK";
+    else fill_policy = "RETURN";
+
+    string norm_status = EnableSymbolNormalization ? "ON" : "OFF";
+
+    Print("[INIT] ", g_ea.symbol_name, " ", g_ea.symbol_type,
+          " | Broker:", g_ea.broker_name, "/", g_ea.account_type,
+          " | Leverage:", g_ea.all_leverages,
+          " | Fill:", fill_policy, " Norm:", norm_status, " ✓");
 
     // PART 2: Folder selection (only for local file mode) | Chon thu muc (chi cho che do file local)
     if(CSDL_Source == FOLDER_1) g_ea.csdl_folder = "DataAutoOner\\";
@@ -1841,11 +2261,14 @@ int OnInit() {
     // PART 7: Map CSDL variables (includes TREND/NEWS optimization) | Anh xa bien CSDL (bao gom toi uu TREND/NEWS)
     MapCSDLToEAVariables();
 
-    // PART 7B: CRITICAL FIX - Reset ALL auxiliary flags to prevent ZOMBIE variables | Dat lai TAT CA co phu tranh bien zombie >> MQL4 does NOT auto-reset global variables on EA restart | MQL4 KHONG tu dong reset bien toan cuc khi EA khoi dong lai
-    // If EA was killed (crash/user stop), old flag values may persist | Neu EA bi tat ngang, gia tri co cu co the con ton tai >> This causes ZOMBIE orders: flag=1 but order doesn't exist, or TF disabled but flag still set | Gay lenh zombie: co=1 nhung lenh khong ton tai, hoac TF tat nhung co van = 1
+    // PART 7B: ?? CRITICAL FIX - Reset ALL auxiliary flags to prevent ZOMBIE variables | Dat lai TAT CA co phu tranh bien zombie
+    // MQL4 does NOT auto-reset global variables on EA restart | MQL4 KHONG tu dong reset bien toan cuc khi EA khoi dong lai
+    // If EA was killed (crash/user stop), old flag values may persist | Neu EA bi tat ngang, gia tri co cu co the con ton tai
+    // This causes ZOMBIE orders: flag=1 but order doesn't exist, or TF disabled but flag still set | Gay lenh zombie: co=1 nhung lenh khong ton tai, hoac TF tat nhung co van = 1
     for(int tf = 0; tf < 7; tf++) {
         for(int s = 0; s < 3; s++) {
             g_ea.position_flags[tf][s] = 0;
+            g_ea.print_failed[tf][s] = false;  // Reset print error flags
         }
     }
 
@@ -1863,7 +2286,8 @@ int OnInit() {
         g_ea.timestamp_old[tf] = (datetime)g_ea.csdl_rows[tf].timestamp;
     }
 
-    // PART 8B: Build compact startup summary BEFORE RESTORE | Tao tom tat khoi dong TRUOC KHI RESTORE >> This must be done BEFORE RestoreOrCleanupPositions() so it can print final summary | Phai lam TRUOC RestoreOrCleanupPositions() de in tom tat cuoi cung
+    // PART 8B: Build compact startup summary BEFORE RESTORE | Tao tom tat khoi dong TRUOC KHI RESTORE
+    // This must be done BEFORE RestoreOrCleanupPositions() so it can print final summary | Phai lam TRUOC RestoreOrCleanupPositions() de in tom tat cuoi cung
     string tf_status = "";
     int tf_count = 0;
     if(TF_M1) { tf_status += "M1,"; tf_count++; }
@@ -1882,8 +2306,8 @@ int OnInit() {
     if(S3_NEWS) { strat_status += "S3,"; strat_count++; }
     if(StringLen(strat_status) > 0) strat_status = StringSubstr(strat_status, 0, StringLen(strat_status) - 1);
 
-    string sl_mode = (StoplossMode == LAYER1_MAXLOSS) ? "L1" : ("L2/" + DoubleToStr(Layer2_Divisor, 0));
-    string master_mode = (Period()==PERIOD_M1) ? "M1" : "M5-D1";
+    string sl_mode = (StoplossMode == LAYER1_MAXLOSS) ? "L1" : ("L2/" + DoubleToString(Layer2_Divisor, 0));
+    string master_mode = (_Period==PERIOD_M1) ? "M1" : "M5-D1";
 
     // CSDL source name | Ten nguon CSDL
     string folder_name = "";
@@ -1899,7 +2323,7 @@ int OnInit() {
 
     g_ea.init_summary = "[INIT] " + g_ea.symbol_name + " | SL:" + sl_mode +
                         " News:7TF(" + news_str + ") Trend:" + trend_str +
-                        " | Lot:" + DoubleToStr(g_ea.lot_sizes[0][0], 2) + "-" + DoubleToStr(g_ea.lot_sizes[6][2], 2) +
+                        " | Lot:" + DoubleToString(g_ea.lot_sizes[0][0], 2) + "-" + DoubleToString(g_ea.lot_sizes[6][2], 2) +
                         " | TF:" + IntegerToString(tf_count) + " S:" + IntegerToString(strat_count) +
                         " | Folder:" + folder_name + " Master:" + master_mode +
                         " Magic:" + IntegerToString(g_ea.magic_numbers[0][0]) + "-" + IntegerToString(g_ea.magic_numbers[6][2]);
@@ -1920,21 +2344,28 @@ void OnDeinit(const int reason) {
     EventKillTimer();
     Comment("");  // Clear Comment | Xoa Comment
 
-    // Delete all dashboard labels (15 labels: dash_0 to dash_14) | Xoa tat ca label dashboard >> Use g_ea.symbol_prefix to delete objects correctly | Su dung g_ea.symbol_prefix de xoa dung
+    // Delete background panel FIRST | Xoa nen truoc tien
+    string bg_name = g_ea.symbol_prefix + "dash_bg";
+    if(::ObjectFind(0, bg_name) >= 0) {
+        ::ObjectDelete(0, bg_name);
+    }
+
+    // Delete all dashboard labels (15 labels: dash_0 to dash_14) | Xoa tat ca label dashboard
+    // ✅ Use g_ea.symbol_prefix to delete objects correctly | Su dung g_ea.symbol_prefix de xoa dung -> IMPORTANT: Use direct MT5 call (not wrapper) to ensure objects are deleted
     for(int i = 0; i <= 14; i++) {
         string obj_name = g_ea.symbol_prefix + "dash_" + IntegerToString(i);
-        if(ObjectFind(obj_name) >= 0) {
-            ObjectDelete(obj_name);
+        if(::ObjectFind(0, obj_name) >= 0) {
+            ::ObjectDelete(0, obj_name);
         }
     }
 
-    // Delete all objects with symbol_prefix + "dash_" pattern (cleanup any orphaned objects) >> Xoa tat ca object co pattern symbol_prefix + "dash_" (don dep cac object con sot lai)
-    int total = ObjectsTotal();
+    // Delete all objects with symbol_prefix + "dash_" pattern (cleanup any orphaned objects) | Xoa tat ca object co pattern symbol_prefix + "dash_" (don dep cac object con sot lai)
+    int total = ::ObjectsTotal(0);
     for(int i = total - 1; i >= 0; i--) {
-        string obj_name = ObjectName(i);
-        // Check if object name starts with symbol_prefix AND contains "dash_": Kiem tra object bat dau bang symbol_prefix VA chua "dash_"
+        string obj_name = ::ObjectName(0, i);
+        // Check if object name starts with symbol_prefix AND contains "dash_" | Kiem tra object bat dau bang symbol_prefix VA chua "dash_"
         if(StringFind(obj_name, g_ea.symbol_prefix) == 0 && StringFind(obj_name, "dash_") > 0) {
-            ObjectDelete(obj_name);
+            ::ObjectDelete(0, obj_name);
         }
     }
 
@@ -1942,10 +2373,56 @@ void OnDeinit(const int reason) {
 }
 
 //=============================================================================
-//  PART 19: DASHBOARD - OBJ_LABEL (4 functions) | BANG DIEU KHIEN OBJ_LABEL
+//  PART 19: DASHBOARD - OBJ_LABEL (5 functions) | BANG DIEU KHIEN OBJ_LABEL
 //=============================================================================
-// Leverages existing EA resources: g_ea struct, flags, lot sizes | Tan dung tai nguyen EA co san: Uses OBJ_LABEL with fixed-width spaces + alternating colors (Blue/White) | Dung OBJ_LABEL voi khoang cach co dinh + 2 mau xen ke
-// Scan all orders once for dashboard (reuse stoploss logic) | Quet lenh 1 lan cho dashboard (tai su dung logic stoploss) >> NEW: Builds 2 separate summaries - S1 only (row 1), S2+S3 (row 2) | Xay dung 2 tom tat rieng - Chi S1 (hang 1), S2+S3 (hang 2)
+// Leverages existing EA resources: g_ea struct, flags, lot sizes | Tan dung tai nguyen EA co san
+// Uses OBJ_LABEL with dynamic spacing + Unicode symbols + Segoe UI font | Dung OBJ_LABEL voi khoang cach dong + ky tu Unicode + font Segoe UI
+
+// Detect symbol type (FOREX/CRYPTO/METAL/INDEX) - called ONCE at OnInit | Phat hien loai symbol - goi MOT LAN tai OnInit
+// Uses hybrid approach: MT5 API first, then pattern matching fallback | Dung phuong phap lai: MT5 API truoc, sau do pattern matching
+string DetectSymbolType(string symbol) {
+    // Try MT5 API first (works on MT5 build 2600+) | Thu MT5 API truoc
+    long sector = SymbolInfoInteger(symbol, SYMBOL_SECTOR);
+
+    if(sector > 0) {
+        // API works, use it | API hoat dong, su dung
+        switch((int)sector) {
+            case 1: return "FX";       // SECTOR_CURRENCY
+            case 2: return "METAL";    // SECTOR_METALS
+            case 3: return "CRYPTO";   // SECTOR_CRYPTO
+            case 4: return "INDEX";    // SECTOR_INDEX
+            case 5: return "STOCK";    // SECTOR_STOCK
+            case 6: return "CMDTY";    // SECTOR_COMMODITY
+        }
+    }
+
+    // Fallback: Pattern matching if API not available or returns 0 | Du phong: khop pattern neu API khong co
+    string sym = symbol;
+    StringToUpper(sym);
+
+    // CRYPTO patterns | Cac pattern CRYPTO
+    if(StringFind(sym, "BTC") >= 0 || StringFind(sym, "ETH") >= 0 ||
+       StringFind(sym, "LTC") >= 0 || StringFind(sym, "XRP") >= 0 ||
+       StringFind(sym, "BNB") >= 0) return "CRYPTO";
+
+    // METAL patterns | Cac pattern KIM LOAI
+    if(StringFind(sym, "XAU") >= 0 || StringFind(sym, "XAG") >= 0 ||
+       StringFind(sym, "GOLD") >= 0 || StringFind(sym, "SILVER") >= 0) return "METAL";
+
+    // ENERGY patterns | Cac pattern NANG LUONG
+    if(StringFind(sym, "OIL") >= 0 || StringFind(sym, "WTI") >= 0 ||
+       StringFind(sym, "BRENT") >= 0) return "ENERGY";
+
+    // INDEX patterns | Cac pattern CHI SO
+    if(StringFind(sym, "SPX") >= 0 || StringFind(sym, "NAS") >= 0 ||
+       StringFind(sym, "DOW") >= 0 || StringFind(sym, "DAX") >= 0) return "INDEX";
+
+    // Default to FOREX | Mac dinh la FOREX
+    return "FX";
+}
+
+// Scan all orders once for dashboard (reuse stoploss logic) | Quet lenh 1 lan cho dashboard (tai su dung logic stoploss)
+// NEW: Builds 2 separate summaries - S1 only (row 1), S2+S3 (row 2) | Xay dung 2 tom tat rieng - Chi S1 (hang 1), S2+S3 (hang 2)
 void ScanAllOrdersForDashboard(int &total_orders, double &total_profit, double &total_loss,
                                 string &s1_summary, string &s2s3_summary) {
     total_orders = 0;
@@ -1958,13 +2435,13 @@ void ScanAllOrdersForDashboard(int &total_orders, double &total_profit, double &
     int s1_count = 0;
     int s2s3_count = 0;
 
-    for(int i = 0; i < OrdersTotal(); i++) {
+    for(int i = 0; i < PositionsTotal(); i++) {
         if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) continue;
-        if(OrderSymbol() != Symbol()) continue;
+        if(OrderSymbol() != _Symbol) continue;
 
         int magic = OrderMagicNumber();
         double profit = OrderProfit() + OrderSwap() + OrderCommission();
-        double margin_usd = OrderLots() * MarketInfo(Symbol(), MODE_MARGINREQUIRED);
+        double margin_usd = OrderLots() * MarketInfo(_Symbol, MODE_MARGINREQUIRED);
 
         // Check which strategy this order belongs to | Kiem tra lenh thuoc chien luoc nao
         for(int tf = 0; tf < 7; tf++) {
@@ -1977,7 +2454,7 @@ void ScanAllOrdersForDashboard(int &total_orders, double &total_profit, double &
                 s1_count++;
                 if(s1_count <= 7) {  // Max 7 (all TF) | Toi da 7 (tat ca TF)
                     if(s1_count > 1) s1_summary += ", ";
-                    s1_summary += "S1_" + G_TF_NAMES[tf] + "[$" + DoubleToStr(margin_usd, 0) + "]";
+                    s1_summary += "S1_" + G_TF_NAMES[tf] + "[$" + DoubleToString(margin_usd, 0) + "]";
                 }
                 break;
             }
@@ -1991,7 +2468,7 @@ void ScanAllOrdersForDashboard(int &total_orders, double &total_profit, double &
                 if(s2s3_count <= 7) {  // Show first 7 | Chi hien 7 dau
                     string strategy = (magic == g_ea.magic_numbers[tf][1]) ? "S2" : "S3";
                     if(s2s3_count > 1) s2s3_summary += ", ";
-                    s2s3_summary += strategy + "_" + G_TF_NAMES[tf] + "[$" + DoubleToStr(margin_usd, 0) + "]";
+                    s2s3_summary += strategy + "_" + G_TF_NAMES[tf] + "[$" + DoubleToString(margin_usd, 0) + "]";
                 }
                 break;
             }
@@ -2035,9 +2512,9 @@ double CalculateTFPnL(int tf) {
         int target_magic = g_ea.magic_numbers[tf][s];
 
         // Scan all orders to find matching magic | Quet tat ca lenh de tim magic khop
-        for(int i = 0; i < OrdersTotal(); i++) {
+        for(int i = 0; i < PositionsTotal(); i++) {
             if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) continue;
-            if(OrderSymbol() != Symbol()) continue;
+            if(OrderSymbol() != _Symbol) continue;
             if(OrderMagicNumber() == target_magic) {
                 total_pnl += OrderProfit() + OrderSwap() + OrderCommission();
             }
@@ -2051,9 +2528,9 @@ double CalculateTFPnL(int tf) {
 bool HasBonusOrders(int tf) {
     int target_magic = g_ea.magic_numbers[tf][2]; // S3 magic for this TF | Magic S3 cho TF nay
 
-    for(int i = 0; i < OrdersTotal(); i++) {
+    for(int i = 0; i < PositionsTotal(); i++) {
         if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) continue;
-        if(OrderSymbol() != Symbol()) continue;
+        if(OrderSymbol() != _Symbol) continue;
         if(OrderMagicNumber() == target_magic) {
             // Check if comment contains "BONUS" | Kiem tra comment co chua "BONUS"
             string comment = OrderComment();
@@ -2124,7 +2601,49 @@ string FormatBonusStatus() {
     return result;
 }
 
-// Main dashboard update with OBJ_LABEL (15 lines, optimized) | Cap nhat dashboard voi OBJ_LABEL (15 dong, toi uu)
+// Get all leverage: Always show all 4 types (FX, CRYPTO, METAL, INDEX) -> FX=Full, Crypto=1/5, Metal=Full, Index=1/2 | Lay tat ca cac loai don bay cua tai khoan
+string GetAllLeverages() {
+
+    int base_lev = (int)AccountLeverage();
+
+    // Build result with all 4 common leverage types | Xay dung ket qua voi 4 loai don bay pho bien
+    string result = "FX:" + IntegerToString(base_lev) + " " +
+                   "CR:" + IntegerToString(base_lev / 5) + " " +
+                   "MT:" + IntegerToString(base_lev) + " " +
+                   "IX:" + IntegerToString(base_lev / 2);
+
+    return result;
+}
+
+// Create dashboard background panel (dark brown rectangle) | Tao nen dashboard (hinh chu nhat mau nau dam)
+void CreateDashboardBackground(int y_start, int line_height, int total_rows) {
+    string bg_name = g_ea.symbol_prefix + "dash_bg";
+
+    // Calculate panel dimensions | Tinh kich thuoc panel
+    int panel_x = 5;              // 5px from left edge | 5px tu canh trai
+    int panel_y = y_start - 5;    // 5px above dashboard start | 5px phia tren dashboard
+    int panel_width = 490;        // 2/3 of original (750 * 2/3 = 500) | 2/3 kich thuoc cu
+    int panel_height = (total_rows * line_height) + 35;  // Height + extra padding for last row | Chieu cao + padding them cho dong cuoi
+
+    // Dark brown color (professional look) | Mau nau dam (nhin chuyen nghiep)
+    color bg_color = C'30,25,20';  // RGB: Very dark brown | Nau rat dam
+
+    // Create or update rectangle background | Tao hoac cap nhat nen hinh chu nhat
+    if(ObjectFind(bg_name) < 0) {
+        ObjectCreate(bg_name, OBJ_RECTANGLE_LABEL, 0, 0, 0);
+        ObjectSet(bg_name, OBJPROP_CORNER, CORNER_LEFT_UPPER);
+        ObjectSet(bg_name, OBJPROP_BACK, true);  // Place in background layer | Dat o lop phia sau
+    }
+
+    // Update position and size | Cap nhat vi tri va kich thuoc
+    ObjectSet(bg_name, OBJPROP_XDISTANCE, panel_x);
+    ObjectSet(bg_name, OBJPROP_YDISTANCE, panel_y);
+    ObjectSet(bg_name, OBJPROP_XSIZE, panel_width);
+    ObjectSet(bg_name, OBJPROP_YSIZE, panel_height);
+    ObjectSet(bg_name, OBJPROP_BGCOLOR, bg_color);
+}
+
+// Main dashboard update with OBJ_LABEL - DYNAMIC LAYOUT (11 lines, compact) | Cap nhat dashboard - BO CUC DONG (11 dong, gon)
 void UpdateDashboard() {
     // Check if dashboard is enabled | Kiem tra dashboard co bat khong
     if(!ShowDashboard) {
@@ -2132,12 +2651,17 @@ void UpdateDashboard() {
         for(int i = 0; i <= 14; i++) {
             ObjectDelete("dash_" + IntegerToString(i));
         }
+        ObjectDelete(g_ea.symbol_prefix + "dash_bg");  // Delete background too
         return;
     }
 
     int y_start = 150;  // Start 150px from top | Bat dau tu 150px tu tren
-    int line_height = 14;  // Line spacing | Khoang cach dong
+    int line_height = 13;  // Line spacing (smaller) | Khoang cach dong (nho bon)
     int y_pos = y_start;
+    int total_rows = 11;  // Total dashboard rows | Tong so dong dashboard
+
+    // ===== CREATE BACKGROUND PANEL (draw first, before labels) | TAO NEN (ve truoc, duoi cac label)
+    CreateDashboardBackground(y_start, line_height, total_rows);
 
     // ===== LEVERAGE: Account info | Tai su dung: Thong tin tai khoan
     double equity = AccountEquity();
@@ -2160,9 +2684,9 @@ void UpdateDashboard() {
     ArrayInitialize(bonus_count_per_tf, 0);
     ArrayInitialize(bonus_lots_per_tf, 0.0);
 
-    for(int i = 0; i < OrdersTotal(); i++) {
+    for(int i = 0; i < PositionsTotal(); i++) {
         if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) continue;
-        if(OrderSymbol() != Symbol()) continue;
+        if(OrderSymbol() != _Symbol) continue;
 
         double order_pnl = OrderProfit() + OrderSwap() + OrderCommission();
         int magic = OrderMagicNumber();
@@ -2185,122 +2709,143 @@ void UpdateDashboard() {
         }
     }
 
-    // ===== LEVERAGE: g_ea variables | Tai su dung: Bien g_ea
+    // ===== LEVERAGE: g_ea variables | Tai su dung: Bien g_ea -> Folder/API source display | Hien thi nguon folder/API
     string folder = "";
-    if(CSDL_Source == FOLDER_1) folder = "DA1";
-    else if(CSDL_Source == FOLDER_2) folder = "DA2";
-    else if(CSDL_Source == FOLDER_3) folder = "DA3";
-    string trend = (g_ea.trend_d1 == 1) ? "^" : (g_ea.trend_d1 == -1 ? "v" : "-");
+    if(CSDL_Source == FOLDER_1) folder = "DA1:BSpy";
+    else if(CSDL_Source == FOLDER_2) folder = "DA2:Def";
+    else if(CSDL_Source == FOLDER_3) folder = "DA3:Sync";
+    else if(CSDL_Source == HTTP_API) folder = "API:Rem";
 
-    // ===== LINE 0: HEADER (YELLOW) | TIEU DE (VANG)
-    string header = "[" + g_ea.symbol_name + "] " + folder + " | 7TFx3S | D1:" + trend +
-                    " | $" + DoubleToStr(equity, 0) + " DD:" + DoubleToStr(dd, 1) + "% | " +
-                    IntegerToString(total_orders) + "/21";
-    CreateOrUpdateLabel(g_ea.symbol_prefix + "dash_0", header, 10, y_pos, clrYellow, 9);
-    y_pos += line_height;
-
-    // ===== LINE 1: SEPARATOR (White) | DUONG GACH (Trang)
-    CreateOrUpdateLabel(g_ea.symbol_prefix + "dash_1", "----------------------------------------------------", 10, y_pos, clrWhite, 9);
-    y_pos += line_height;
-
-    // ===== LINE 2: COLUMN HEADERS (White) | TEN COT (Trang)
-    string col_header = PadRight("TF", 5) + PadRight("Sig", 5) + PadRight("S1", 7) +
-                        PadRight("S2", 7) + PadRight("S3", 7) + PadRight("P&L", 9) +
-                        PadRight("News", 7) + "Bonus";
-    CreateOrUpdateLabel(g_ea.symbol_prefix + "dash_2", col_header, 10, y_pos, clrWhite, 9);
-    y_pos += line_height;
-
-    // ===== LINE 3: SEPARATOR (White) | DUONG GACH (Trang)
-    CreateOrUpdateLabel(g_ea.symbol_prefix + "dash_3", "----------------------------------------------------", 10, y_pos, clrWhite, 9);
-    y_pos += line_height;
-
-    // ===== LINES 4-10: 7 TF ROWS - ALTERNATING COLORS + P&L | 7 HANG TF - 2 MAU XEN KE + LAI LO
-
-    // 🔍 DEBUG: Print NEWS before display (once per cycle)
-    static datetime last_news_debug = 0;
-    if(TimeCurrent() != last_news_debug) {
-        string news_debug = "DASH NEWS: ";
-        for(int i = 0; i < 7; i++) {
-            news_debug += "TF" + IntegerToString(i) + "=" + IntegerToString(g_ea.csdl_rows[i].news) + " ";
-        }
-        DebugPrint(news_debug);
-        last_news_debug = TimeCurrent();
+    // S2 Trend Mode display (from Input parameter, not g_ea.trend_d1) | Hien thi che do S2 Trend (tu tham so Input)
+    string trend = "";
+    if(S2_TrendMode == S2_FOLLOW_D1) {
+        // Auto: Follow D1 signal | Tu dong: Theo tin hieu D1
+        trend = (g_ea.trend_d1 == 1) ? ARROW_UP : (g_ea.trend_d1 == -1 ? ARROW_DOWN : BULLET);
+    } else if(S2_TrendMode == S2_FORCE_BUY) {
+        trend = ARROW_UP + "!";  // Force BUY mode | Che do ep BUY
+    } else if(S2_TrendMode == S2_FORCE_SELL) {
+        trend = ARROW_DOWN + "!";  // Force SELL mode | Che do ep SELL
     }
 
+    // ===== ROW 0: HEADER with Symbol Type (YELLOW) | HANG 0: TIEU DE voi Loai symbol (VANG)
+    string header = "[" + g_ea.symbol_name + MIDDOT + g_ea.symbol_type + "] " + folder +
+                    " | 7TFx3S | D1" + trend + " | $" + DoubleToString(equity, 0) +
+                    " DD:" + DoubleToString(dd, 1) + "% | " + IntegerToString(total_orders) + "/21";
+    CreateOrUpdateLabel(g_ea.symbol_prefix + "dash_0", header, 10, y_pos, clrYellow, 8);
+    y_pos += line_height;
+
+    // ===== ROW 1: SEPARATOR (White) | HANG 1: DUONG PHAN CACH (Trang)
+    string separator = "";
+    for(int i = 0; i < 60; i++) separator += LINE_H;  // 60 chars of ─
+    CreateOrUpdateLabel(g_ea.symbol_prefix + "dash_1", separator, 10, y_pos, clrWhite, 8);
+    y_pos += line_height;
+
+    // ===== ROWS 2-8: 7 TF ROWS with DYNAMIC LAYOUT + UNICODE | 7 HANG TF voi BO CUC DONG + UNICODE
+
     for(int tf = 0; tf < 7; tf++) {
-        // Signal with ASCII arrows (^ up, v down, - none) | Tin hieu voi mui ten ASCII
+        // Signal with Unicode symbols | Tin hieu voi ky tu Unicode
         int current_signal = g_ea.csdl_rows[tf].signal;
-        string sig = "";
-        if(current_signal == 1) sig = "^";         // UP arrow | Mui ten len
-        else if(current_signal == -1) sig = "v";   // DOWN arrow | Mui ten xuong
-        else sig = "-";                             // NONE | Khong co
+        string sig = (current_signal == 1) ? ARROW_UP : (current_signal == -1 ? ARROW_DOWN : BULLET);
 
-        // S1/S2/S3 positions | Vi the S1/S2/S3
-        string s1 = (g_ea.position_flags[tf][0] == 1) ? "*" + DoubleToStr(g_ea.lot_sizes[tf][0], 2) : "o";
-        string s2 = (g_ea.position_flags[tf][1] == 1) ? "*" + DoubleToStr(g_ea.lot_sizes[tf][1], 2) : "o";
-        string s3 = (g_ea.position_flags[tf][2] == 1) ? "*" + DoubleToStr(g_ea.lot_sizes[tf][2], 2) : "o";
+        // PriceDiff (USD movement) | Chenh lech gia (USD)
+        double pricediff = g_ea.csdl_rows[tf].pricediff;
+        string pd_str = "";
+        if(pricediff > 0.05) pd_str = "+" + DoubleToString(pricediff, 1);
+        else if(pricediff < -0.05) pd_str = DoubleToString(pricediff, 1);
+        else pd_str = "+0.0";
 
-        // P&L for this TF (all strategies) | Lai lo cho TF nay (tat ca chien luoc)
+        // TimeDiff (smart format: 3m, 2h, 5d) | Chenh lech thoi gian (dinh dang thong minh)
+        int timediff = g_ea.csdl_rows[tf].timediff;
+        string td_str = "";
+        if(timediff < 0) td_str = "0m";
+        else if(timediff < 60) td_str = IntegerToString(timediff) + "m";        // < 1h: minutes
+        else if(timediff < 1440) td_str = IntegerToString(timediff/60) + "h";   // < 1d: hours
+        else td_str = IntegerToString(timediff/1440) + "d";                      // >= 1d: days
+
+        // S1/S2/S3 positions with Unicode | Vi the S1/S2/S3 voi Unicode
+        string s1 = (g_ea.position_flags[tf][0] == 1) ? CIRCLE_FULL + DoubleToString(g_ea.lot_sizes[tf][0], 2) : CIRCLE_EMPTY;
+        string s2 = (g_ea.position_flags[tf][1] == 1) ? CIRCLE_FULL + DoubleToString(g_ea.lot_sizes[tf][1], 2) : CIRCLE_EMPTY;
+        string s3 = (g_ea.position_flags[tf][2] == 1) ? CIRCLE_FULL + DoubleToString(g_ea.lot_sizes[tf][2], 2) : CIRCLE_EMPTY;
+
+        // P&L for this TF | Lai lo cho TF nay
         double tf_pnl = CalculateTFPnL(tf);
         string pnl_str = "";
-        if(tf_pnl > 0) pnl_str = "+" + DoubleToStr(tf_pnl, 2);
-        else if(tf_pnl < 0) pnl_str = DoubleToStr(tf_pnl, 2);
+        if(tf_pnl > 0) pnl_str = "+" + DoubleToString(tf_pnl, 2);
+        else if(tf_pnl < 0) pnl_str = DoubleToString(tf_pnl, 2);
         else pnl_str = "+0.00";
 
         // News with sign | Tin tuc voi dau
-        string nw = IntegerToString(g_ea.csdl_rows[tf].news);
-        if(g_ea.csdl_rows[tf].news > 0) nw = "+" + nw;
+        int news = g_ea.csdl_rows[tf].news;
+        string nw = (news > 0) ? "+" + IntegerToString(news) : IntegerToString(news);
 
-        // BONUS display: "count|lot" or "-" | Hien thi BONUS: "so|lot" hoac "-"
-        string bonus_str = "-";
-        if(bonus_count_per_tf[tf] > 0) {
-            bonus_str = IntegerToString(bonus_count_per_tf[tf]) + "|" +
-                        DoubleToStr(bonus_lots_per_tf[tf], 2);
-        }
+        // BONUS display | Hien thi BONUS
+        string bonus_str = (bonus_count_per_tf[tf] > 0) ?
+                          IntegerToString(bonus_count_per_tf[tf]) + "|" + DoubleToString(bonus_lots_per_tf[tf], 2) :
+                          EM_DASH;
 
-        // Build row with fixed-width columns | Xay dung dong voi cot co dinh
-        string row = PadRight(G_TF_NAMES[tf], 5) + PadRight(sig, 5) + PadRight(s1, 7) +
-                     PadRight(s2, 7) + PadRight(s3, 7) + PadRight(pnl_str, 9) +
-                     PadRight(nw, 7) + bonus_str;
+        // Add padding to TF name for relative column alignment | Them padding cho ten TF de canh cot tuong doi
+        string tf_padded = "";
+        if(G_TF_NAMES[tf] == "M1")  tf_padded = " >> M1 .....";          // 2 underscores
+        else if(G_TF_NAMES[tf] == "M5")  tf_padded = " >> M5 .....";
+        else if(G_TF_NAMES[tf] == "M15") tf_padded = " >> M15...";    // 1 underscore
+        else if(G_TF_NAMES[tf] == "M30") tf_padded = " >> M30...";
+        else if(G_TF_NAMES[tf] == "H1")  tf_padded = " >> H1 .....";  // 2 underscores
+        else if(G_TF_NAMES[tf] == "H4")  tf_padded = " >> H4 .....";
+        else if(G_TF_NAMES[tf] == "D1")  tf_padded = " >> D1 .....";
 
-        // Alternating colors: Blue (even rows), White (odd rows) | Mau xen ke: Xanh (dong chan), Trang (dong le)
+        // Build row with | SEPARATORS for visual clarity | Xay dung dong voi | PHAN CACH de de doc
+        // Format: |TF__ signal |pricediff| |timediff||s1||s2||s3||pnl||news||bonus|
+        string row = "|" + tf_padded + " " + sig + " |" + pd_str + "] [" + td_str + "] [" +
+                     s1 + "] [" + s2 + "] [" + s3 + "] [" + pnl_str + "] [" + nw + "] [" + bonus_str + "]";
+
+        // Alternating colors | Mau xen ke
         color row_color = (tf % 2 == 0) ? clrDodgerBlue : clrWhite;
-        CreateOrUpdateLabel(g_ea.symbol_prefix + "dash_" + IntegerToString(4 + tf), row, 10, y_pos, row_color, 9);
+        CreateOrUpdateLabel(g_ea.symbol_prefix + "dash_" + IntegerToString(2 + tf), row, 10, y_pos, row_color, 8);
         y_pos += line_height;
     }
 
-    // ===== LINE 11: SEPARATOR (White) | DUONG GACH (Trang)
-    CreateOrUpdateLabel(g_ea.symbol_prefix + "dash_11", "----------------------------------------------------", 10, y_pos, clrWhite, 9);
+    // ===== ROW 9: SEPARATOR (White) | HANG 9: DUONG PHAN CACH (Trang)
+    CreateOrUpdateLabel(g_ea.symbol_prefix + "dash_9", separator, 10, y_pos, clrWhite, 8);
     y_pos += line_height;
 
-    // ===== LINE 12: BONUS STATUS (White) | TRANG THAI BONUS (Trang)
-    string bonus_status = FormatBonusStatus();
-    CreateOrUpdateLabel(g_ea.symbol_prefix + "dash_12", bonus_status, 10, y_pos, clrWhite, 9);
-    y_pos += line_height;
-
-    // ===== LINE 13: NET SUMMARY (Yellow) | TOM TAT NET (Vang)
+    // ===== ROW 10: NET SUMMARY + BONUS (MERGED) (Yellow) | HANG 10: TOM TAT + BONUS (GOP CHUNG) (Vang)
     double net = total_profit + total_loss;
-    string net_summary = "NET:$" + DoubleToStr(net, 2);
+    string summary = "NET:$" + DoubleToString(net, 2);
 
     // Add strategy breakdown if there are orders | Them phan tich chien luoc neu co lenh
-    if(s1_count > 0) net_summary += " | S1:" + IntegerToString(s1_count) + "x$" + DoubleToStr(s1_pnl, 0);
-    if(s2_count > 0) net_summary += " | S2:" + IntegerToString(s2_count) + "x$" + DoubleToStr(s2_pnl, 0);
-    if(s3_count > 0) net_summary += " | S3:" + IntegerToString(s3_count) + "x$" + DoubleToStr(s3_pnl, 1);
+    if(s1_count > 0) summary += " S1:" + IntegerToString(s1_count) + MULTIPLY + "$" + DoubleToString(s1_pnl, 0);
+    if(s2_count > 0) summary += " S2:" + IntegerToString(s2_count) + MULTIPLY + "$" + DoubleToString(s2_pnl, 0);
+    if(s3_count > 0) summary += " S3:" + IntegerToString(s3_count) + MULTIPLY + "$" + DoubleToString(s3_pnl, 1);
 
-    net_summary += " | " + IntegerToString(total_orders) + "/21";
+    // Add BONUS to same line (merged) | Them BONUS vao cung dong (gop lai)
+    int total_bonus = 0;
+    double total_bonus_lots = 0;
+    for(int i = 0; i < 7; i++) {
+        total_bonus += bonus_count_per_tf[i];
+        total_bonus_lots += bonus_lots_per_tf[i];
+    }
+    if(total_bonus > 0) {
+        summary += " BONUS:" + IntegerToString(total_bonus) + "|" + DoubleToString(total_bonus_lots, 2);
+    }
 
-    CreateOrUpdateLabel(g_ea.symbol_prefix + "dash_13", net_summary, 10, y_pos, clrYellow, 9);
+    summary += " " + IntegerToString(total_orders) + "/21";
+
+    CreateOrUpdateLabel(g_ea.symbol_prefix + "dash_10", summary, 10, y_pos, clrYellow, 8);
     y_pos += line_height;
 
-    // ===== LINE 14: BROKER INFO (Yellow) | THONG TIN SAN (Vang)
-    string broker = AccountCompany();
-    int leverage = AccountLeverage();
-    string broker_info = broker + " | Lev:1:" + IntegerToString(leverage) + " | 2s";
-    CreateOrUpdateLabel(g_ea.symbol_prefix + "dash_14", broker_info, 10, y_pos, clrYellow, 8);
+    // ===== ROW 11: BROKER INFO with ALL Leverage Types (Yellow) | HANG 11: THONG TIN SAN voi TAT CA Don bay (Vang)
+    // Use cached values from g_ea (calculated ONCE in OnInit) | Dung gia tri cache tu g_ea (tinh MOT LAN trong OnInit)
+    // Format: Exness | Demo | FX:500 CR:100 MT:500 IX:250 | Sp:2 2s
+    double current_spread = SymbolInfoInteger(_Symbol, SYMBOL_SPREAD) * SymbolInfoDouble(_Symbol, SYMBOL_POINT);
+    string spread_str = DoubleToString(current_spread / SymbolInfoDouble(_Symbol, SYMBOL_POINT), 0);
 
-    // Clean up old unused labels | Don dep nhan cu khong dung
-    ObjectDelete(g_ea.symbol_prefix + "dash_15");
-    ObjectDelete(g_ea.symbol_prefix + "dash_16");
+    string broker_info = g_ea.broker_name + " | " + g_ea.account_type + " | " + g_ea.all_leverages + " | Sp:" + spread_str + " 2s";
+    CreateOrUpdateLabel(g_ea.symbol_prefix + "dash_11", broker_info, 10, y_pos, clrYellow, 7);
+
+    // Clean up old unused labels (dash_12-dash_16) | Don dep nhan cu khong dung
+    for(int i = 12; i <= 16; i++) {
+        ObjectDelete(g_ea.symbol_prefix + "dash_" + IntegerToString(i));
+    }
 }
 
 // Create or update OBJ_LABEL | Tao hoac cap nhat OBJ_LABEL
@@ -2311,10 +2856,11 @@ void CreateOrUpdateLabel(string name, string text, int x, int y, color clr, int 
         ObjectSet(name, OBJPROP_XDISTANCE, x);
         ObjectSet(name, OBJPROP_YDISTANCE, y);
     }
-    ObjectSetText(name, text, font_size, "Courier New", clr);
+    ObjectSetText(name, text, font_size, "Segoe UI", clr);  // Changed to Segoe UI
 }
 
-// Timer event - main trading loop (1 second) | Su kien timer - vong lap giao dich chinh (1 giay) | OPTIMIZED V4.0: Split into 2 groups (EVEN/ODD) for better performance | TOI UU: Chia 2 nhom (CHAN/LE) de tang hieu suat
+// Timer event - main trading loop (1 second) | Su kien timer - vong lap giao dich chinh (1 giay)
+// OPTIMIZED V4.0: Split into 2 groups (EVEN/ODD) for better performance | TOI UU: Chia 2 nhom (CHAN/LE) de tang hieu suat
 // GROUP 1 (EVEN): Trading core - Read CSDL + Process signals | Nhom 1 (CHAN): Giao dich chinh - Doc CSDL + Xu ly tin hieu
 // GROUP 2 (ODD): Auxiliary - Stoploss + Dashboard + Health checks | Nhom 2 (LE): Phu tro - Cat lo + Bang dieu khien + Kiem tra suc khoe
 void OnTimer() {
@@ -2326,7 +2872,7 @@ void OnTimer() {
     g_ea.timer_last_run_time = current_time;
 
     //=============================================================================
-    // GROUP 1: EVEN SECONDS (0,2,4,6...) - TRADING CORE (HIGH PRIORITY) |NHOM 1: GIAY CHAN - GIAO DICH CHINH (UU TIEN CAO)
+    // GROUP 1: EVEN SECONDS (0,2,4,6...) - TRADING CORE (HIGH PRIORITY) | NHOM 1: GIAY CHAN - GIAO DICH CHINH (UU TIEN CAO)
     //=============================================================================
     // WHY EVEN: SPY Bot writes CSDL on ODD seconds ? EA reads on EVEN ? No file lock conflict | TAI SAO CHAN: SPY Bot ghi CSDL giay LE ? EA doc giay CHAN ? Khong xung dot file
     if(!UseEvenOddMode || (current_second % 2 == 0)) {
@@ -2337,8 +2883,9 @@ void OnTimer() {
         // STEP 2: Map data for all 7 TF | Anh xa du lieu cho 7 khung
         MapCSDLToEAVariables();
 
-        // STEP 3: Strategy processing loop for 7 TF | Vong lap xu ly chien luoc cho 7 khung | OPEN function respects TF/Strategy toggles | Ham mo tuan theo bat/tat TF/Chien luoc
+        // STEP 3: Strategy processing loop for 7 TF | Vong lap xu ly chien luoc cho 7 khung
         // IMPORTANT: CLOSE function runs on ALL 7 TF (no TF filter) | QUAN TRONG: Ham dong chay TAT CA 7 TF (khong loc TF)
+        // OPEN function respects TF/Strategy toggles | Ham mo tuan theo bat/tat TF/Chien luoc
         for(int tf = 0; tf < 7; tf++) {
             // STEP 3.1: FAST CLOSE by M1 (S1, S2, Bonus) | DONG NHANH theo M1 (S1, S2, Bonus)
             if(tf == 0 && HasValidS2BaseCondition(0)) {
@@ -2352,9 +2899,9 @@ void OnTimer() {
                 if(S1_CloseByM1 && S2_CloseByM1) {
                     CloseS3OrdersForTF(tf);
                 } else if(S1_CloseByM1) {
-                    for(int i = OrdersTotal() - 1; i >= 0; i--) {
+                    for(int i = PositionsTotal() - 1; i >= 0; i--) {
                         if(!OrderSelect(i, SELECT_BY_POS, MODE_TRADES)) continue;
-                        if(OrderSymbol() != Symbol()) continue;
+                        if(OrderSymbol() != _Symbol) continue;
                         int magic = OrderMagicNumber();
                         if(magic == g_ea.magic_numbers[tf][1] || magic == g_ea.magic_numbers[tf][2]) {
                             CloseOrderSafely(OrderTicket(), "SIGNAL_CHANGE");
@@ -2363,9 +2910,9 @@ void OnTimer() {
                     g_ea.position_flags[tf][1] = 0;
                     g_ea.position_flags[tf][2] = 0;
                 } else if(S2_CloseByM1) {
-                    for(int j = OrdersTotal() - 1; j >= 0; j--) {
+                    for(int j = PositionsTotal() - 1; j >= 0; j--) {
                         if(!OrderSelect(j, SELECT_BY_POS, MODE_TRADES)) continue;
-                        if(OrderSymbol() != Symbol()) continue;
+                        if(OrderSymbol() != _Symbol) continue;
                         int order_magic = OrderMagicNumber();
                         if(order_magic == g_ea.magic_numbers[tf][0] || order_magic == g_ea.magic_numbers[tf][2]) {
                             CloseOrderSafely(OrderTicket(), "SIGNAL_CHANGE");
@@ -2399,7 +2946,8 @@ void OnTimer() {
     //=============================================================================
     // GROUP 2: ODD SECONDS (1,3,5,7...) - AUXILIARY (SUPPORT) | NHOM 2: GIAY LE - PHU TRO (HO TRO)
     //=============================================================================
-    // WHY ODD: These functions don't need fresh CSDL data ? Run independently ? Reduce load on EVEN seconds | TAI SAO LE: Cac ham nay khong can CSDL moi ? Chay doc lap ? Giam tai cho giay CHAN
+    
+    // WHY ODD: These functions don't need fresh CSDL data ? Run independently ? Reduce load on EVEN seconds >> TAI SAO LE: Cac ham nay khong can CSDL moi ? Chay doc lap ? Giam tai cho giay CHAN
     // NOTE: Respects UseEvenOddMode - if disabled, runs every second | Tuan theo UseEvenOddMode - neu tat, chay moi giay
     if(!UseEvenOddMode || (current_second % 2 != 0)) {
 
@@ -2418,8 +2966,4 @@ void OnTimer() {
         // STEP 5: Health check at 8h/16h (M1 only) | Kiem tra suc khoe luc 8h/16h (chi M1)
         CheckSPYBotHealth();
     }
-<<<<<<< Updated upstream
 }
-=======
-}
->>>>>>> Stashed changes

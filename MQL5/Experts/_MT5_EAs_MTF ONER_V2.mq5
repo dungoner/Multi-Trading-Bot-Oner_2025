@@ -241,18 +241,35 @@ void InitMT5Trading() {
     if((filling & 2) == 2) {
         // Broker supports IOC - prefer this (most flexible)
         g_trade.SetTypeFilling(ORDER_FILLING_IOC);
+<<<<<<< Updated upstream
+=======
+        Print("[INIT] Fill Policy: IOC (Immediate or Cancel)");
+>>>>>>> Stashed changes
     }
     else if((filling & 1) == 1) {
         // Broker only supports FOK
         g_trade.SetTypeFilling(ORDER_FILLING_FOK);
+<<<<<<< Updated upstream
+=======
+        Print("[INIT] Fill Policy: FOK (Fill or Kill)");
+>>>>>>> Stashed changes
     }
     else {
         // Fallback to RETURN mode
         g_trade.SetTypeFilling(ORDER_FILLING_RETURN);
+<<<<<<< Updated upstream
+=======
+        Print("[INIT] Fill Policy: RETURN (Market Execution)");
+>>>>>>> Stashed changes
     }
 
     // Set slippage tolerance | Đặt độ trượt giá chấp nhận
     g_trade.SetDeviationInPoints(30);
+<<<<<<< Updated upstream
+=======
+
+    Print("[INIT] MT5 Trading initialized successfully | Khởi tạo MT5 Trading thành công");
+>>>>>>> Stashed changes
 }
 
 //=============================================================================

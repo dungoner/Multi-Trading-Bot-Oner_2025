@@ -83,6 +83,11 @@ class Config:
     # Options: "S2_FOLLOW_D1" (0), "S2_FORCE_BUY" (1), "S2_FORCE_SELL" (-1)
     S2_TrendMode: int = 0  # S2: Trend (D1 Auto/manual)
 
+    # B.2B S2 NEWS Filter (3) | Lọc tin tức cho S2 (optional, default OFF)
+    S2_UseNewsFilter: bool = False         # S2: Use NEWS filter (FALSE=OFF, TRUE=ON)
+    MinNewsLevelS2: int = 2                # S2: Min NEWS level (2-70, same as S1)
+    S2_RequireNewsDirection: bool = False  # S2: Match NEWS direction (signal==news!)
+
     # B.3 S3 NEWS Configuration (4) | Cấu hình tin tức
     MinNewsLevelS3: int = 20               # S3: Min NEWS level (2-70)
     EnableBonusNews: bool = True           # S3: Enable Bonus (extra on high NEWS)
@@ -113,6 +118,11 @@ class Config:
     # D.3 Display (2) | Hiển thị
     ShowDashboard: bool = True   # Show dashboard (console info)
     DebugMode: bool = False      # Debug mode (verbose logging)
+
+    # D.4 NY Session Hours Filter (3) | Lọc giờ phiên NY (chỉ S1/S2, không S3/Bonus)
+    EnableNYHoursFilter: bool = False  # Enable NY hours filter (only S1/S2, not S3/Bonus)
+    NYSessionStart: int = 14           # NY session start hour (Server time, ICMarket EU: 14=8AM NY)
+    NYSessionEnd: int = 21             # NY session end hour (Server time, ICMarket EU: 21=3PM NY)
 
     # ===== E. TRADELOCKER CREDENTIALS | THÔNG TIN ĐĂNG NHẬP =====
 
@@ -204,6 +214,9 @@ class Config:
             if 'strategy_s2' in data:
                 s2 = data['strategy_s2']
                 config.S2_TrendMode = s2.get('TrendMode', config.S2_TrendMode)
+                config.S2_UseNewsFilter = s2.get('UseNewsFilter', config.S2_UseNewsFilter)
+                config.MinNewsLevelS2 = s2.get('MinNewsLevel', config.MinNewsLevelS2)
+                config.S2_RequireNewsDirection = s2.get('RequireNewsDirection', config.S2_RequireNewsDirection)
 
             # Load S3 strategy settings
             if 'strategy_s3' in data:
@@ -234,6 +247,9 @@ class Config:
                 config.EnableHealthCheck = aux.get('EnableHealthCheck', config.EnableHealthCheck)
                 config.ShowDashboard = aux.get('ShowDashboard', config.ShowDashboard)
                 config.DebugMode = aux.get('DebugMode', config.DebugMode)
+                config.EnableNYHoursFilter = aux.get('EnableNYHoursFilter', config.EnableNYHoursFilter)
+                config.NYSessionStart = aux.get('NYSessionStart', config.NYSessionStart)
+                config.NYSessionEnd = aux.get('NYSessionEnd', config.NYSessionEnd)
 
             print(f"✅ Configuration loaded from: {json_path}")
 
@@ -302,7 +318,8 @@ class EASymbolData:
     # TradeLocker specific: ticket mapping (21 vars: 7×3)
     position_tickets: List[List[Optional[str]]] = field(default_factory=lambda: [[None]*3 for _ in range(7)])
 
-    # Global state vars (5 vars)
+    # Global state vars (6 vars) - Prevent multi-symbol conflicts
+    print_failed: List[List[bool]] = field(default_factory=lambda: [[False]*3 for _ in range(7)])  # Replaced global self.g_ea.print_failed
     first_run_completed: bool = False
     weekend_last_day: int = 0
     health_last_check_hour: int = -1
@@ -315,9 +332,6 @@ class EASymbolData:
 
 G_TF_NAMES = ["M1", "M5", "M15", "M30", "H1", "H4", "D1"]
 G_STRATEGY_NAMES = ["S1", "S2", "S3"]
-
-# Static flag to prevent spam print when order fails
-g_print_failed = [[False]*3 for _ in range(7)]  # [TF][Strategy]
 
 # ==============================================================================
 #  PART 4: LOGGING SETUP | THIẾT LẬP GHI NHẬN
@@ -383,6 +397,28 @@ class TradeLockerBot:
         elif signal == -1:
             return "SELL"
         return "NONE"
+
+    def IsWithinNYHours(self) -> bool:
+        """Check if current time is within NY session hours | Kiểm tra giờ hiện tại trong phiên NY
+
+        Returns:
+            bool: True if within hours OR filter disabled, False otherwise
+
+        Note: Only applies to S1/S2 strategies, not S3/Bonus (they have own NEWS logic)
+        """
+        if not self.config.EnableNYHoursFilter:
+            return True  # Filter disabled, allow all hours
+
+        current_hour = datetime.now().hour
+
+        # Simple case: Start < End (same day, e.g., 14:00-21:00)
+        if self.config.NYSessionStart < self.config.NYSessionEnd:
+            return (current_hour >= self.config.NYSessionStart and
+                   current_hour < self.config.NYSessionEnd)
+        # Complex case: Start > End (cross midnight, e.g., 22:00-06:00)
+        else:
+            return (current_hour >= self.config.NYSessionStart or
+                   current_hour < self.config.NYSessionEnd)
 
     # ==========================================================================
     #  PART 5B: TRADELOCKER API WRAPPERS (equivalent to MT5 wrappers)
@@ -1130,6 +1166,10 @@ class TradeLockerBot:
 
     def ProcessS1Strategy(self, tf: int):
         """Process S1 strategy | Xử lý chiến lược S1"""
+        # CHECK NY HOURS: Only S1 needs this (S3/Bonus have own NEWS logic)
+        if not self.IsWithinNYHours():
+            return
+
         if self.config.S1_UseNewsFilter:
             self.ProcessS1NewsFilterStrategy(tf)
         else:
@@ -1161,8 +1201,6 @@ class TradeLockerBot:
 
     def OpenS1Order(self, tf: int, signal: int, mode: str):
         """Open S1 order | Mở lệnh S1"""
-        global g_print_failed
-
         timestamp = self.g_ea.csdl_rows[tf].timestamp
         news_level = self.g_ea.news_level[tf]
         news_direction = self.g_ea.news_direction[tf]
@@ -1180,7 +1218,7 @@ class TradeLockerBot:
         if order_id:
             self.g_ea.position_flags[tf][0] = 1
             self.g_ea.position_tickets[tf][0] = order_id
-            g_print_failed[tf][0] = False
+            self.g_ea.print_failed[tf][0] = False
 
             log_msg = f">>> [OPEN] S1_{mode} TF={G_TF_NAMES[tf]} | #{order_id} {type_str} {self.g_ea.lot_sizes[tf][0]:.2f}"
 
@@ -1193,13 +1231,15 @@ class TradeLockerBot:
         else:
             self.g_ea.position_flags[tf][0] = 0
 
-            if not g_print_failed[tf][0]:
+            if not self.g_ea.print_failed[tf][0]:
                 self.logger.error(f"[S1_{mode}_{G_TF_NAMES[tf]}] Failed to create order")
-                g_print_failed[tf][0] = True
+                self.g_ea.print_failed[tf][0] = True
 
     def ProcessS2Strategy(self, tf: int):
         """Process S2 (Trend Following) strategy | Xử lý chiến lược S2"""
-        global g_print_failed
+        # CHECK NY HOURS: Only S2 needs this (S3/Bonus have own NEWS logic)
+        if not self.IsWithinNYHours():
+            return
 
         current_signal = self.g_ea.csdl_rows[tf].signal
         timestamp = self.g_ea.csdl_rows[tf].timestamp
@@ -1216,6 +1256,22 @@ class TradeLockerBot:
             self.DebugPrint(f"S2_TREND: Signal={current_signal} != Trend={trend_to_follow}, skip")
             return
 
+        # STEP 3: NEWS filter check (optional, only if S2_UseNewsFilter = true)
+        if self.config.S2_UseNewsFilter:
+            news_level = self.g_ea.news_level[tf]
+            news_direction = self.g_ea.news_direction[tf]
+
+            # Check 1: NEWS level >= MinNewsLevelS2
+            if news_level < self.config.MinNewsLevelS2:
+                self.DebugPrint(f"S2_NEWS: {G_TF_NAMES[tf]} NEWS={news_level} < Min={self.config.MinNewsLevelS2}, SKIP")
+                return
+
+            # Check 2: Signal = NEWS direction (if S2_RequireNewsDirection = true)
+            if self.config.S2_RequireNewsDirection:
+                if current_signal != news_direction:
+                    self.DebugPrint(f"S2_NEWS: {G_TF_NAMES[tf]} Signal={current_signal} != NewsDir={news_direction}, SKIP")
+                    return
+
         side = "buy" if current_signal == 1 else "sell"
         type_str = "BUY" if current_signal == 1 else "SELL"
 
@@ -1229,7 +1285,7 @@ class TradeLockerBot:
         if order_id:
             self.g_ea.position_flags[tf][1] = 1
             self.g_ea.position_tickets[tf][1] = order_id
-            g_print_failed[tf][1] = False
+            self.g_ea.print_failed[tf][1] = False
 
             trend_str = "UP" if trend_to_follow == 1 else "DOWN"
             mode_str = "AUTO" if self.config.S2_TrendMode == 0 else ("FBUY" if self.config.S2_TrendMode == 1 else "FSELL")
@@ -1240,14 +1296,12 @@ class TradeLockerBot:
         else:
             self.g_ea.position_flags[tf][1] = 0
 
-            if not g_print_failed[tf][1]:
+            if not self.g_ea.print_failed[tf][1]:
                 self.logger.error(f"[S2_{G_TF_NAMES[tf]}] Failed to create order")
-                g_print_failed[tf][1] = True
+                self.g_ea.print_failed[tf][1] = True
 
     def ProcessS3Strategy(self, tf: int):
         """Process S3 (News Alignment) strategy | Xử lý chiến lược S3"""
-        global g_print_failed
-
         news_level = self.g_ea.news_level[tf]
         news_direction = self.g_ea.news_direction[tf]
         current_signal = self.g_ea.csdl_rows[tf].signal
@@ -1274,7 +1328,7 @@ class TradeLockerBot:
         if order_id:
             self.g_ea.position_flags[tf][2] = 1
             self.g_ea.position_tickets[tf][2] = order_id
-            g_print_failed[tf][2] = False
+            self.g_ea.print_failed[tf][2] = False
 
             arrow = "↑" if news_direction > 0 else "↓"
             self.logger.info(f">>> [OPEN] S3_NEWS TF={G_TF_NAMES[tf]} | #{order_id} {type_str} "
@@ -1284,9 +1338,9 @@ class TradeLockerBot:
         else:
             self.g_ea.position_flags[tf][2] = 0
 
-            if not g_print_failed[tf][2]:
+            if not self.g_ea.print_failed[tf][2]:
                 self.logger.error(f"[S3_{G_TF_NAMES[tf]}] Failed to create order")
-                g_print_failed[tf][2] = True
+                self.g_ea.print_failed[tf][2] = True
 
     def ProcessBonusNews(self):
         """

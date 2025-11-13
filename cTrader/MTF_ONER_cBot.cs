@@ -128,7 +128,8 @@ namespace cAlgo.Robots
             // Position flags [TF][Strategy]: track if position exists
             public int[,] PositionFlags { get; set; }
 
-            // Global state vars
+            // Global state vars (6 vars) - Prevent multi-symbol conflicts
+            public bool[,] PrintFailed { get; set; }  // Replaced static _eaData.PrintFailed
             public bool FirstRunCompleted { get; set; }
             public int WeekendLastDay { get; set; }
             public int HealthLastCheckHour { get; set; }
@@ -161,6 +162,7 @@ namespace cAlgo.Robots
 
                 Layer1Thresholds = new double[7, 3];
                 PositionFlags = new int[7, 3];
+                PrintFailed = new bool[7, 3];  // Initialize print failed flags
 
                 FirstRunCompleted = false;
                 WeekendLastDay = 0;
@@ -245,6 +247,15 @@ namespace cAlgo.Robots
         [Parameter("S2_TrendMode", DefaultValue = S2TrendMode.FOLLOW_D1, Group = "B. STRATEGY CONFIG")]
         public S2TrendMode S2_TrendMode { get; set; }
 
+        [Parameter("S2_UseNewsFilter", DefaultValue = false, Group = "B. STRATEGY CONFIG")]
+        public bool S2_UseNewsFilter { get; set; }
+
+        [Parameter("MinNewsLevelS2", DefaultValue = 2, MinValue = 2, MaxValue = 70, Group = "B. STRATEGY CONFIG")]
+        public int MinNewsLevelS2 { get; set; }
+
+        [Parameter("S2_RequireNewsDirection", DefaultValue = false, Group = "B. STRATEGY CONFIG")]
+        public bool S2_RequireNewsDirection { get; set; }
+
         [Parameter("MinNewsLevelS3", DefaultValue = 20, MinValue = 2, MaxValue = 70, Group = "B. STRATEGY CONFIG")]
         public int MinNewsLevelS3 { get; set; }
 
@@ -291,6 +302,15 @@ namespace cAlgo.Robots
         [Parameter("DebugMode", DefaultValue = false, Group = "D. AUXILIARY")]
         public bool DebugMode { get; set; }
 
+        [Parameter("EnableNYHoursFilter", DefaultValue = false, Group = "D. AUXILIARY")]
+        public bool EnableNYHoursFilter { get; set; }
+
+        [Parameter("NYSessionStart", DefaultValue = 14, MinValue = 0, MaxValue = 23, Group = "D. AUXILIARY")]
+        public int NYSessionStart { get; set; }
+
+        [Parameter("NYSessionEnd", DefaultValue = 21, MinValue = 0, MaxValue = 23, Group = "D. AUXILIARY")]
+        public int NYSessionEnd { get; set; }
+
         #endregion
 
         #region ========== CONSTANTS ==========
@@ -310,9 +330,6 @@ namespace cAlgo.Robots
 
         // HTTP client for API calls (reusable)
         private HttpClient _httpClient;
-
-        // Static flag to prevent spam print when order fails [TF][Strategy]
-        private static bool[,] _printFailed = new bool[7, 3];
 
         #endregion
 
@@ -875,6 +892,30 @@ namespace cAlgo.Robots
         }
 
         /// <summary>
+        /// Check if current time is within NY session hours
+        /// Returns true if within hours OR filter disabled
+        /// Only applies to S1/S2 strategies, not S3/Bonus (they have own NEWS logic)
+        /// </summary>
+        private bool IsWithinNYHours()
+        {
+            if (!EnableNYHoursFilter)
+                return true;  // Filter disabled, allow all hours
+
+            int current_hour = Server.Time.Hour;
+
+            // Simple case: Start < End (same day, e.g., 14:00-21:00)
+            if (NYSessionStart < NYSessionEnd)
+            {
+                return (current_hour >= NYSessionStart && current_hour < NYSessionEnd);
+            }
+            // Complex case: Start > End (cross midnight, e.g., 22:00-06:00)
+            else
+            {
+                return (current_hour >= NYSessionStart || current_hour < NYSessionEnd);
+            }
+        }
+
+        /// <summary>
         /// Debug print (only if DebugMode enabled)
         /// </summary>
         private void DebugPrint(string message)
@@ -1292,7 +1333,7 @@ namespace cAlgo.Robots
             if (result != null && result.IsSuccessful)
             {
                 _eaData.PositionFlags[tf, 0] = 1;
-                _printFailed[tf, 0] = false;  // Reset error flag on success
+                _eaData.PrintFailed[tf, 0] = false;  // Reset error flag on success
 
                 string log_msg = $">>> [OPEN] S1_{mode} TF={TF_NAMES[tf]} | #{result.Position.Id} {type_str} {Symbol.VolumeInUnitsToQuantity(volume):F2} @{price} | Sig={signal}";
 
@@ -1312,10 +1353,10 @@ namespace cAlgo.Robots
                 _eaData.PositionFlags[tf, 0] = 0;
 
                 // Print error ONLY ONCE until success
-                if (!_printFailed[tf, 0])
+                if (!_eaData.PrintFailed[tf, 0])
                 {
                     Print($"[S1_{mode}_{TF_NAMES[tf]}] Failed");
-                    _printFailed[tf, 0] = true;
+                    _eaData.PrintFailed[tf, 0] = true;
                 }
             }
         }
@@ -1370,6 +1411,10 @@ namespace cAlgo.Robots
         /// </summary>
         private void ProcessS1Strategy(int tf)
         {
+            // CHECK NY HOURS: Only S1 needs this (S3/Bonus have own NEWS logic)
+            if (!IsWithinNYHours())
+                return;
+
             if (S1_UseNewsFilter)
             {
                 ProcessS1NewsFilterStrategy(tf);
@@ -1386,6 +1431,10 @@ namespace cAlgo.Robots
         /// </summary>
         private void ProcessS2Strategy(int tf)
         {
+            // CHECK NY HOURS: Only S2 needs this (S3/Bonus have own NEWS logic)
+            if (!IsWithinNYHours())
+                return;
+
             int current_signal = _eaData.CSDLRows[tf].Signal;
             long timestamp = _eaData.CSDLRows[tf].Timestamp;
 
@@ -1412,6 +1461,30 @@ namespace cAlgo.Robots
                 return;
             }
 
+            // STEP 3: NEWS filter check (optional, only if S2_UseNewsFilter = true)
+            if (S2_UseNewsFilter)
+            {
+                int news_level = _eaData.NewsLevel[tf];
+                int news_direction = _eaData.NewsDirection[tf];
+
+                // Check 1: NEWS level >= MinNewsLevelS2
+                if (news_level < MinNewsLevelS2)
+                {
+                    DebugPrint($"S2_NEWS: {TF_NAMES[tf]} NEWS={news_level} < Min={MinNewsLevelS2}, SKIP");
+                    return;
+                }
+
+                // Check 2: Signal = NEWS direction (if S2_RequireNewsDirection = true)
+                if (S2_RequireNewsDirection)
+                {
+                    if (current_signal != news_direction)
+                    {
+                        DebugPrint($"S2_NEWS: {TF_NAMES[tf]} Signal={current_signal} != NewsDir={news_direction}, SKIP");
+                        return;
+                    }
+                }
+            }
+
             string label = _eaData.Labels[tf, 1];  // S2 label
             double volume = _eaData.LotSizes[tf, 1];
             TradeType tradeType = (current_signal == 1) ? TradeType.Buy : TradeType.Sell;
@@ -1422,7 +1495,7 @@ namespace cAlgo.Robots
             if (result != null && result.IsSuccessful)
             {
                 _eaData.PositionFlags[tf, 1] = 1;
-                _printFailed[tf, 1] = false;  // Reset error flag on success
+                _eaData.PrintFailed[tf, 1] = false;  // Reset error flag on success
                 string trend_str = trend_to_follow == 1 ? "UP" : "DOWN";
                 string mode_str = (S2_TrendMode == S2TrendMode.FOLLOW_D1) ? "AUTO" :
                                   (S2_TrendMode == S2TrendMode.FORCE_BUY) ? "FBUY" : "FSELL";
@@ -1435,10 +1508,10 @@ namespace cAlgo.Robots
                 _eaData.PositionFlags[tf, 1] = 0;
 
                 // Print error ONLY ONCE until success
-                if (!_printFailed[tf, 1])
+                if (!_eaData.PrintFailed[tf, 1])
                 {
                     Print($"[S2_{TF_NAMES[tf]}] Failed");
-                    _printFailed[tf, 1] = true;
+                    _eaData.PrintFailed[tf, 1] = true;
                 }
             }
         }
@@ -1477,7 +1550,7 @@ namespace cAlgo.Robots
             if (result != null && result.IsSuccessful)
             {
                 _eaData.PositionFlags[tf, 2] = 1;
-                _printFailed[tf, 2] = false;  // Reset error flag on success
+                _eaData.PrintFailed[tf, 2] = false;  // Reset error flag on success
                 string arrow = (news_direction > 0) ? "↑" : "↓";
                 string type_str = (current_signal == 1) ? "BUY" : "SELL";
 
@@ -1488,10 +1561,10 @@ namespace cAlgo.Robots
                 _eaData.PositionFlags[tf, 2] = 0;
 
                 // Print error ONLY ONCE until success
-                if (!_printFailed[tf, 2])
+                if (!_eaData.PrintFailed[tf, 2])
                 {
                     Print($"[S3_{TF_NAMES[tf]}] Failed");
-                    _printFailed[tf, 2] = true;
+                    _eaData.PrintFailed[tf, 2] = true;
                 }
             }
         }
