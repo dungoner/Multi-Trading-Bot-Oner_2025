@@ -1,8 +1,8 @@
 //+------------------------------------------------------------------+
-//| MT4_EAs_M7TF ONER_v2: Multi Timeframe Expert Advisor for MT4 | EA nhieu khung thoi gian cho MT4
+//| MT4_Eas_Mtf NEWS_v3: Multi Timeframe Expert Advisor for MT4 | EA nhieu khung thoi gian cho MT4
 //| 7 TF × 3 Strategies = 21 orders | 7 khung x 3 chien luoc = 21 lenh | Version: API_V2 (MT4) - Added HTTP API support | Phien ban: API_V2 - Them ho tro HTTP API
 //+------------------------------------------------------------------+
-#property copyright "MT4_EAs_M7TF ONER_v2"
+#property copyright "MT4_Eas_Mtf NEWS_v3"
 #property strict
 
 //=============================================================================
@@ -12,25 +12,25 @@
 input string ___Menu_A___ = "___A. CORE SETTINGS __________";  //
 
 //--- A.1 Timeframe toggles (7) | Bat/tat khung thoi gian
-input bool TF_M1 = false;  // M1 Signal(1,-1) vs Timestamp(Mt4server)
+input bool TF_M1 = true;  // M1 Signal(1,-1) vs Timestamp(Mt4server)
 input bool TF_M5 = true;   // M5 (Buy/Sell Symbol_M5)
 input bool TF_M15 = true;  // M15 (Signal Symbol_M15)
 input bool TF_M30 = true;  // M30 (Buy/Sell Symbol_M30)
 input bool TF_H1 = true;   // H1 (Signal Symbol_H1)
 input bool TF_H4 = true;   // H4 (Buy/Sell Symbol_H4)
-input bool TF_D1 = false;  // D1 (Signal Symbol_D1)
+input bool TF_D1 = true;  // D1 (Signal Symbol_D1)
 
 //--- A.2 Strategy toggles (3) | Bat/tat chien luoc
 input bool S1_HOME = true;   // S1: Binary (Home_7TF > B1:S1_NewsFilter=false)
-input bool S2_TREND = true;  // S2: Trend (Follow D1)
+input bool S2_TREND = false;  // S2: Trend (Follow D1)
 input bool S3_NEWS = true;   // S3: News (High compact)
 //--- A.3 Close Mode Configuration (2) | Che do dong lenh
-input bool S1_CloseByM1 = true;   // S1: Close by M1 (TRUE=fast M1, FALSE=own TF)
+input bool S1_CloseByM1 = false;   // S1: Close by M1 (TRUE=fast M1, FALSE=own TF)
 input bool S2_CloseByM1 = false;   // S2: Close by M1 (TRUE=fast M1, FALSE=own TF)
 
 //--- A.4 Risk management (2) | Quan ly rui ro
 input double FixedLotSize = 0.1;          // Lot size (0.01-1.0 recommended)
-input double MaxLoss_Fallback = -1000.0;   // Maxloss fallback ($USD if CSDL fails)
+input double MaxLoss_Fallback = -1000.0;  // Maxloss fallback ($USD if CSDL fails)
 
 //--- A.5 Data source (1) | Nguon du lieu
 enum CSDL_SOURCE_ENUM {
@@ -43,9 +43,9 @@ input CSDL_SOURCE_ENUM CSDL_Source = FOLDER_2;  // CSDL folder (signal source)
 
 //--- A.6 HTTP API settings (only used if CSDL_Source = HTTP_API) | Cau hinh HTTP API >> IMPORTANT: MT4 must allow URL in Tools->Options->Expert Advisors | QUAN TRONG: MT4 phai cho phep URL
 // NOTE: MT4 WebRequest automatically uses port 80 for http:// | LUU Y: MT4 WebRequest tu dong dung port 80 >> DuckDNS domain for easy IP update IP at duckdns.org only
-input string HTTP_Server_IP = "dungalading.duckdns.org";  // HTTP Server domain/IP (Bot Python VPS)
+input string HTTP_Server_IP = "dungalading.duckdns.org";  // HTTP API (Bot Sync VPS)
 input string HTTP_API_Key = "";            // API Key (empty = no auth | de trong)
-input bool EnableSymbolNormal = false;     // symbol name (LTCUSDc.xyz -> FALSE = LTCUSD use_exact_name)
+input bool EnableSymbolNormal = false;     // Symbol_name (LTCUSDc.xyz ->FALSE =LTCUSD use_exact_name)
 
 input string ___Sep_B___ = "___B. STRATEGY CONFIG ________";  //
 
@@ -62,12 +62,17 @@ enum S2_TREND_MODE {
 };
 input S2_TREND_MODE S2_TrendMode = S2_FOLLOW_D1;  // S2: Trend (D1 auto/manual)
 
+//--- B.2B S2 NEWS Filter (3) | Loc tin tuc cho S2 (optional, default OFF)
+input bool S2_UseNewsFilter = false;        // S2: Use NEWS filter (FALSE=OFF, TRUE=ON)
+input int MinNewsLevelS2 = 2;                // S2: Min NEWS level (2-70, same as S1)
+input bool S2_RequireNewsDirection = false;  // S2: Match NEWS direction (signal==news!)
+
 //--- B.3 S3 NEWS Configuration (4) | Cau hinh tin tuc
-input int MinNewsLevelS3 = 2;         // S3: Min NEWS level (2-70)
+input int MinNewsLevelS3 = 2;          // S3: Min NEWS level (2-70)
 input bool EnableBonusNews = true;     // S3: Enable Bonus (extra on high NEWS)
-input int BonusOrderCount = 1;         // S3: Bonus count (1-5 orders)
+input int BonusOrderCount = 2;         // S3: Bonus count (1-5 orders)
 input int MinNewsLevelBonus = 2;       // S3: Min NEWS for Bonus (threshold)
-input double BonusLotMultiplier = 1.2; // S3: Bonus lot multiplier (1.0-10.0)
+input double BonusLotMultiplier = 1.2; // S3: Bonus lot multiplier (= S3_lot×1.2)
 
 input string ___Sep_C___ = "___C. RISK PROTECTION _________";  //
 
@@ -78,11 +83,15 @@ enum STOPLOSS_MODE {
     LAYER2_MARGIN = 2    // Layer2: margin/divisor (emergency)
 };
 input STOPLOSS_MODE StoplossMode = LAYER1_MAXLOSS;  // Stoploss mode (0=OFF, 1=CSDL, 2=Margin)
-input double Layer2_Divisor = 5.0;  // Layer2 divisor (margin/-5 = threshold)
+input double Layer2_Divisor = 5.0;       // Layer2 divisor (margin/-5 = threshold)
 
 //--- C.2 Take profit (2) | Chot loi
+<<<<<<< HEAD
 input bool   UseTakeProfit = false;  // Enable take profit (FALSE=OFF, TRUE=ON)
 <<<<<<< Updated upstream
+=======
+input bool   UseTakeProfit = false;      // Enable take profit (FALSE=OFF, TRUE=ON)
+>>>>>>> 4bd130fb37bc308f96938909b7d792462711591f
 input double TakeProfit_Multiplier = 5;  // TP_Multi (Col_mloss x a_lot x b_Multi >> vd=1000 ×0.21 ×5 =1050 USD)
 =======
 input double TakeProfit_Multiplier = 3;  // TP_Multi (Col_mloss x a_lot x b_Muti)
@@ -94,12 +103,17 @@ input string ___Sep_D___ = "___D. AUXILIARY SETTINGS ______";  //
 input bool UseEvenOddMode = true;  // Even/odd split mode (load balancing)
 
 //--- D.2 Health check & reset (2) | Kiem tra suc khoe
-input bool EnableWeekendReset = false;  // Weekend reset (auto close Friday 23:50)
-input bool EnableHealthCheck = true;    // Health check (8h/16h SPY bot status)
+input bool EnableWeekendReset = false;  // Auto close Saturday 00:03 (M5→M15→M30→H1→H4→D1→M1)
+input bool EnableHealthCheck = true;    // Health check (8h/16h SPY bot status reset auto)
 
 //--- D.3 Display (2) | Hien thi
 input bool ShowDashboard = true;  // Show dashboard (on-chart info)
 input bool DebugMode = false;      // Debug mode (verbose logging)
+
+//--- D.4 NY Session Hours Filter (3) | Loc gio phien NY (chi S1/S2, khong S3/Bonus)
+input bool EnableNYHoursFilter = false;  // Enable NY hours filter (only S1/S2, not S3/Bonus)
+input int NYSessionStart = 14;           // NY session start hour (Server time, ICMarket EU: 14=8AM NY)
+input int NYSessionEnd = 21;             // NY session end hour (Server time, ICMarket EU: 21=3PM NY)
 
 //=============================================================================
 //  PART 2: DATA STRUCTURES (1 struct) | CAU TRUC DU LIEU
@@ -155,12 +169,14 @@ struct EASymbolData {
     // Position flags (21 vars) | Co trang thai lenh
     int position_flags[7][3];    // [TF][Strategy]: [0]=S1, [1]=S2, [2]=S3
 
-    // Global state vars (5 vars) - Prevent multi-symbol conflicts | Bien trang thai - Tranh xung dot da symbol
+    // Global state vars (7 vars) - Prevent multi-symbol conflicts | Bien trang thai - Tranh xung dot da symbol
     bool first_run_completed;      // Replaced g_first_run_completed | Thay the g_first_run_completed
     int weekend_last_day;           // Replaced static last_day | Thay the last_day tinh
     int health_last_check_hour;     // Replaced static last_check_hour | Thay the last_check_hour tinh
     datetime timer_last_run_time;   // Replaced static last_run_time | Thay the last_run_time tinh
     string init_summary;            // Init summary for final print in RESTORE | Tom tat khoi dong de in cuoi cung trong RESTORE
+    bool print_failed[7][3];        // Replaced static g_print_failed - Print error flags per TF/Strategy | Co loi in theo TF/Chien luoc
+    datetime last_news_debug;       // Replaced static last_news_debug - Dashboard NEWS debug timestamp | Timestamp debug NEWS dashboard
 };
 
 // Single global instance for current chart | Instance toan cuc duy nhat cho chart hien tai
@@ -1220,7 +1236,7 @@ void CloseS3OrdersForTF(int tf) {
 }
 
 //=============================================================================
-//  PART 13: BASE CONDITION CHECK (1 function) | KIEM TRA DIEU KIEN GOC
+//  PART 13: BASE CONDITION CHECK (2 functions) | KIEM TRA DIEU KIEN GOC
 //=============================================================================
 
 // Check if signal changed and new signal valid | Kiem tra tin hieu co thay doi va tin hieu moi hop le
@@ -1237,12 +1253,30 @@ bool HasValidS2BaseCondition(int tf) {
             (timestamp_new - timestamp_old) > 15);
 }
 
+// Check if current time is within NY session hours | Kiem tra gio hien tai co trong phien NY
+// IMPORTANT: Only affects S1/S2 OPENING orders, NOT S3/Bonus (NEWS has own logic) | Chi anh huong MO lenh S1/S2
+// IMPORTANT: Does NOT affect CLOSING orders (close anytime by signal/SL/TP) | KHONG anh huong DONG lenh
+bool IsWithinNYHours() {
+    // If disabled, always return true (no filter) | Neu tat, luon tra ve true
+    if(!EnableNYHoursFilter) return true;
+
+    int current_hour = TimeHour(TimeCurrent());
+
+    // Simple case: Start < End (same day) | TH don gian: trong cung ngay
+    // Example: 14:00 - 21:00 (ICMarket EU default)
+    if(NYSessionStart < NYSessionEnd) {
+        return (current_hour >= NYSessionStart && current_hour < NYSessionEnd);
+    }
+    // Complex case: Start > End (cross midnight) | TH phuc tap: qua dem
+    // Example: 20:00 - 03:00 (next day)
+    else {
+        return (current_hour >= NYSessionStart || current_hour < NYSessionEnd);
+    }
+}
+
 //=============================================================================
 //  PART 14: STRATEGY PROCESSING (4 functions) | XU LY CHIEN LUOC
 //=============================================================================
-
-// Static flag to prevent spam print when order fails | Co tinh de tranh spam print khi lenh that bai
-static bool g_print_failed[7][3] = {{false}};  // [TF][Strategy]: Track if already printed error
 
 // S1 Core: Open order (DRY - shared logic for BASIC and NEWS strategies)
 void OpenS1Order(int tf, int signal, string mode) {
@@ -1264,7 +1298,7 @@ void OpenS1Order(int tf, int signal, string mode) {
 
     if(ticket > 0) {
         g_ea.position_flags[tf][0] = 1;
-        g_print_failed[tf][0] = false;  // Reset error flag on success | Dat lai co loi khi thanh cong
+        g_ea.print_failed[tf][0] = false;  // Reset error flag on success | Dat lai co loi khi thanh cong
 
         string log_msg = ">>> [OPEN] S1_" + mode + " TF=" + G_TF_NAMES[tf] +
                          " | #" + IntegerToString(ticket) + " " + type_str + " " +
@@ -1284,9 +1318,9 @@ void OpenS1Order(int tf, int signal, string mode) {
         g_ea.position_flags[tf][0] = 0;
 
         // Print error ONLY ONCE until success | Chi in loi 1 LAN cho den khi thanh cong
-        if(!g_print_failed[tf][0]) {
+        if(!g_ea.print_failed[tf][0]) {
             Print("[S1_", mode, "_", G_TF_NAMES[tf], "] Failed: ", GetLastError());
-            g_print_failed[tf][0] = true;
+            g_ea.print_failed[tf][0] = true;
         }
     }
 }
@@ -1331,6 +1365,9 @@ void ProcessS1NewsFilterStrategy(int tf) {
 
 // S1 Strategy Router: Call appropriate function based on filter setting | Bo dinh tuyen S1: Goi ham tuong ung theo cai dat
 void ProcessS1Strategy(int tf) {
+    // CHECK NY HOURS: Only S1 needs this (S3/Bonus have own NEWS logic) | Chi S1 can kiem tra gio NY
+    if(!IsWithinNYHours()) return;
+
     if(S1_UseNewsFilter) {
         ProcessS1NewsFilterStrategy(tf);
     } else {
@@ -1339,12 +1376,15 @@ void ProcessS1Strategy(int tf) {
 }
 
 // Process S2 (Trend Following) strategy for TF | Xu ly chien luoc S2 (Theo xu huong) >> OPTIMIZED: Uses single g_trend_d1 + pre-calculated lot + reads signal from CSDL | TOI UU: Dung g_trend_d1 don + lot da tinh + doc tin hieu tu CSDL
-// ENHANCED: Support 3 modes (auto D1 / force BUY / force SELL) | CAI TIEN: Ho tro 3 che do (tu dong D1 / chi BUY / chi SELL)
+// ENHANCED: Support 3 modes (auto D1 / force BUY / force SELL) + NEWS filter (optional) | CAI TIEN: Ho tro 3 che do + loc tin tuc (tuy chon)
 void ProcessS2Strategy(int tf) {
+    // CHECK NY HOURS: Only S2 needs this (S3/Bonus have own NEWS logic) | Chi S2 can kiem tra gio NY
+    if(!IsWithinNYHours()) return;
+
     int current_signal = g_ea.csdl_rows[tf].signal;
     datetime timestamp = (datetime)g_ea.csdl_rows[tf].timestamp;
 
-    // NEW: Determine trend based on mode | Xac dinh xu huong theo che do
+    // STEP 1: Determine trend based on mode | Xac dinh xu huong theo che do
     int trend_to_follow = 0;
 
     if(S2_TrendMode == S2_FOLLOW_D1) {
@@ -1357,11 +1397,33 @@ void ProcessS2Strategy(int tf) {
         trend_to_follow = -1;  // Force SELL only | Chi danh SELL
     }
 
-    // Check signal matches trend | Kiem tra tin hieu khop voi xu huong
+    // STEP 2: Check signal matches trend | Kiem tra tin hieu khop voi xu huong
     if(current_signal != trend_to_follow) {
         DebugPrint("S2_TREND: Signal=" + IntegerToString(current_signal) +
                    " != Trend=" + IntegerToString(trend_to_follow) + ", skip");
         return;
+    }
+
+    // STEP 3: NEWS filter check (optional, only if S2_UseNewsFilter = true) | Kiem tra loc tin tuc (tuy chon)
+    if(S2_UseNewsFilter) {
+        int news_level = g_ea.news_level[tf];           // |NEWS| absolute value
+        int news_direction = g_ea.news_direction[tf];   // NEWS sign (+1/-1/0)
+
+        // Check 1: NEWS level >= MinNewsLevelS2
+        if(news_level < MinNewsLevelS2) {
+            DebugPrint("S2_NEWS: " + G_TF_NAMES[tf] + " NEWS=" + IntegerToString(news_level) +
+                       " < Min=" + IntegerToString(MinNewsLevelS2) + ", SKIP");
+            return;
+        }
+
+        // Check 2: Signal = NEWS direction (if S2_RequireNewsDirection = true)
+        if(S2_RequireNewsDirection) {
+            if(current_signal != news_direction) {
+                DebugPrint("S2_NEWS: " + G_TF_NAMES[tf] + " Signal=" + IntegerToString(current_signal) +
+                           " != NewsDir=" + IntegerToString(news_direction) + ", SKIP");
+                return;
+            }
+        }
     }
 
     RefreshRates();
@@ -1374,19 +1436,24 @@ void ProcessS2Strategy(int tf) {
                                    "S2_" + G_TF_NAMES[tf], g_ea.magic_numbers[tf][1]);
         if(ticket > 0) {
             g_ea.position_flags[tf][1] = 1;
-            g_print_failed[tf][1] = false;  // Reset error flag on success | Dat lai co loi khi thanh cong
+            g_ea.print_failed[tf][1] = false;
             string trend_str = trend_to_follow == 1 ? "UP" : "DOWN";
             string mode_str = (S2_TrendMode == 0) ? "AUTO" : (S2_TrendMode == 1) ? "FBUY" : "FSELL";
-            Print(">>> [OPEN] S2_TREND TF=", G_TF_NAMES[tf], " | #", ticket, " BUY ",
-                  DoubleToStr(g_ea.lot_sizes[tf][1], 2), " @", DoubleToStr(Ask, Digits),
-                  " | Sig=+1 Trend:", trend_str, " Mode:", mode_str, " | Timestamp:", IntegerToString(timestamp), " <<<");
+            string log_msg = ">>> [OPEN] S2_TREND TF=" + G_TF_NAMES[tf] + " | #" + IntegerToString(ticket) +
+                            " BUY " + DoubleToStr(g_ea.lot_sizes[tf][1], 2) + " @" + DoubleToStr(Ask, Digits) +
+                            " | Sig=+1 Trend:" + trend_str + " Mode:" + mode_str;
+            if(S2_UseNewsFilter) {
+                string arrow = (g_ea.news_direction[tf] > 0) ? "↑" : "↓";
+                log_msg += " News=" + (g_ea.news_direction[tf] > 0 ? "+" : "") +
+                          IntegerToString(g_ea.news_level[tf]) + arrow;
+            }
+            log_msg += " | Timestamp:" + IntegerToString(timestamp) + " <<<";
+            Print(log_msg);
         } else {
             g_ea.position_flags[tf][1] = 0;
-
-            // Print error ONLY ONCE until success | Chi in loi 1 LAN cho den khi thanh cong
-            if(!g_print_failed[tf][1]) {
+            if(!g_ea.print_failed[tf][1]) {
                 Print("[S2_", G_TF_NAMES[tf], "] Failed: ", GetLastError());
-                g_print_failed[tf][1] = true;
+                g_ea.print_failed[tf][1] = true;
             }
         }
     }
@@ -1396,19 +1463,24 @@ void ProcessS2Strategy(int tf) {
                                    "S2_" + G_TF_NAMES[tf], g_ea.magic_numbers[tf][1]);
         if(ticket > 0) {
             g_ea.position_flags[tf][1] = 1;
-            g_print_failed[tf][1] = false;  // Reset error flag on success | Dat lai co loi khi thanh cong
+            g_ea.print_failed[tf][1] = false;
             string trend_str = trend_to_follow == -1 ? "DOWN" : "UP";
             string mode_str = (S2_TrendMode == 0) ? "AUTO" : (S2_TrendMode == 1) ? "FBUY" : "FSELL";
-            Print(">>> [OPEN] S2_TREND TF=", G_TF_NAMES[tf], " | #", ticket, " SELL ",
-                  DoubleToStr(g_ea.lot_sizes[tf][1], 2), " @", DoubleToStr(Bid, Digits),
-                  " | Sig=-1 Trend:", trend_str, " Mode:", mode_str, " | Timestamp:", IntegerToString(timestamp), " <<<");
+            string log_msg = ">>> [OPEN] S2_TREND TF=" + G_TF_NAMES[tf] + " | #" + IntegerToString(ticket) +
+                            " SELL " + DoubleToStr(g_ea.lot_sizes[tf][1], 2) + " @" + DoubleToStr(Bid, Digits) +
+                            " | Sig=-1 Trend:" + trend_str + " Mode:" + mode_str;
+            if(S2_UseNewsFilter) {
+                string arrow = (g_ea.news_direction[tf] > 0) ? "↑" : "↓";
+                log_msg += " News=" + (g_ea.news_direction[tf] > 0 ? "+" : "") +
+                          IntegerToString(g_ea.news_level[tf]) + arrow;
+            }
+            log_msg += " | Timestamp:" + IntegerToString(timestamp) + " <<<";
+            Print(log_msg);
         } else {
             g_ea.position_flags[tf][1] = 0;
-
-            // Print error ONLY ONCE until success | Chi in loi 1 LAN cho den khi thanh cong
-            if(!g_print_failed[tf][1]) {
+            if(!g_ea.print_failed[tf][1]) {
                 Print("[S2_", G_TF_NAMES[tf], "] Failed: ", GetLastError());
-                g_print_failed[tf][1] = true;
+                g_ea.print_failed[tf][1] = true;
             }
         }
     }
@@ -1446,7 +1518,7 @@ void ProcessS3Strategy(int tf) {
                                    "S3_" + G_TF_NAMES[tf], g_ea.magic_numbers[tf][2]);
         if(ticket > 0) {
             g_ea.position_flags[tf][2] = 1;
-            g_print_failed[tf][2] = false;  // Reset error flag on success | Dat lai co loi khi thanh cong
+            g_ea.print_failed[tf][2] = false;  // Reset error flag on success | Dat lai co loi khi thanh cong
             string arrow = (news_direction > 0) ? "↑" : "↓";
             Print(">>> [OPEN] S3_NEWS TF=", G_TF_NAMES[tf], " | #", ticket, " BUY ",
                   DoubleToStr(g_ea.lot_sizes[tf][2], 2), " @", DoubleToStr(Ask, Digits),
@@ -1456,9 +1528,9 @@ void ProcessS3Strategy(int tf) {
             g_ea.position_flags[tf][2] = 0;
 
             // Print error ONLY ONCE until success | Chi in loi 1 LAN cho den khi thanh cong
-            if(!g_print_failed[tf][2]) {
+            if(!g_ea.print_failed[tf][2]) {
                 Print("[S3_", G_TF_NAMES[tf], "] Failed: ", GetLastError());
-                g_print_failed[tf][2] = true;
+                g_ea.print_failed[tf][2] = true;
             }
         }
     }
@@ -1468,7 +1540,7 @@ void ProcessS3Strategy(int tf) {
                                    "S3_" + G_TF_NAMES[tf], g_ea.magic_numbers[tf][2]);
         if(ticket > 0) {
             g_ea.position_flags[tf][2] = 1;
-            g_print_failed[tf][2] = false;  // Reset error flag on success | Dat lai co loi khi thanh cong
+            g_ea.print_failed[tf][2] = false;  // Reset error flag on success | Dat lai co loi khi thanh cong
             string arrow = (news_direction > 0) ? "↑" : "↓";
             Print(">>> [OPEN] S3_NEWS TF=", G_TF_NAMES[tf], " | #", ticket, " SELL ",
                   DoubleToStr(g_ea.lot_sizes[tf][2], 2), " @", DoubleToStr(Bid, Digits),
@@ -1478,9 +1550,9 @@ void ProcessS3Strategy(int tf) {
             g_ea.position_flags[tf][2] = 0;
 
             // Print error ONLY ONCE until success | Chi in loi 1 LAN cho den khi thanh cong
-            if(!g_print_failed[tf][2]) {
+            if(!g_ea.print_failed[tf][2]) {
                 Print("[S3_", G_TF_NAMES[tf], "] Failed: ", GetLastError());
-                g_print_failed[tf][2] = true;
+                g_ea.print_failed[tf][2] = true;
             }
         }
     }
@@ -1846,6 +1918,7 @@ int OnInit() {
     for(int tf = 0; tf < 7; tf++) {
         for(int s = 0; s < 3; s++) {
             g_ea.position_flags[tf][s] = 0;
+            g_ea.print_failed[tf][s] = false;  // Reset print error flags (prevent multi-symbol conflicts)
         }
     }
 
@@ -1854,8 +1927,9 @@ int OnInit() {
     g_ea.weekend_last_day = -1;
     g_ea.health_last_check_hour = TimeHour(TimeCurrent());  // Skip current hour on startup | Bo qua gio hien tai khi khoi dong
     g_ea.timer_last_run_time = 0;
+    g_ea.last_news_debug = 0;  // Reset dashboard NEWS debug timestamp (prevent multi-symbol conflicts)
 
-    DebugPrint("[RESET] All position flags (21) & state vars reset to 0");
+    DebugPrint("[RESET] All position flags (21), print flags (21) & state vars reset to 0");
 
     // PART 8: Set BASELINE (only old) - FOR ALL 7 TF | Dat moc ban dau cho 7 khung
     for(int tf = 0; tf < 7; tf++) {
@@ -2217,14 +2291,13 @@ void UpdateDashboard() {
     // ===== LINES 4-10: 7 TF ROWS - ALTERNATING COLORS + P&L | 7 HANG TF - 2 MAU XEN KE + LAI LO
 
     // 🔍 DEBUG: Print NEWS before display (once per cycle)
-    static datetime last_news_debug = 0;
-    if(TimeCurrent() != last_news_debug) {
+    if(TimeCurrent() != g_ea.last_news_debug) {
         string news_debug = "DASH NEWS: ";
         for(int i = 0; i < 7; i++) {
             news_debug += "TF" + IntegerToString(i) + "=" + IntegerToString(g_ea.csdl_rows[i].news) + " ";
         }
         DebugPrint(news_debug);
-        last_news_debug = TimeCurrent();
+        g_ea.last_news_debug = TimeCurrent();
     }
 
     for(int tf = 0; tf < 7; tf++) {
