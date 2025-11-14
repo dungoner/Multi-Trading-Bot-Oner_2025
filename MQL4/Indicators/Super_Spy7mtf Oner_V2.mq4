@@ -1,4 +1,4 @@
-﻿//+-----------------------------------------------------------------------------------+
+//+-----------------------------------------------------------------------------------+
 //  Super_Spy7mtf Oner_V2 - Multi-Timeframe Signal Monitor | BOT GIAM SAT TIN HIEU NHIEU KHUNG THOI GIAN V2
 //+-----------------------------------------------------------------------------------+
 #property copyright "Super_Spy7mtf Oner_V2 - Multi-Timeframe Signal Spy with NEWS CASCADE Analysis"
