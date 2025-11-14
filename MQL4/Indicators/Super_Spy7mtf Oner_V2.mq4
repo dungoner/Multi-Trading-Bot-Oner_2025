@@ -34,6 +34,7 @@ input double NewsBaseLiveDiff = 1.2;                         // - L1: NewsBaseLi
 input double NewsLiveDiffStep = 0.6;                         // - Live Diff increment per level (USD) | L3 =1.5 + 1.0 = 2.5 USD → ±30 ..
 input bool   EnableCategoryUser = true;                      // >>Enable Category 2 (User Reference) | Bat Category 2 (tham khao)
 input int    NewsBaseTimeMinutes = 2;                        // - Category 2 Base Time (minutes) 2^level | Thoi gian co so Category 2
+input int    NewsTimeUnitSeconds = 60;                       // - Time unit in seconds (60=1min, 30=30s, 120=2min) | Don vi thoi gian (giay)
 input double NewsCascadeMultiplier = 0.5;                    // - Base (0.1->0.7 for L1-L7) | L1 =0.5 ×1 -> +time<2min → ±1 | L2 =0.5 ×2 -> +time<4min → ±2
 
 //==============================================================================
@@ -1846,7 +1847,7 @@ void DetectCASCADE_New() {
         if(g_symbol_data.news_results[0] == 0) {  // Only if Category 1 wrote 0
             if(m1_signal != 0) {
                 double l1_usd_threshold = NewsCascadeMultiplier * 1;  // 0.1 USD
-                int l1_time_limit = 1 * NewsBaseTimeMinutes * 60;  // 1 × 2 × 60 = 120s = 2min
+                int l1_time_limit = 1 * NewsBaseTimeMinutes * NewsTimeUnitSeconds;  // 1 × 2 × 60 = 120s = 2min
                 if(live_usd_diff > l1_usd_threshold && live_time_diff < l1_time_limit) {
                     g_symbol_data.news_results[0] = m1_signal * 1;  // Algorithm OUTPUT: score
                 }
@@ -1861,7 +1862,7 @@ void DetectCASCADE_New() {
             if(m5_signal != 0 && m1_signal != 0 && m1_signal == m5_signal) {
                 if(m5_cross == m1_time) {
                     double l2_usd_threshold = NewsCascadeMultiplier * 2;  // 0.2 USD
-                    int l2_time_limit = 2 * NewsBaseTimeMinutes * 60;  // 2 × 2 × 60 = 240s = 4min
+                    int l2_time_limit = 2 * NewsBaseTimeMinutes * NewsTimeUnitSeconds;  // 2 × 2 × 60 = 240s = 4min
                     if(live_usd_diff > l2_usd_threshold && live_time_diff < l2_time_limit) {
                         g_symbol_data.news_results[1] = m5_signal * 2;  // Algorithm OUTPUT: score
                     }
@@ -1875,7 +1876,7 @@ void DetectCASCADE_New() {
                m1_signal == m5_signal && m5_signal == m15_signal) {
                 if(m15_cross == m5_time && m5_cross == m1_time) {
                     double l3_usd_threshold = NewsCascadeMultiplier * 3;  // 0.3 USD
-                    int l3_time_limit = 3 * NewsBaseTimeMinutes * 60;  // 3 × 2 × 60 = 360s = 6min
+                    int l3_time_limit = 3 * NewsBaseTimeMinutes * NewsTimeUnitSeconds;  // 3 × 2 × 60 = 360s = 6min
                     if(live_usd_diff > l3_usd_threshold && live_time_diff < l3_time_limit) {
                         g_symbol_data.news_results[2] = m15_signal * 3;  // Algorithm OUTPUT: score
                     }
@@ -1889,7 +1890,7 @@ void DetectCASCADE_New() {
                m1_signal == m5_signal && m5_signal == m15_signal && m15_signal == m30_signal) {
                 if(m30_cross == m15_time && m15_cross == m5_time && m5_cross == m1_time) {
                     double l4_usd_threshold = NewsCascadeMultiplier * 4;  // 0.4 USD
-                    int l4_time_limit = 4 * NewsBaseTimeMinutes * 60;  // 4 × 2 × 60 = 480s = 8min
+                    int l4_time_limit = 4 * NewsBaseTimeMinutes * NewsTimeUnitSeconds;  // 4 × 2 × 60 = 480s = 8min
                     if(live_usd_diff > l4_usd_threshold && live_time_diff < l4_time_limit) {
                         g_symbol_data.news_results[3] = m30_signal * 4;  // Algorithm OUTPUT: score
                     }
@@ -1903,7 +1904,7 @@ void DetectCASCADE_New() {
                m1_signal == m5_signal && m5_signal == m15_signal && m15_signal == m30_signal && m30_signal == h1_signal) {
                 if(h1_cross == m30_time && m30_cross == m15_time && m15_cross == m5_time && m5_cross == m1_time) {
                     double l5_usd_threshold = NewsCascadeMultiplier * 5;  // 0.5 USD
-                    int l5_time_limit = 5 * NewsBaseTimeMinutes * 60;  // 5 × 2 × 60 = 600s = 10min
+                    int l5_time_limit = 5 * NewsBaseTimeMinutes * NewsTimeUnitSeconds;  // 5 × 2 × 60 = 600s = 10min
                     if(live_usd_diff > l5_usd_threshold && live_time_diff < l5_time_limit) {
                         g_symbol_data.news_results[4] = h1_signal * 5;  // Algorithm OUTPUT: score
                     }
@@ -1919,7 +1920,7 @@ void DetectCASCADE_New() {
                 if(h4_cross == h1_time && h1_cross == m30_time && m30_cross == m15_time &&
                    m15_cross == m5_time && m5_cross == m1_time) {
                     double l6_usd_threshold = NewsCascadeMultiplier * 6;  // 0.6 USD
-                    int l6_time_limit = 6 * NewsBaseTimeMinutes * 60;  // 6 × 2 × 60 = 720s = 12min
+                    int l6_time_limit = 6 * NewsBaseTimeMinutes * NewsTimeUnitSeconds;  // 6 × 2 × 60 = 720s = 12min
                     if(live_usd_diff > l6_usd_threshold && live_time_diff < l6_time_limit) {
                         g_symbol_data.news_results[5] = h4_signal * 6;  // Algorithm OUTPUT: score
                     }
@@ -1937,7 +1938,7 @@ void DetectCASCADE_New() {
                 if(d1_cross == h4_time && h4_cross == h1_time && h1_cross == m30_time &&
                    m30_cross == m15_time && m15_cross == m5_time && m5_cross == m1_time) {
                     double l7_usd_threshold = NewsCascadeMultiplier * 7;  // 0.7 USD
-                    int l7_time_limit = 7 * NewsBaseTimeMinutes * 60;  // 7 × 2 × 60 = 840s = 14min
+                    int l7_time_limit = 7 * NewsBaseTimeMinutes * NewsTimeUnitSeconds;  // 7 × 2 × 60 = 840s = 14min
                     if(live_usd_diff > l7_usd_threshold && live_time_diff < l7_time_limit) {
                         g_symbol_data.news_results[6] = d1_signal * 7;  // Algorithm OUTPUT: score
                     }
